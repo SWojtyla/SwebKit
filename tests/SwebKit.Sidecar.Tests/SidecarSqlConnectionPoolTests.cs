@@ -38,6 +38,8 @@ internal sealed class TrackingSqlClient : ISqlClient
         _inner.CompareSchemaAsync(target, sourceDatabase, targetDatabase, ct);
     public Task<SqlHealthReport> CheckHealthAsync(string? database, CancellationToken ct = default) => _inner.CheckHealthAsync(database, ct);
     public Task<IReadOnlyList<string>> GetMyPermissionsAsync(string? database, CancellationToken ct = default) => _inner.GetMyPermissionsAsync(database, ct);
+    public Task<IReadOnlyList<SqlColumnInfo>> GetObjectColumnsAsync(string schemaName, string objectName, string? database, CancellationToken ct = default) =>
+        _inner.GetObjectColumnsAsync(schemaName, objectName, database, ct);
 }
 
 internal sealed class TrackingSqlClientFactory : ISqlClientFactory

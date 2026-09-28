@@ -541,6 +541,22 @@ export function ApiClientPageProvider({ children }: { children: ReactNode }): JS
     });
   }, [updateCollectionsMutate]);
 
+  // "New API request" palette action: `state.newRequest` opens the create-request
+  // dialog against the selected (or first) collection — the same dialog the
+  // tree's "+" button opens.
+  useEffect(() => {
+    const state = location.state as { newRequest?: boolean } | null;
+    if (!state?.newRequest) return;
+    const target = selectedCollectionId ?? collections[0]?.id;
+    if (target) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
+      handleAddRequest(target);
+    } else {
+      notify("info", "No API collections", "Create a collection first, then add requests to it.");
+    }
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location, collections, selectedCollectionId, handleAddRequest, navigate, notify]);
+
   const handleAddFolder = useCallback((collectionId: string, parentId?: string) => {
     setNameDialog({
       title: "New Folder",

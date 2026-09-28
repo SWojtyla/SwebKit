@@ -46,7 +46,13 @@ public partial class DemoAksClient
     {
         await Task.Delay(300 + Rng.Next(150), ct).ConfigureAwait(false);
 
-        return DemoDeployments.Select(d => new DeploymentInfo
+        var now = DateTimeOffset.UtcNow;
+        // Deterministic per-deployment offsets (index-based, not random) so the demo "what
+        // changed" timeline shows a stable, plausible spread: a couple of workloads touched
+        // within the last hour, the rest days ago.
+        double[] lastUpdateMinutesAgo = [25, 4 * 60, 50, 3 * 24 * 60, 90, 26 * 60, 5 * 24 * 60, 7 * 24 * 60, 35, 2 * 24 * 60];
+
+        return DemoDeployments.Select((d, i) => new DeploymentInfo
         {
             Name = d.Name,
             Namespace = ns,
@@ -54,6 +60,7 @@ public partial class DemoAksClient
             ReadyReplicas = d.Ready,
             Status = d.Status,
             ImageTag = d.ImageTag,
+            LastUpdateTime = now.AddMinutes(-lastUpdateMinutesAgo[i % lastUpdateMinutesAgo.Length]),
             Labels = new Dictionary<string, string>
             {
                 ["app"] = d.Name,
@@ -109,6 +116,8 @@ public partial class DemoAksClient
                     PodIP = $"10.16.{Rng.Next(30, 40)}.{Rng.Next(1, 255)}",
                     NodeName = $"aks-nodepool1-{37000000 + Rng.Next(100):D8}-vmss00000{Rng.Next(0, 6)}",
                     StartTime = DateTimeOffset.UtcNow.AddHours(-Rng.Next(1, 72)),
+                    OwnerKind = "ReplicaSet",
+                    OwnerName = $"{d.Name}-{suffix[..5]}",
                     Containers = [d.Name, "istio-proxy"],
                     Labels = new Dictionary<string, string>
                     {

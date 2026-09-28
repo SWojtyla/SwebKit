@@ -1,4 +1,4 @@
-import type { AlertFiredEvent, AlertSeverity } from "../../lib/api";
+import type { AlertSeverity } from "../../lib/api";
 
 export type HistorySeverityFilter = "All" | AlertSeverity;
 export type HistorySortBy = "time" | "severity";
@@ -14,11 +14,11 @@ const SEVERITY_RANK: Record<AlertSeverity, number> = {
  * existing, already-time-sorted relative order) so switching to "Severity" doesn't scramble
  * same-severity events out of chronological order.
  */
-export function filterAndSortHistory(
-  events: AlertFiredEvent[],
+export function filterAndSortHistory<T extends { severity: AlertSeverity }>(
+  events: T[],
   severityFilter: HistorySeverityFilter,
   sortBy: HistorySortBy,
-): AlertFiredEvent[] {
+): T[] {
   const filtered = severityFilter === "All" ? events : events.filter((e) => e.severity === severityFilter);
 
   if (sortBy !== "severity") return filtered;

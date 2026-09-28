@@ -1,13 +1,15 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Redis;
 
 /// <summary>
-/// Applies confirmed Redis actions (delete key, set/remove TTL). The <see cref="IAgentActionExecutor"/>
-/// implementation for the Redis area — see <c>AgentActionApplier</c> for how executors are dispatched.
+/// Applies confirmed Redis actions (delete key, set/remove TTL, flush database). The
+/// <see cref="IAgentActionExecutor"/> implementation for the Redis area — see
+/// <c>AgentActionApplier</c> for how executors are dispatched.
 /// </summary>
 public sealed class RedisActionExecutor : IAgentActionExecutor
 {
@@ -22,16 +24,13 @@ public sealed class RedisActionExecutor : IAgentActionExecutor
         _factory = factory;
     }
 
-    public bool CanHandle(AgentActionType type) => type is AgentActionType.DeleteRedisKey or AgentActionType.SetRedisKeyTtl;
+    public bool CanHandle(AgentActionType type) => type is
+        AgentActionType.DeleteRedisKey or AgentActionType.SetRedisKeyTtl or AgentActionType.FlushRedisDatabase;
 
     public async Task<AgentActionResult> ApplyAsync(PendingAgentAction action, CancellationToken ct)
     {
         if (action.Payload is not { } payload)
             return Fail("Missing structured payload.");
-
-        var key = payload.TryGetProperty("key", out var k) ? k.GetString() : null;
-        if (string.IsNullOrEmpty(key))
-            return Fail("Missing 'key' in the proposed action's payload.");
 
         var cacheId = payload.TryGetProperty("cache_id", out var c) ? c.GetString() : null;
         var resolution = await RedisToolContext.ResolveAsync(_appState, _profiles, _factory, cacheId, ct);
@@ -39,6 +38,13 @@ public sealed class RedisActionExecutor : IAgentActionExecutor
             return Fail(resolution.Error);
 
         using var client = resolution.Client!;
+        if (action.Type == AgentActionType.FlushRedisDatabase)
+            return await ApplyFlushAsync(client, resolution.Cache!, ct);
+
+        var key = payload.TryGetProperty("key", out var k) ? k.GetString() : null;
+        if (string.IsNullOrEmpty(key))
+            return Fail("Missing 'key' in the proposed action's payload.");
+
         return action.Type switch
         {
             AgentActionType.DeleteRedisKey => await ApplyDeleteAsync(client, key, ct),
@@ -67,6 +73,17 @@ public sealed class RedisActionExecutor : IAgentActionExecutor
 
         await client.SetTtlAsync(key, TimeSpan.FromSeconds(ttlSeconds.Value), ct);
         return new AgentActionResult { IsSuccess = true, ResultSummary = $"Set '{key}' TTL to {ttlSeconds}s" };
+    }
+
+    private static async Task<AgentActionResult> ApplyFlushAsync(
+        IRedisClient client, RedisCacheEntry cache, CancellationToken ct)
+    {
+        await client.FlushDatabaseAsync(ct);
+        return new AgentActionResult
+        {
+            IsSuccess = true,
+            ResultSummary = $"Flushed all keys on '{cache.DisplayName}' (db {cache.Database})",
+        };
     }
 
     private static AgentActionResult Fail(string message) => new() { IsSuccess = false, ErrorMessage = message };

@@ -11,7 +11,8 @@ import { ProfileListLayout } from "./ProfileListLayout";
  * untouched "New Storage Account" placeholder can go without the extra click. */
 function isConfigured(account: StorageConfig): boolean {
     return (
-        account.accountName.trim() !== "" ||
+        // accountName is typed string but can arrive null from persisted profiles.json
+        (account.accountName ?? "").trim() !== "" ||
         !!account.connectionStringRef?.trim()
     );
 }
@@ -186,6 +187,28 @@ function AccountRow({
                     Entra ID (AAD)
                 </label>
             </div>
+
+            {account.useAad && (
+                <div>
+                    <DraftInput
+                        type="text"
+                        value={account.resourceId ?? ""}
+                        onCommit={(v) => onUpdate({ resourceId: v || null })}
+                        className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                        placeholder="Azure resource ID (optional)"
+                        data-testid={`storage-resource-id-${account.id}`}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        e.g.{" "}
+                        <code>
+                            /subscriptions/…/resourceGroups/…/providers/Microsoft.Storage/storageAccounts/…
+                        </code>
+                        — the access report uses it to scope access requests.
+                        Leave empty if unknown; it's never guessed from the
+                        account name.
+                    </p>
+                </div>
+            )}
 
             {!account.useAad && (
                 <div>

@@ -1,7 +1,23 @@
 import { useState } from "react";
-import { Copy, Loader2, MessageSquare, Trash2, Wrench } from "lucide-react";
-import type { ProactiveInsightReport } from "../../lib/api";
+import { Link, useNavigate } from "react-router";
+import {
+    Bell,
+    Copy,
+    ExternalLink,
+    Loader2,
+    MessageSquare,
+    Trash2,
+    Wrench,
+    Zap,
+} from "lucide-react";
+import type { EvidenceItem, ProactiveInsightReport } from "../../lib/api";
+import { resolveEvidenceView } from "../../lib/evidence-links";
 import { useNotification } from "../layout/notification-context";
+import { usePendingApprovals } from "@/lib/hooks/useAgent";
+import { PendingActionCard } from "../agent/PendingActionCard";
+import { proposalsLinkedToReport } from "./proposalLinks";
+import { AccessGapsCard } from "./AccessGapsCard";
+import { buildWatchPrefill } from "./watchPrefill";
 import {
     formatInsightTime,
     insightSeverityBadge,
@@ -30,9 +46,27 @@ export function AiReportDetail({
     deletePending,
 }: AiReportDetailProps) {
     const { notify } = useNotification();
+    const navigate = useNavigate();
     // Two-click inline confirm — window.confirm is unreliable under automation
     // (see swebkit-ui-ux-guardrails escape hatches).
     const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+    // Structured evidence when the report carries it (agent-colleague item 1); the
+    // legacy string list stays the fallback for reports persisted by older builds.
+    const evidenceItems = report.evidenceItems ?? [];
+
+    const watchThis = (item: EvidenceItem) => {
+        const prefillRule = buildWatchPrefill(item.watch);
+        if (!prefillRule) return;
+        navigate("/monitoring", { state: { prefillRule } });
+    };
+
+    // Remediation proposals this investigation parked (monitoring-closed-loop 1c) — the report
+    // carries their ids, the live approvals list carries the confirmable card. Actions confirmed,
+    // rejected, or expired drop out of the live list and render as a resolved note instead.
+    const pendingApprovals = usePendingApprovals();
+    const linkedIds = report.pendingActionIds ?? [];
+    const liveProposals = proposalsLinkedToReport(report, pendingApprovals.data ?? []);
 
     const copyFix = () => {
         if (!report.proposedFix?.snippet) return;
@@ -120,16 +154,98 @@ export function AiReportDetail({
                 <p className="mt-1 text-sm">{report.hypothesis}</p>
             </section>
 
-            {report.evidence.length > 0 && (
+            {evidenceItems.length > 0 ? (
                 <section data-testid="ai-report-evidence">
                     <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Evidence
                     </h4>
-                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
-                        {report.evidence.map((item, i) => (
-                            <li key={i}>{item}</li>
-                        ))}
+                    <ul className="mt-1 space-y-1.5 pl-1 text-sm">
+                        {evidenceItems.map((item, i) => {
+                            const viewRoute = resolveEvidenceView(item.view);
+                            const hasWatch =
+                                buildWatchPrefill(item.watch) !== null;
+                            return (
+                                <li key={i} data-testid={`evidence-item-${i}`}>
+                                    <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
+                                        <span className="min-w-0 flex-1">
+                                            {item.text}
+                                        </span>
+                                        {item.tool && (
+                                            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                                {item.tool}
+                                            </span>
+                                        )}
+                                        {viewRoute && (
+                                            <Link
+                                                to={viewRoute}
+                                                className="flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                                                data-testid={`evidence-view-${i}`}
+                                            >
+                                                <ExternalLink className="h-3 w-3" />
+                                                View
+                                            </Link>
+                                        )}
+                                        {hasWatch && (
+                                            <button
+                                                onClick={() => watchThis(item)}
+                                                className="flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                                                title="Create a monitoring alert rule watching this"
+                                                data-testid={`evidence-watch-${i}`}
+                                            >
+                                                <Bell className="h-3 w-3" />
+                                                Watch this
+                                            </button>
+                                        )}
+                                    </div>
+                                </li>
+                            );
+                        })}
                     </ul>
+                </section>
+            ) : (
+                report.evidence.length > 0 && (
+                    <section data-testid="ai-report-evidence">
+                        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Evidence
+                        </h4>
+                        <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
+                            {report.evidence.map((item, i) => (
+                                <li key={i}>{item}</li>
+                            ))}
+                        </ul>
+                    </section>
+                )
+            )}
+
+            <AccessGapsCard gaps={report.accessGaps ?? []} />
+
+            {linkedIds.length > 0 && (
+                <section data-testid="ai-report-proposed-actions">
+                    <h4 className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Zap className="h-3 w-3" /> Proposed actions
+                    </h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        The investigation proposed these remediations — nothing
+                        runs until you confirm one.
+                    </p>
+                    <div className="mt-2 space-y-2">
+                        {liveProposals.map((action) => (
+                            <PendingActionCard
+                                key={action.id}
+                                action={action}
+                            />
+                        ))}
+                        {liveProposals.length < linkedIds.length && (
+                            <p
+                                className="text-xs text-muted-foreground"
+                                data-testid="ai-report-proposals-resolved-note"
+                            >
+                                {linkedIds.length - liveProposals.length} of{" "}
+                                {linkedIds.length} proposal(s) already resolved
+                                or expired.
+                            </p>
+                        )}
+                    </div>
                 </section>
             )}
 

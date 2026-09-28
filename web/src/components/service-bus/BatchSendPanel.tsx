@@ -174,7 +174,7 @@ export function BatchSendPanel({ nsId, namespaces, entity, onClose }: Props) {
             data-testid="batch-overlay"
         >
             <div
-                className="flex max-h-[90vh] w-[700px] flex-col rounded-lg border bg-card shadow-lg"
+                className="flex max-h-[90vh] w-[700px] flex-col rounded-lg border bg-popover shadow-lg"
                 data-testid="batch-send-panel"
             >
                 {/* Header */}

@@ -12,7 +12,16 @@ import type {
     SbMessage,
     SbNamespaceInfo,
     SbMessageTemplate,
+    SbSessionSummary,
     ScheduledMessageEntry,
+    ReachMessageRequest,
+    ReachMessagePreview,
+    SbOperationStatus,
+    DlqRequeueByFilterRequest,
+    DlqRequeueByFilterResult,
+    ReplayToRequest,
+    ReplayToPreview,
+    SbEntityProperties,
 } from "../types";
 
 // ── Service Bus ──────────────────────────────────────────────────────────────
@@ -146,6 +155,29 @@ export function useSbPeekDlq(
 }
 
 /**
+ * Session summaries for the entity's peek window — the "who holds sessions here" answer behind
+ * the chip bar. The endpoint groups the peek window server-side (there is no session-listing
+ * API in the SDK); callers only enable it on `requiresSession` entities, so the extra request
+ * never fires on ordinary queues.
+ */
+export function useSbSessions(
+    nsId: string | null,
+    entityPath: string | null,
+    options?: { enabled?: boolean },
+) {
+    return useQuery({
+        queryKey: ["sb-sessions", nsId, entityPath],
+        queryFn: ({ signal }) =>
+            apiFetch<SbSessionSummary[]>(
+                `/api/servicebus/${nsId}/entities/${entitySegment(entityPath!)}/sessions?count=250`,
+                { signal },
+            ),
+        enabled: !!nsId && !!entityPath && (options?.enabled ?? true),
+        retry: 1, // same reasoning as useSbPeekMessages
+    });
+}
+
+/**
  * Finds an entity's already-loaded counts in the cached queue/topic/subscription lists.
  *
  * The tree fetches counts for every entity it lists, so selecting one and then fetching its `/stats`
@@ -225,6 +257,7 @@ export function invalidateServiceBusQueries(
     qc.invalidateQueries({ queryKey: ["sb-dlq", nsId, entityPath] });
     qc.invalidateQueries({ queryKey: ["sb-entity-stats", nsId, entityPath] });
     qc.invalidateQueries({ queryKey: ["sb-scheduled", nsId, entityPath] });
+    qc.invalidateQueries({ queryKey: ["sb-sessions", nsId, entityPath] });
 
     // Message mutations change the counts the entity-tree badges render from the
     // queue/topic lists — one request each, cheap enough to refresh on every
@@ -466,5 +499,351 @@ export function useSbResubmitDlq() {
         },
         onError: (error) =>
             notify("error", "Couldn't resubmit messages", String(error)),
+    });
+}
+
+/**
+ * The DLQ "Edit & Resubmit" path: sends the edited message to the target entity and — unlike a
+ * plain send — settles the DLQ original by sequence number, so the pre-edit copy can't linger as
+ * a duplicate next to the edited one. Same-namespace operation; `targetEntityPath` is a
+ * destination override within it.
+ */
+export function useSbResubmitEditedDlq() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (vars: {
+            nsId: string;
+            entityPath: string;
+            sequenceNumber: number;
+            message: SbMessage;
+            targetEntityPath?: string | null;
+        }) =>
+            apiSend(
+                `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/dlq/resubmit-edited`,
+                "POST",
+                {
+                    sequenceNumber: vars.sequenceNumber,
+                    message: vars.message,
+                    targetEntityPath: vars.targetEntityPath ?? null,
+                },
+            ),
+        onSuccess: (_data, vars) => {
+            invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
+        },
+        onError: (error) =>
+            notify(
+                "error",
+                "Couldn't resubmit edited message",
+                String(error),
+            ),
+    });
+}
+
+// ── Power ops: reach-message + DLQ triage ────────────────────────────────────
+//
+// Reach-message is a background sidecar operation, not a request/response — the
+// UI previews, confirms, starts, then POLLS the operation record. Parked
+// messages carry a DLQ stamp so a sidecar restart can rediscover them; the list
+// endpoint enriches interrupted/failed/cancelled ops with a live stamp scan
+// (`parkedInDlq`), which is why the banner polls it rather than trusting a
+// journal snapshot.
+
+/**
+ * Operations on one entity — backs the interrupted-operation banner. Refetches
+ * while any op is non-terminal so the banner's live count stays honest.
+ */
+export function useSbEntityOperations(
+    nsId: string | null,
+    entityPath: string | null,
+) {
+    return useQuery({
+        queryKey: ["sb-operations", nsId, entityPath],
+        queryFn: ({ signal }) =>
+            apiFetch<SbOperationStatus[]>(
+                `/api/servicebus/${nsId}/operations?entity=${encodeURIComponent(entityPath!)}`,
+                { signal },
+            ),
+        enabled: !!nsId && !!entityPath,
+        refetchInterval: (query) => {
+            const ops = query.state.data;
+            return ops?.some(
+                (op) =>
+                    op.state === "Running" ||
+                    op.state === "Interrupted" ||
+                    op.state === "Failed" ||
+                    op.state === "Cancelled",
+            )
+                ? 3_000
+                : false;
+        },
+        retry: 1,
+    });
+}
+
+/** Polls a single operation — the wizard's progress view. */
+export function useSbOperation(
+    nsId: string | null,
+    operationId: string | null,
+) {
+    return useQuery({
+        queryKey: ["sb-operation", nsId, operationId],
+        queryFn: ({ signal }) =>
+            apiFetch<SbOperationStatus>(
+                `/api/servicebus/${nsId}/operations/${operationId}`,
+                { signal },
+            ),
+        enabled: !!nsId && !!operationId,
+        refetchInterval: (query) =>
+            query.state.data?.state === "Running" ? 1_000 : false,
+        retry: 1,
+    });
+}
+
+/**
+ * The preview call — deliberately a mutation, not a query: it peeks 1,000
+ * messages server-side, which is too expensive to refire on focus/stale, and
+ * the wizard only wants it on an explicit click. The response is rendered
+ * verbatim (consequences + warnings are the product's honesty contract).
+ */
+export function useSbReachMessagePreview() {
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (vars: {
+            nsId: string;
+            entityPath: string;
+            request: ReachMessageRequest;
+        }) =>
+            apiSend<ReachMessagePreview>(
+                `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/reach-message/preview`,
+                "POST",
+                vars.request,
+            ),
+        onError: (error) =>
+            notify("error", "Couldn't preview reach-message", String(error)),
+    });
+}
+
+/** Starts the background op after the preview's ConfirmBar — returns the op record to poll. */
+export function useSbReachMessageStart() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (vars: {
+            nsId: string;
+            entityPath: string;
+            request: ReachMessageRequest;
+        }) =>
+            apiSend<SbOperationStatus>(
+                `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/reach-message/start`,
+                "POST",
+                vars.request,
+            ),
+        onSuccess: (_data, vars) => {
+            qc.invalidateQueries({
+                queryKey: ["sb-operations", vars.nsId, vars.entityPath],
+            });
+            invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
+        },
+        onError: (error) =>
+            notify("error", "Couldn't start reach-message", String(error)),
+    });
+}
+
+/** Cancel is observed between receive batches — in-flight locks expire harmlessly. */
+export function useSbCancelOperation() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (vars: { nsId: string; operationId: string }) =>
+            apiSend<SbOperationStatus>(
+                `/api/servicebus/${vars.nsId}/operations/${vars.operationId}/cancel`,
+                "POST",
+            ),
+        onSuccess: (data, vars) => {
+            qc.invalidateQueries({
+                queryKey: ["sb-operation", vars.nsId, vars.operationId],
+            });
+            qc.invalidateQueries({
+                queryKey: ["sb-operations", vars.nsId, data.entityPath],
+            });
+            invalidateServiceBusQueries(qc, vars.nsId, data.entityPath);
+        },
+        onError: (error) =>
+            notify("error", "Couldn't cancel operation", String(error)),
+    });
+}
+
+/**
+ * Resume = re-run the restore phase against the entity's DLQ stamp set. Valid
+ * for interrupted, failed and cancelled ops — the only states with parked
+ * messages that may still need it.
+ */
+export function useSbResumeOperation() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (vars: { nsId: string; operationId: string }) =>
+            apiSend<SbOperationStatus>(
+                `/api/servicebus/${vars.nsId}/operations/${vars.operationId}/resume`,
+                "POST",
+            ),
+        onSuccess: (data, vars) => {
+            qc.invalidateQueries({
+                queryKey: ["sb-operation", vars.nsId, vars.operationId],
+            });
+            qc.invalidateQueries({
+                queryKey: ["sb-operations", vars.nsId, data.entityPath],
+            });
+            invalidateServiceBusQueries(qc, vars.nsId, data.entityPath);
+        },
+        onError: (error) =>
+            notify("error", "Couldn't resume operation", String(error)),
+    });
+}
+
+/** "Leave in DLQ" — terminal; the parked copies keep their stamps as a record. */
+export function useSbDismissOperation() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (vars: { nsId: string; operationId: string }) =>
+            apiSend<SbOperationStatus>(
+                `/api/servicebus/${vars.nsId}/operations/${vars.operationId}/dismiss`,
+                "POST",
+            ),
+        onSuccess: (data, vars) => {
+            qc.invalidateQueries({
+                queryKey: ["sb-operations", vars.nsId, data.entityPath],
+            });
+        },
+        onError: (error) =>
+            notify("error", "Couldn't dismiss operation", String(error)),
+    });
+}
+
+/**
+ * DLQ triage past the peek window: resubmit every DLQ message matching a
+ * (reason, description) group server-side, capped by limit. For messages inside
+ * the loaded window, the ordinary per-selection resubmit path is still the
+ * right tool — this exists for groups bigger than what was peeked.
+ */
+export function useSbRequeueDlqByFilter() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (vars: {
+            nsId: string;
+            entityPath: string;
+            request: DlqRequeueByFilterRequest;
+        }) =>
+            apiSend<DlqRequeueByFilterResult>(
+                `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/dlq/requeue-by-filter`,
+                "POST",
+                vars.request,
+            ),
+        onSuccess: (data, vars) => {
+            invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
+            notify(
+                "success",
+                `Resubmitted ${data.resubmitted} dead-lettered message(s)`,
+            );
+        },
+        onError: (error) =>
+            notify("error", "Couldn't resubmit DLQ group", String(error)),
+    });
+}
+
+// ── Cross-environment replay + entity properties ───────────────────────────
+//
+// Replay-to is the same background-op contract as reach-message — preview,
+// confirm, start, then poll `GET .../operations/{id}` — but its target can be
+// a different namespace entirely. Every replayed message is a NEW tail-appended
+// copy on the target (fresh sequence, reset delivery count) stamped
+// SwebKit.ReplayedFrom; nothing is parked in the source DLQ.
+
+/**
+ * Read-only management-plane properties for one entity (queue, topic or
+ * subscription): max size, TTL, lock duration, delivery caps, partitioning and
+ * session flags, as grouped name/value rows. Editing is deliberately not
+ * surfaced — this is the "what is this entity configured as" answer.
+ */
+export function useSbEntityProperties(
+    nsId: string | null,
+    entityPath: string | null,
+    options?: { enabled?: boolean },
+) {
+    return useQuery({
+        queryKey: ["sb-entity-properties", nsId, entityPath],
+        queryFn: ({ signal }) =>
+            apiFetch<SbEntityProperties>(
+                `/api/servicebus/${nsId}/entities/${entitySegment(entityPath!)}/properties`,
+                { signal },
+            ),
+        enabled: !!nsId && !!entityPath && (options?.enabled ?? true),
+        // Entity config changes with deployments, not with use — same cadence as topology.
+        staleTime: TOPOLOGY_STALE_TIME,
+        retry: 1,
+    });
+}
+
+/**
+ * The replay preview call — deliberately a mutation, not a query: it peeks the
+ * source window server-side to count matches, and the wizard only wants it on
+ * an explicit click. Consequences and warnings are rendered verbatim — they
+ * are the honesty contract ("new tail-appended copies", never "like nothing
+ * happened").
+ */
+export function useSbReplayToPreview() {
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (vars: {
+            nsId: string;
+            entityPath: string;
+            request: ReplayToRequest;
+        }) =>
+            apiSend<ReplayToPreview>(
+                `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/replay-to/preview`,
+                "POST",
+                vars.request,
+            ),
+        onError: (error) =>
+            notify("error", "Couldn't preview replay", String(error)),
+    });
+}
+
+/**
+ * Starts the journaled replay op — returns the op record to poll. On success
+ * both the SOURCE entity's lists AND the target namespace's are invalidated:
+ * move semantics drain the source, and copies landing on the target change its
+ * counts even when it's another namespace entirely.
+ */
+export function useSbReplayToStart() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (vars: {
+            nsId: string;
+            entityPath: string;
+            request: ReplayToRequest;
+        }) =>
+            apiSend<SbOperationStatus>(
+                `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/replay-to/start`,
+                "POST",
+                vars.request,
+            ),
+        onSuccess: (_data, vars) => {
+            qc.invalidateQueries({
+                queryKey: ["sb-operations", vars.nsId, vars.entityPath],
+            });
+            invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
+            invalidateServiceBusQueries(
+                qc,
+                vars.request.targetNsId,
+                vars.request.targetEntityPath,
+            );
+        },
+        onError: (error) =>
+            notify("error", "Couldn't start replay", String(error)),
     });
 }

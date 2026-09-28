@@ -108,6 +108,23 @@ export function AksSettings() {
         </div>
 
         <div>
+          <label className="mb-1 block text-sm font-medium">Azure Resource ID</label>
+          <DraftInput
+            type="text"
+            value={aks.resourceId ?? ""}
+            onCommit={(v) => update({ resourceId: v || null })}
+            className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+            placeholder="/subscriptions/…/resourceGroups/…/providers/Microsoft.ContainerService/managedClusters/… (optional)"
+            data-testid="aks-resource-id"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Optional — the access report uses it to scope access requests for this
+            cluster. Leave empty if unknown; it's never guessed from the kubeconfig
+            context name.
+          </p>
+        </div>
+
+        <div>
           <label className="mb-1 block text-sm font-medium">Default Namespace</label>
           <DraftInput
             type="text"

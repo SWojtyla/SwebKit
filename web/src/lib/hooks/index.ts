@@ -4,6 +4,7 @@
 // (Module 2, 2.4) for the rationale behind this per-domain split.
 
 export * from "./useProfile";
+export * from "./useAccess";
 export * from "./useServiceBus";
 export * from "./useAks";
 export * from "./useRedis";
@@ -17,6 +18,7 @@ export * from "./useWorkspaceTopology";
 export * from "./useWorkspaceWarmup";
 export * from "./useUpdateSearchParams";
 export * from "./useNow";
+export * from "./useUpdateCheck";
 
 // Re-exported from the original hooks.ts for callers that imported it from
 // "@/lib/hooks" instead of "@/lib/useNotifyMutation" directly.

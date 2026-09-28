@@ -63,6 +63,10 @@ public static class SqlSchemaComparer
         foreach (var schema in model.Schemas)
         foreach (var obj in schema.Objects)
         {
+            // Declared-only objects are user assertions, not observed catalog state — a
+            // compare must never report "only in source" for a name the catalog never
+            // confirmed. Catalog-confirmed declarations still carry loaded columns.
+            if (obj.IsDeclared && obj.Columns.Count == 0) continue;
             var flat = new FlatObject(schema.Name, obj);
             map[$"{schema.Name}.{obj.Name}"] = flat;
         }

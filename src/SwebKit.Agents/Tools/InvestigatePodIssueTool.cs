@@ -9,7 +9,7 @@ namespace SwebKit.Agents.Tools;
 /// Composite tool that runs pod status, logs, and events fetches in parallel
 /// to provide a comprehensive view of a pod's health.
 /// </summary>
-public sealed class InvestigatePodIssueTool : IAgentTool
+public sealed class InvestigatePodIssueTool : IAccessAwareTool
 {
     private readonly IAksClientFactory _aksFactory;
     private readonly DemoAksClient _demoAksClient;
@@ -29,6 +29,14 @@ public sealed class InvestigatePodIssueTool : IAgentTool
         "and events in parallel. Returns a merged result with all information in one call.";
 
     public FeatureArea FeatureArea => FeatureArea.Aks;
+
+    // All legs are cluster reads on one cluster — matching the report's kubernetes.read row.
+    // (Per-section failures still degrade into per-field errors by design; the opt-in pays off
+    // through the known-denial short-circuit.)
+    public string Capability => AccessCapabilities.KubernetesRead;
+
+    public string? GetConnectionKey(JsonElement arguments) =>
+        AksToolContext.ResolveConnectionKey(_appState, AksToolContext.GetContext(arguments));
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {

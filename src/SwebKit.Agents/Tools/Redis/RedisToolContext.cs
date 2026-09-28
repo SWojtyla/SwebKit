@@ -14,7 +14,38 @@ namespace SwebKit.Agents.Tools.Redis;
 /// </summary>
 internal static class RedisToolContext
 {
+    /// <summary>Id of the demo cache — mirrors the sidecar's <c>DemoModeService.DemoRedisCacheId</c>
+    /// (kept in sync deliberately: the access report keys probe rows on this id).</summary>
+    private const string DemoCacheId = "demo-cache";
+
     public readonly record struct Resolution(IRedisClient? Client, RedisCacheEntry? Cache, string? Error);
+
+    /// <summary>
+    /// Resolves which cache a call would use <em>without creating a client</em> — the cache half
+    /// of <see cref="ResolveAsync"/>. Used by <see cref="IAccessAwareTool.GetConnectionKey"/>
+    /// implementations, where creating a Redis client just to learn the key would defeat the
+    /// point of a short-circuit. Returns null when the target can't be determined.
+    /// </summary>
+    public static RedisCacheEntry? ResolveCache(
+        AppStateService appState, ProfileRepository profiles, string? requestedCacheId)
+    {
+        if (appState.UseDemoData)
+            return new RedisCacheEntry { Id = DemoCacheId, DisplayName = "Demo Cache", Database = 0 };
+
+        var caches = profiles.GetProfileData().Config.RedisConfig?.Caches ?? [];
+        if (caches.Count == 0)
+            return null;
+
+        var activeCacheId = profiles.GetProfileData().Config.RedisConfig?.ActiveCacheId;
+        var cache =
+            (requestedCacheId is not null ? caches.FirstOrDefault(c => c.Id == requestedCacheId) : null) ??
+            (activeCacheId is not null ? caches.FirstOrDefault(c => c.Id == activeCacheId) : null) ??
+            caches[0];
+
+        return requestedCacheId is not null && cache.Id != requestedCacheId
+            ? null
+            : cache;
+    }
 
     public static async Task<Resolution> ResolveAsync(
         AppStateService appState,
@@ -25,7 +56,7 @@ internal static class RedisToolContext
     {
         if (appState.UseDemoData)
         {
-            var demoCache = new RedisCacheEntry { Id = "demo-cache", DisplayName = "Demo Cache", Database = 0 };
+            var demoCache = ResolveCache(appState, profiles, requestedCacheId)!;
             return new Resolution(new DemoRedisClient(0), demoCache, null);
         }
 
@@ -33,13 +64,8 @@ internal static class RedisToolContext
         if (caches.Count == 0)
             return new Resolution(null, null, "Redis is not configured. Add a cache in settings.");
 
-        var activeCacheId = profiles.GetProfileData().Config.RedisConfig?.ActiveCacheId;
-        var cache =
-            (requestedCacheId is not null ? caches.FirstOrDefault(c => c.Id == requestedCacheId) : null) ??
-            (activeCacheId is not null ? caches.FirstOrDefault(c => c.Id == activeCacheId) : null) ??
-            caches[0];
-
-        if (requestedCacheId is not null && cache.Id != requestedCacheId)
+        var cache = ResolveCache(appState, profiles, requestedCacheId);
+        if (cache is null)
             return new Resolution(null, null, $"Cache '{requestedCacheId}' not found.");
 
         var client = await factory.CreateAsync(cache, ct);

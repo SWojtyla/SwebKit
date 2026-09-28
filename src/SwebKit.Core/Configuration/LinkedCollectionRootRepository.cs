@@ -78,6 +78,13 @@ public sealed class LinkedCollectionRootRepository(ILogger<LinkedCollectionRootR
         return config;
     }
 
+    /// <summary>Replaces the whole root list (e.g. a team-pack replace-mode import).</summary>
+    public async Task ReplaceRootsAsync(IReadOnlyList<LinkedCollectionRootConfig> roots)
+    {
+        _store.Roots = [.. roots];
+        await SaveAsync().ConfigureAwait(false);
+    }
+
     public async Task<bool> RemoveRootAsync(string rootId)
     {
         var removed = _store.Roots.RemoveAll(r => r.Id == rootId);

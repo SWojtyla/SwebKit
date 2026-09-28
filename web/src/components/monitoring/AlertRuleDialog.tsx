@@ -52,6 +52,7 @@ const empty = (): MonitoringAlertRule => ({
         clientCountLowerBound: 1,
     },
     aiInvestigationEnabled: true,
+    autoFixProposalsEnabled: false,
 });
 
 export function AlertRuleDialog({
@@ -541,6 +542,38 @@ export function AlertRuleDialog({
                                 </span>
                             </span>
                         </label>
+                        {draft.aiInvestigationEnabled && (
+                            <label className="mt-2 flex items-start gap-2 border-t pt-3 text-sm">
+                                <input
+                                    type="checkbox"
+                                    checked={
+                                        draft.autoFixProposalsEnabled ?? false
+                                    }
+                                    onChange={(e) =>
+                                        set({
+                                            autoFixProposalsEnabled:
+                                                e.target.checked,
+                                        })
+                                    }
+                                    className="mt-0.5"
+                                    data-testid="alert-rule-autofix-proposals"
+                                />
+                                <span>
+                                    <span className="font-medium">
+                                        May propose fixes
+                                    </span>
+                                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                                        The investigation may also park
+                                        confirmable remediation proposals
+                                        (restart a deployment, resubmit
+                                        dead-letters, flush a cache) you approve
+                                        with one click from the report. Nothing
+                                        ever runs without your explicit
+                                        confirmation.
+                                    </span>
+                                </span>
+                            </label>
+                        )}
                     </div>
                 </div>
 

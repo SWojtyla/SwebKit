@@ -41,4 +41,9 @@ public sealed class ToolDefinition
     /// <c>SidecarAgentChatService</c> to scope a contextual conversation's tools to the page it was
     /// opened from.</summary>
     public required FeatureArea FeatureArea { get; set; }
+
+    /// <summary>Carried over from <see cref="IAgentTool.BackgroundProposalEligible"/> — the
+    /// tool-declared whitelist a background (proactive) investigation consults to decide whether
+    /// a Mutate-kind tool may park a proposal during an opted-in run.</summary>
+    public bool BackgroundProposalEligible { get; set; }
 }

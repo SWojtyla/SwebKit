@@ -12,10 +12,11 @@ import { ProfileListLayout } from "./ProfileListLayout";
 /** A cache is worth confirming removal of once it has real configured data — an untouched
  * "New Cache" placeholder can go without the extra click. */
 function isConfigured(cache: RedisCacheEntry): boolean {
+    // typed string fields can arrive null from persisted profiles.json
     return (
-        cache.connectionString.trim() !== "" ||
-        cache.credentialKey.trim() !== "" ||
-        cache.cacheName.trim() !== ""
+        (cache.connectionString ?? "").trim() !== "" ||
+        (cache.credentialKey ?? "").trim() !== "" ||
+        (cache.cacheName ?? "").trim() !== ""
     );
 }
 
@@ -284,6 +285,18 @@ function CacheRow({
                         <code>&lt;name&gt;.redis.cache.windows.net</code> using
                         your signed-in Azure identity.
                     </p>
+                    <DraftInput
+                        type="text"
+                        value={cache.resourceId ?? ""}
+                        onCommit={(v) => onUpdate({ resourceId: v || null })}
+                        className="mt-2 w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                        placeholder="Azure resource ID (optional)"
+                        data-testid={`redis-resource-id-${cache.id}`}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Used to scope access requests — leave empty if unknown;
+                        it's never guessed from the hostname.
+                    </p>
                 </div>
             ) : (
                 <div>
@@ -321,8 +334,8 @@ function CacheRow({
                         <code>
                             mycache.redis.cache.windows.net:6380,ssl=True,password=...
                         </code>
-                        . Saved into your OS credential store — the profile keeps
-                        only a key reference, never the secret itself.
+                        . Saved into your OS credential store — the profile
+                        keeps only a key reference, never the secret itself.
                     </p>
                 </div>
             )}

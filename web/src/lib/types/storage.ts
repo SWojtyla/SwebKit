@@ -5,6 +5,9 @@ export interface StorageConfig {
     connectionStringRef: string | null;
     useAad: boolean;
     allowMutations: boolean;
+    /** Optional full ARM resource id of the account — scopes access-request artifacts
+     * for Entra-authenticated accounts. Never derived from the account name. */
+    resourceId?: string | null;
 }
 
 export interface StorageContainerItem {

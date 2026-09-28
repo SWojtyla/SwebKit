@@ -83,6 +83,15 @@ public interface IAgentTool
     /// <summary>Minimum capability the provider must support for this tool to be available.</summary>
     AgentCapability RequiredCapability => AgentCapability.ToolCalling;
 
+    /// <summary>
+    /// Whether an unsupervised background run (a proactive alert investigation) may see this tool
+    /// even though it is <see cref="ToolKind.Mutate"/> — monitoring-closed-loop's
+    /// <c>AutoFixProposalsEnabled</c> gate. Fails safe: default false, so only tools that
+    /// deliberately opt in (and only ever *park* a <see cref="PendingAgentAction"/> for user
+    /// confirmation, never execute anything) are reachable without a user driving the turn.
+    /// </summary>
+    bool BackgroundProposalEligible => false;
+
     Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct);
 }
 

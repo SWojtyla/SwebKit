@@ -1,6 +1,7 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools;
@@ -8,7 +9,7 @@ namespace SwebKit.Agents.Tools;
 /// <summary>
 /// Retrieves queue statistics including message counts, error rates, and basic metadata.
 /// </summary>
-public sealed class GetQueueStatsTool : IAgentTool
+public sealed class GetQueueStatsTool : IAccessAwareTool
 {
     private readonly IServiceBusConnectionPool _pool;
     private readonly AppStateService _appState;
@@ -27,6 +28,20 @@ public sealed class GetQueueStatsTool : IAgentTool
         "Omit namespace to use the namespace selected in the UI.";
 
     public FeatureArea FeatureArea => FeatureArea.ServiceBus;
+
+    // Stats/listing go through the administration client — the Manage claim, matching the
+    // report's servicebus.manage row (data-plane-only identities get a true denial here).
+    public string Capability => AccessCapabilities.ServiceBusManage;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        // Demo mode never resolves a namespace — the call goes to a synthetic client instead.
+        if (_appState.UseDemoData)
+            return null;
+        var requested = arguments.TryGetProperty("namespace", out var nsEl) ? nsEl.GetString() : null;
+        var resolution = ServiceBusToolContext.ResolveNamespace(_appState, requested);
+        return resolution.IsSuccess ? resolution.Namespace!.Id.ToString() : null;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -109,6 +124,12 @@ public sealed class GetQueueStatsTool : IAgentTool
                 transfer_count = entityStats.TransferCount,
                 updated_at = entityStats.UpdatedAt?.ToString("o")
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

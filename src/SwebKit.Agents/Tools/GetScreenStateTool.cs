@@ -31,7 +31,9 @@ public sealed class GetScreenStateTool : IAgentTool
         "their selection, and a bounded slice of the data the UI already fetched (pods listed, " +
         "message/blob/key being inspected, active filters). Call this when the user's question " +
         "refers to what they can see ('this pod', 'the error on screen', 'why is this failing') " +
-        "instead of re-fetching the same data with another tool.";
+        "instead of re-fetching the same data with another tool. The `entities` list names " +
+        "individually addressable things on screen (`<area>.<kind>.<id>`); call " +
+        "get_screen_detail with one of those ids for that entity's bounded detail.";
 
     public JsonElement ParametersSchema => Schema;
 
@@ -59,6 +61,9 @@ public sealed class GetScreenStateTool : IAgentTool
             capturedAt = current.CapturedAt,
             ageSeconds,
             snapshot = current.Snapshot,
+            // Ids only — the whole point of the entity index is that the overview stays small;
+            // get_screen_detail fetches one entity's detail on demand.
+            entities = current.Entities.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList(),
         }));
     }
 }

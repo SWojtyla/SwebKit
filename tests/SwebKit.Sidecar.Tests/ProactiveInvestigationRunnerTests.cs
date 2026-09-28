@@ -5,6 +5,7 @@ using SwebKit.Agents.Tools;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 using SwebKit.Sidecar.Endpoints;
 using SwebKit.Sidecar.Services;
 
@@ -80,9 +81,10 @@ public class ProactiveInvestigationRunnerTests
     private static ProactiveInvestigationRunner BuildRunner(
         ScriptedInvestigationModelClient modelClient,
         AgentToolRegistry registry,
-        TimeSpan? budget = null) =>
+        TimeSpan? budget = null,
+        IEnumerable<IAgentTool>? allTools = null) =>
         new(modelClient, registry, new ProfileRepository(), new DemoModeService(),
-            NullLogger<ProactiveInvestigationRunner>.Instance, budget);
+            NullLogger<ProactiveInvestigationRunner>.Instance, allTools, budget);
 
     private static AlertFiredEvent Fired() => new(
         RuleId: "r1",
@@ -324,5 +326,144 @@ public class ProactiveInvestigationRunnerTests
         Assert.DoesNotContain("Ask & do", prompt);
         Assert.Contains("## Tool policy (background investigation)", prompt);
         Assert.Contains("\"proposed_fix\"", prompt);
+    }
+
+    // ── monitoring-closed-loop 1b/1c — autofix proposal gating ───────────────
+
+    private sealed class EligibleFakeProposeTool(string name) : IAgentTool
+    {
+        private static readonly JsonElement Schema = AgentToolSchema.Parse("""{ "type": "object", "properties": {} }""");
+        public string Name => name;
+        public string Description => $"fake {name}";
+        public JsonElement ParametersSchema => Schema;
+        public FeatureArea FeatureArea => FeatureArea.Aks;
+        public ToolKind Kind => ToolKind.Mutate;
+        public bool BackgroundProposalEligible => true;
+        public Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct) =>
+            Task.FromResult("""{"status":"pending_confirmation"}""");
+    }
+
+    [Fact]
+    public async Task AutofixNotOptedIn_EligibleProposalTools_StayHidden_AndNoAddendum()
+    {
+        var read = new FakeInvestigationTool("fake_read", FeatureArea.Aks);
+        var propose = new EligibleFakeProposeTool("propose_fake_fix");
+        var modelClient = new ScriptedInvestigationModelClient();
+        var runner = BuildRunner(modelClient, new AgentToolRegistry([read, propose]), allTools: [propose]);
+
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.DoesNotContain(modelClient.LastRequest!.Tools, t => t.Name == "propose_fake_fix");
+        Assert.DoesNotContain("Autofix proposals", modelClient.LastRequest.SystemPrompt);
+    }
+
+    [Fact]
+    public async Task AutofixOptedIn_EligibleToolExposed_IneligibleMutateStaysHidden_PromptGetsAddendum()
+    {
+        var read = new FakeInvestigationTool("fake_read", FeatureArea.Aks);
+        var eligible = new EligibleFakeProposeTool("propose_fake_fix");
+        var ineligible = new FakeInvestigationTool("propose_fake_other", FeatureArea.Aks, ToolKind.Mutate);
+        var modelClient = new ScriptedInvestigationModelClient();
+        var runner = BuildRunner(modelClient, new AgentToolRegistry([read, ineligible]),
+            allTools: [eligible, ineligible]);
+
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None,
+            allowAutofixProposals: true, sessionId: "proactive-r1-1");
+
+        Assert.NotNull(result);
+        var tools = modelClient.LastRequest!.Tools;
+        Assert.Contains(tools, t => t.Name == "propose_fake_fix" && t.BackgroundProposalEligible);
+        Assert.DoesNotContain(tools, t => t.Name == "propose_fake_other");
+        Assert.Contains("Autofix proposals", modelClient.LastRequest.SystemPrompt);
+    }
+
+    [Fact]
+    public async Task AutofixOptedIn_ProposalToolCall_ParksAction_WithInvestigationOriginStamp()
+    {
+        // End-to-end gating: the real propose tool executes through the registry while the
+        // ambient selection is pushed, so the parked action carries the run's provenance.
+        var read = new FakeInvestigationTool("fake_read", FeatureArea.Aks);
+        var coordinator = new AgentActionCoordinator();
+        var appState = new AppStateService(new ProfileRepository(), new UiStateRepository(),
+            new AppEventBus(NullLogger<AppEventBus>.Instance));
+        var propose = new SwebKit.Agents.Tools.Aks.ProposeRestartAksDeploymentTool(appState, coordinator);
+
+        var modelClient = new ScriptedInvestigationModelClient
+        {
+            OnChat = async (_, executor, ct) =>
+            {
+                Assert.NotNull(executor);
+                var toolResult = await executor!("propose_restart_aks_deployment",
+                    JsonDocument.Parse("""{"deployment":"orders","namespace":"prod"}""").RootElement, ct);
+                Assert.Contains("pending_confirmation", toolResult);
+                return new AgentChatResult
+                {
+                    Text = """{"hypothesis":"stuck rollout"}""",
+                    ToolsUsed = ["propose_restart_aks_deployment"],
+                    Elapsed = TimeSpan.Zero,
+                };
+            },
+        };
+        var runner = BuildRunner(modelClient, new AgentToolRegistry([read, propose]), allTools: [propose]);
+
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None,
+            allowAutofixProposals: true, sessionId: "proactive-r1-99");
+
+        Assert.NotNull(result);
+        var action = Assert.Single(coordinator.GetPendingActions());
+        Assert.Equal(AgentActionType.RestartAksDeployment, action.Type);
+        Assert.Equal("investigation", action.Origin);
+        Assert.Equal("proactive-r1-99", action.OriginSessionId);
+        Assert.True(action.ExpiresAt > DateTimeOffset.UtcNow.AddHours(23));
+    }
+
+    [Fact]
+    public async Task AutofixOptedIn_NoSessionId_ProposalsParkWithoutOrigin()
+    {
+        var read = new FakeInvestigationTool("fake_read", FeatureArea.Aks);
+        var coordinator = new AgentActionCoordinator();
+        var appState = new AppStateService(new ProfileRepository(), new UiStateRepository(),
+            new AppEventBus(NullLogger<AppEventBus>.Instance));
+        var propose = new SwebKit.Agents.Tools.Aks.ProposeRestartAksDeploymentTool(appState, coordinator);
+
+        var modelClient = new ScriptedInvestigationModelClient
+        {
+            OnChat = async (_, executor, ct) =>
+            {
+                await executor!("propose_restart_aks_deployment",
+                    JsonDocument.Parse("""{"deployment":"orders"}""").RootElement, ct);
+                return new AgentChatResult { Text = """{"hypothesis":"h"}""", ToolsUsed = [], Elapsed = TimeSpan.Zero };
+            },
+        };
+        var runner = BuildRunner(modelClient, new AgentToolRegistry([read, propose]), allTools: [propose]);
+
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None,
+            allowAutofixProposals: true); // sessionId omitted
+
+        Assert.NotNull(result);
+        var action = Assert.Single(coordinator.GetPendingActions());
+        Assert.Null(action.Origin);
+        Assert.Null(action.OriginSessionId);
+    }
+
+    [Fact]
+    public async Task InvestigateWithSessionId_RequestSelectionCarriesTheProvenanceStamp()
+    {
+        // For ACP profiles the local executor is bypassed — the model client bakes
+        // request.Selection into the MCP bridge URL instead. If the stamp only lived on the
+        // executor, agent-side propose_* calls would park actions the report can't find.
+        var read = new FakeInvestigationTool("fake_read", FeatureArea.Aks);
+        var modelClient = new ScriptedInvestigationModelClient();
+        var runner = BuildRunner(modelClient, new AgentToolRegistry([read]));
+
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None,
+            sessionId: "proactive-r1-42");
+
+        Assert.NotNull(result);
+        var selection = modelClient.LastRequest!.Selection;
+        Assert.NotNull(selection);
+        Assert.Equal("investigation", selection![PendingActionProvenance.OriginKey]);
+        Assert.Equal("proactive-r1-42", selection[PendingActionProvenance.SessionIdKey]);
     }
 }

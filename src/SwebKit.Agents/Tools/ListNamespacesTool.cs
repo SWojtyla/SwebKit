@@ -4,7 +4,7 @@ using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools;
 
-public sealed class ListNamespacesTool : IAgentTool
+public sealed class ListNamespacesTool : IAccessAwareTool
 {
     private readonly IAksClientFactory _aksFactory;
     private readonly DemoAksClient _demoAksClient;
@@ -20,6 +20,12 @@ public sealed class ListNamespacesTool : IAgentTool
     public string Name => "list_namespaces";
     public string Description => "Lists all Kubernetes namespaces in the cluster.";
     public FeatureArea FeatureArea => FeatureArea.Aks;
+
+    // Namespace listing — the same call the access report's kubernetes.read probe runs.
+    public string Capability => AccessCapabilities.KubernetesRead;
+
+    public string? GetConnectionKey(JsonElement arguments) =>
+        AksToolContext.ResolveConnectionKey(_appState, AksToolContext.GetContext(arguments));
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {

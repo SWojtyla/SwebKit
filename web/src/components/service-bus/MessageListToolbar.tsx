@@ -18,6 +18,8 @@ import {
     type RowDensity,
 } from "@/lib/stores/sb-preferences";
 import type { SbSavedFilter } from "@/lib/stores/sb-filters";
+import type { SbSessionSummary } from "@/lib/types";
+import { formatLocalDateTime } from "@/lib/datetime";
 
 /** Everything the toolbar needs from MessageList — grouped so the JSX sections can move
  * without the parent re-deriving each field per section. */
@@ -93,7 +95,7 @@ export function MessageListToolbar(p: FilterToolbarProps) {
                     Saved
                 </button>
                 {p.showSavedFilters && (
-                    <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded-md border bg-card p-2 shadow-lg">
+                    <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded-md border bg-popover p-2 shadow-lg">
                         {p.savedFilters.length === 0 ? (
                             <div className="text-xs text-muted-foreground">
                                 No saved filters
@@ -480,6 +482,52 @@ export function SessionPinFilter({
                     <X className="h-3.5 w-3.5" />
                 </button>
             )}
+        </div>
+    );
+}
+
+/**
+ * One chip per session visible in the peek window — clicking a chip drives the existing
+ * SessionPinFilter rather than filtering on its own, so the chips and the pin input can never
+ * disagree about which session is pinned. Only rendered for `requiresSession` entities.
+ */
+export function SessionChipBar({
+    sessions,
+    pinnedSessionId,
+    onPin,
+}: {
+    sessions: SbSessionSummary[];
+    pinnedSessionId: string | null;
+    onPin: (sessionId: string | null) => void;
+}) {
+    if (sessions.length === 0) return null;
+    return (
+        <div
+            className="flex flex-wrap items-center gap-1 border-b px-2 py-1"
+            data-testid="session-chip-bar"
+        >
+            <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="mr-1 text-xs text-muted-foreground">Sessions:</span>
+            {sessions.map((session) => {
+                const active = pinnedSessionId === session.sessionId;
+                return (
+                    <button
+                        key={session.sessionId}
+                        type="button"
+                        data-testid={`session-chip-${session.sessionId}`}
+                        aria-pressed={active}
+                        onClick={() => onPin(active ? null : session.sessionId)}
+                        title={`${session.messageCount} message(s) · ${formatLocalDateTime(session.firstEnqueuedAt)} – ${formatLocalDateTime(session.lastEnqueuedAt)}${active ? " · click to unpin" : " · click to pin this session"}`}
+                        className={`rounded-full border px-2 py-0.5 text-xs ${
+                            active
+                                ? "border-primary bg-primary/15 text-primary"
+                                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                        }`}
+                    >
+                        {session.sessionId} ({session.messageCount})
+                    </button>
+                );
+            })}
         </div>
     );
 }

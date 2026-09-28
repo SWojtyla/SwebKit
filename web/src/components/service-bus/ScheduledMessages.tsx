@@ -41,7 +41,7 @@ export function ScheduledMessages({ nsId, entityPath, onClose }: Props) {
             data-testid="scheduled-overlay"
         >
             <div
-                className="flex max-h-[80vh] w-[600px] flex-col rounded-lg border bg-card shadow-lg"
+                className="flex max-h-[80vh] w-[600px] flex-col rounded-lg border bg-popover shadow-lg"
                 data-testid="scheduled-messages-panel"
             >
                 {/* Header */}

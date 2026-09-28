@@ -92,6 +92,20 @@ Settings component
 
 The GET endpoint clones profile data before applying demo overlays. The PUT endpoint removes known demo IDs before persistence so toggling demo mode cannot poison real configuration.
 
+## Access report (access-awareness-pipeline)
+
+`AccessReportService` probes what the configured identity can actually do per feature area
+— Service Bus management vs. data-plane peek are separate capabilities, alongside SQL
+metadata visibility (`sys.fn_my_permissions`), Redis, Storage, AKS, and Observability.
+Results are cached five minutes with per-probe `Lazy<Task>` coalescing and an
+eight-second abandon-not-cancel timeout, so a hung probe never blocks the report.
+`RecordObservedDenial`/`TryGetKnownDenial` let tools feed runtime denials back into the
+report without waiting for TTL expiry. Profile save/import invalidates the affected
+entries; demo-mode overlays keep reserved demo IDs from resolving to real connections.
+
+- `GET /api/access/report` — full report (`?refresh=true` bypasses the cache)
+- `GET /api/access/report/{featureArea}/{connectionKey}` — single entry, 404 if absent
+
 ## Export and Import
 
 General Settings can export or import the versioned configuration bundle through:

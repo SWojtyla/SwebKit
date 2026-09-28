@@ -47,6 +47,16 @@ public class DeploymentInfo
     public int ReadyReplicas { get; set; }
     public string Status { get; set; } = "Unknown";
     public string? ImageTag { get; set; }
+
+    /// <summary>
+    /// Most recent <c>status.conditions[*].lastUpdateTime/lastTransitionTime</c> the deployment
+    /// controller stamped — the closest Kubernetes exposes to a "this deployment changed at"
+    /// timestamp (rollouts, scaling, and status flips all move a condition). Null when the
+    /// deployment has no conditions yet (freshly created, or a client that doesn't populate it).
+    /// It proves *that* something about the deployment was touched around that time, not *what*
+    /// — consumers answering "what changed" should treat it as a coarse correlation signal.
+    /// </summary>
+    public DateTimeOffset? LastUpdateTime { get; set; }
     public Dictionary<string, string> Labels { get; set; } = [];
     public Dictionary<string, string> SelectorLabels { get; set; } = [];
 }
@@ -70,6 +80,11 @@ public class PodInfo
     public string? PodIP { get; set; }
     public string? NodeName { get; set; }
     public DateTimeOffset? StartTime { get; set; }
+    /// <summary>Kind of the controller ownerReference (Job, ReplicaSet, StatefulSet…),
+    /// null for bare pods. Monitoring uses it to tell normal controller cleanup
+    /// (e.g. a CronJob deleting a finished Job's pod) from a real termination.</summary>
+    public string? OwnerKind { get; set; }
+    public string? OwnerName { get; set; }
     public List<string> Containers { get; set; } = [];
     public Dictionary<string, string> Labels { get; set; } = [];
     public string ReadyDisplay => $"{ReadyContainers}/{TotalContainers}";
@@ -283,6 +298,11 @@ public class KubeContextInfo
 
 public class HelmRevisionInfo
 {
+    /// <summary>The Helm release this revision belongs to. Populated by
+    /// <c>GetHelmRevisionsAsync</c> (namespace-wide listing — otherwise the release would be
+    /// unknowable) and by <c>GetHelmReleaseHistoryAsync</c>; null only from producers that
+    /// predate the field.</summary>
+    public string? ReleaseName { get; set; }
     public int Revision { get; set; }
     public string Status { get; set; } = "unknown";
     public string? Chart { get; set; }

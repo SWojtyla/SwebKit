@@ -1,3 +1,5 @@
+using SwebKit.Core.Domain;
+
 namespace SwebKit.Core.Models;
 
 /// <summary>A database on a connected SQL server.</summary>
@@ -33,8 +35,17 @@ public sealed class SqlForeignKeyInfo
 public sealed class SqlObjectInfo
 {
     public string Name { get; set; } = string.Empty;
-    /// <summary>"table" or "view".</summary>
+    /// <summary>"table" or "view" for catalog-discovered objects; a declared procedure is
+    /// "proc" (procedures can't come from the catalog query — it filters on U/V types).</summary>
     public string Kind { get; set; } = "table";
+
+    /// <summary>
+    /// True when the object came from the connection's <see cref="SqlConnectionEntry.DeclaredObjects"/>
+    /// list rather than the catalog — a name the user asserted exists, typically because
+    /// VIEW DEFINITION is denied. Declared objects carry no catalog metadata: columns load
+    /// lazily through <c>SELECT TOP 0</c> result-set metadata, which needs only SELECT.
+    /// </summary>
+    public bool IsDeclared { get; set; }
     public List<SqlColumnInfo> Columns { get; set; } = [];
     public List<SqlIndexInfo> Indexes { get; set; } = [];
     public List<SqlForeignKeyInfo> ForeignKeys { get; set; } = [];
@@ -68,11 +79,47 @@ public sealed class SqlSchemaModel
     /// </summary>
     public bool MetadataHidden { get; set; }
 
-    /// <summary>Applies <see cref="MetadataHidden"/> analysis from a permission probe.</summary>
+    /// <summary>
+    /// Merges user-declared object names (<see cref="SqlConnectionEntry.DeclaredObjects"/>)
+    /// into the tree as <see cref="SqlObjectInfo.IsDeclared"/> nodes — the browsing lifeline
+    /// when catalog metadata is hidden but the identity holds per-object SELECT/EXECUTE.
+    /// A catalog-discovered object always wins over a declaration of the same name; malformed
+    /// entries are ignored (the entry setter already drops them, but persisted JSON and tests
+    /// can carry anything).
+    /// </summary>
+    public void MergeDeclaredObjects(IEnumerable<string>? declared)
+    {
+        foreach (var raw in declared ?? [])
+        {
+            if (!SqlDeclaredObject.TryParse(raw, out var obj))
+                continue;
+
+            var schema = Schemas.FirstOrDefault(s =>
+                string.Equals(s.Name, obj.Schema, StringComparison.OrdinalIgnoreCase));
+            if (schema is null)
+            {
+                schema = new SqlSchemaGroup { Name = obj.Schema };
+                Schemas.Add(schema);
+            }
+            if (schema.Objects.Any(o =>
+                    string.Equals(o.Name, obj.Name, StringComparison.OrdinalIgnoreCase)))
+                continue; // already discovered in the catalog — don't shadow real metadata
+            schema.Objects.Add(new SqlObjectInfo
+            {
+                Name = obj.Name,
+                Kind = obj.IsProcedure ? "proc" : "table",
+                IsDeclared = true,
+            });
+        }
+    }
+
+    /// <summary>Applies <see cref="MetadataHidden"/> analysis from a permission probe.
+    /// Declared objects don't count toward "the catalog has content" — a tree holding only
+    /// declarations still reports hidden metadata so the UI can say "partial tree".</summary>
     public void ApplyPermissionAnalysis(IReadOnlyList<string> permissions)
     {
         EffectivePermissions = [.. permissions];
-        MetadataHidden = Schemas.Count == 0
+        MetadataHidden = Schemas.All(s => s.Objects.All(o => o.IsDeclared))
             && permissions.Count > 0
             && !permissions.Any(p => string.Equals(p, "VIEW DEFINITION", StringComparison.OrdinalIgnoreCase))
             && permissions.Any(p => p is "SELECT" or "EXECUTE" or "INSERT" or "UPDATE" or "DELETE" or "CONTROL");
@@ -171,6 +218,9 @@ public sealed class SqlDiscoveredServer
     public string Name { get; set; } = string.Empty;
     public string ResourceGroup { get; set; } = string.Empty;
     public string SubscriptionId { get; set; } = string.Empty;
+    /// <summary>Full ARM resource id of the server — seeds <c>SqlConnectionEntry.ResourceId</c>
+    /// so a connection added from discovery carries its ARM scope (access-awareness Phase 3a).</summary>
+    public string ResourceId { get; set; } = string.Empty;
     public string SubscriptionName { get; set; } = string.Empty;
     public string Location { get; set; } = string.Empty;
     public List<string> Databases { get; set; } = [];

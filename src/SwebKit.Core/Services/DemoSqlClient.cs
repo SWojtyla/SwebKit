@@ -46,7 +46,12 @@ public sealed class DemoSqlClient : ISqlClient
     {
         var model = new SqlSchemaModel { Database = database ?? "orders" };
         if (MetadataHidden)
-            return Task.FromResult(model); // what sys.objects returns with no VIEW DEFINITION
+        {
+            // What sys.objects returns with no VIEW DEFINITION — empty — plus the
+            // connection's declared objects, which is the whole point of declaring them.
+            model.MergeDeclaredObjects(Connection.DeclaredObjects);
+            return Task.FromResult(model);
+        }
         var dbo = new SqlSchemaGroup { Name = "dbo" };
         var sales = new SqlSchemaGroup { Name = "sales" };
 
@@ -127,7 +132,45 @@ public sealed class DemoSqlClient : ISqlClient
 
         model.Schemas.Add(dbo);
         model.Schemas.Add(sales);
+        model.MergeDeclaredObjects(Connection.DeclaredObjects);
         return Task.FromResult(model);
+    }
+
+    public async Task<IReadOnlyList<SqlColumnInfo>> GetObjectColumnsAsync(
+        string schemaName, string objectName, string? database, CancellationToken ct = default)
+    {
+        if (MetadataHidden)
+        {
+            // The locked-down login: SELECT TOP 0 succeeds on granted objects and denies the
+            // rest. The denial wording intentionally matches the SQL Server phrasing the
+            // AccessAdvisor classifier keys on ("permission was denied"), so demo mode
+            // exercises the same per-object-denial path a real 229 error takes.
+            if (string.Equals(schemaName, "prd", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(objectName, "v_orders", StringComparison.OrdinalIgnoreCase))
+            {
+                return
+                [
+                    Col("id", "int", pk: true),
+                    Col("customer_id", "int"),
+                    Col("order_date", "datetime2"),
+                    Col("total", "decimal"),
+                    Col("status", "nvarchar"),
+                ];
+            }
+            throw new InvalidOperationException(
+                $"The SELECT permission was denied on the object '{objectName}', " +
+                $"database '{database ?? Connection.Database}', schema '{schemaName}'.");
+        }
+
+        // Full-metadata variants answer from the canned catalog — SELECT TOP 0 on a real
+        // server returns exactly this result-set shape.
+        var schema = await GetSchemaAsync(database, ct).ConfigureAwait(false);
+        var match = schema.Schemas
+            .FirstOrDefault(s => string.Equals(s.Name, schemaName, StringComparison.OrdinalIgnoreCase))
+            ?.Objects.FirstOrDefault(o => string.Equals(o.Name, objectName, StringComparison.OrdinalIgnoreCase));
+        return match?.Columns
+            ?? throw new InvalidOperationException(
+                $"Invalid object name '{schemaName}.{objectName}'.");
     }
 
     public Task<SqlQueryResult> ExecuteQueryAsync(string sql, string? database, int maxRows, bool allowWrites, CancellationToken ct = default)
@@ -147,6 +190,14 @@ public sealed class DemoSqlClient : ISqlClient
             result = RowsToResult(ProductRows(), maxRows);
         else if (normalized.Contains("from invoices") || normalized.Contains("from sales.invoices"))
             result = RowsToResult(InvoiceRows(), maxRows);
+        else if (MetadataHidden
+                 && (normalized.Contains("from v_audit") || normalized.Contains("from prd.v_audit")))
+            // v_audit carries an object-level DENY in the demo scenario — it beats the
+            // database-scope SELECT the prd login holds, so queries fail per object.
+            throw new InvalidOperationException(
+                "The SELECT permission was denied on the object 'v_audit', database 'orders', schema 'prd'.");
+        else if (normalized.Contains("from v_orders") || normalized.Contains("from prd.v_orders"))
+            result = RowsToResult(OrderRows(), maxRows); // declared-object query path on demo-sql-prd
         else
             result = new SqlQueryResult
             {
@@ -162,6 +213,12 @@ public sealed class DemoSqlClient : ISqlClient
         string? filterColumn, string? filterText, string? orderByColumn, bool descending,
         int skip, int take, CancellationToken ct = default)
     {
+        // Same object-level DENY as the query path — browsing a denied declared object
+        // surfaces the per-object failure rather than a misleading empty grid.
+        if (MetadataHidden && string.Equals(tableName, "v_audit", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"The SELECT permission was denied on the object '{tableName}', database 'orders', schema '{schemaName}'.");
+
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var rows = RowsFor(schemaName, tableName);
 
@@ -234,6 +291,7 @@ public sealed class DemoSqlClient : ISqlClient
             ("dbo", "products") => ProductRows(),
             ("sales", "invoices") => InvoiceRows(),
             ("sales", "returns") when _variant == 1 => ReturnRows(),
+            ("prd", "v_orders") => OrderRows(), // declared view on the restricted connection
             _ => [],
         };
 

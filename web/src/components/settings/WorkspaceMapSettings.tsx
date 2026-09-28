@@ -24,6 +24,7 @@ import {
     AREA_LABELS,
     AREAS,
     buildGraphElements,
+    collectLogicalNames,
     EMPTY_TOPOLOGY,
     filterTopology,
     suggestionKey,
@@ -176,6 +177,17 @@ export function WorkspaceMapSettings() {
         });
     };
 
+    // Cross-environment compare (agent-colleague item 7) — the shared name that
+    // marks "the same service" on different maps. Only this node changes: the
+    // datalist's existing-name suggestions never propagate to other maps.
+    const setNodeLogicalName = (id: string, logicalName: string | null) => {
+        save({
+            nodes: topology.nodes.map((n) =>
+                n.id === id ? { ...n, logicalName } : n,
+            ),
+        });
+    };
+
     const removeNode = (id: string) => {
         save({
             nodes: topology.nodes.filter((n) => n.id !== id),
@@ -233,6 +245,11 @@ export function WorkspaceMapSettings() {
             node={selectedNode}
             suggestions={visibleSuggestions}
             onRenameNode={renameNode}
+            onSetLogicalName={setNodeLogicalName}
+            logicalNameSuggestions={collectLogicalNames(
+                maps,
+                selectedNode?.logicalName,
+            )}
             onSetNodeContext={setNodeContext}
             onRemoveNode={removeNode}
             onAddRelationship={addRelationship}
@@ -481,6 +498,11 @@ export function WorkspaceMapSettings() {
                                         node={n}
                                         suggestions={visibleSuggestions}
                                         onRenameNode={renameNode}
+                                        onSetLogicalName={setNodeLogicalName}
+                                        logicalNameSuggestions={collectLogicalNames(
+                                            maps,
+                                            n.logicalName,
+                                        )}
                                         onSetNodeContext={setNodeContext}
                                         onRemoveNode={removeNode}
                                         onAddRelationship={addRelationship}

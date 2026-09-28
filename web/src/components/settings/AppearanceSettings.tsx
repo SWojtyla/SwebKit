@@ -1,6 +1,6 @@
 import { useSettingsStore, type Theme } from "@/lib/stores/settings";
 import { useUserSettings, useUpdateUserSettings } from "@/lib/hooks";
-import { FATHOM_UNLOCK_THRESHOLD, type UserSettings } from "@/lib/types";
+import { type UserSettings } from "@/lib/types";
 
 const THEMES: { id: Theme; label: string; desc: string }[] = [
   { id: "dark", label: "Aurora Dark", desc: "Deep navy with indigo glows" },
@@ -8,6 +8,10 @@ const THEMES: { id: Theme; label: string; desc: string }[] = [
   { id: "fancy", label: "✨ Fancy ✨", desc: "Maximum vibes. Zero professionalism." },
   { id: "fathom-dark", label: "Fathom Abyss", desc: "Gold light sinking into dark water" },
   { id: "fathom-light", label: "Fathom Shallows", desc: "Sunlit surface, a hint of gold" },
+  { id: "letterpress-light", label: "Letterpress Day", desc: "Warm paper, ink, and a vermilion stamp" },
+  { id: "letterpress-dark", label: "Letterpress Night", desc: "Candlelit pages, ember accents" },
+  { id: "cascade-light", label: "Cascade Clear", desc: "Frosted panes over drifting water light" },
+  { id: "cascade-dark", label: "Cascade Deep", desc: "Dark water, glass edges catching light" },
 ];
 
 export function AppearanceSettings() {
@@ -18,10 +22,6 @@ export function AppearanceSettings() {
   if (isLoading || !settings) {
     return <div className="text-muted-foreground">Loading...</div>;
   }
-
-  const sessionCount = settings.sessionCount;
-  const fathomAvailable = settings.fathomUnlocked || settings.fathomDeveloperOverride || false;
-  const fathomProgress = Math.min(100, Math.round((sessionCount / FATHOM_UNLOCK_THRESHOLD) * 100));
 
   const selectTheme = (id: Theme) => {
     setTheme(id);
@@ -43,20 +43,17 @@ export function AppearanceSettings() {
         <div className="mt-3 grid grid-cols-3 gap-3">
           {THEMES.map((t) => {
             const isFathom = t.id === "fathom-dark" || t.id === "fathom-light";
-            const locked = isFathom && !fathomAvailable;
+            const isLetterpress = t.id === "letterpress-light" || t.id === "letterpress-dark";
+            const isCascade = t.id === "cascade-light" || t.id === "cascade-dark";
 
             return (
               <button
                 key={t.id}
-                onClick={() => !locked && selectTheme(t.id)}
-                disabled={locked}
-                title={locked ? `Unlocks after ${FATHOM_UNLOCK_THRESHOLD} sessions` : undefined}
+                onClick={() => selectTheme(t.id)}
                 className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all duration-200 ${
-                  locked
-                    ? "cursor-default border-border opacity-60"
-                    : theme === t.id
-                      ? "border-primary glow"
-                      : "border-border hover:border-primary/40"
+                  theme === t.id
+                    ? "border-primary glow"
+                    : "border-border hover:border-primary/40"
                 }`}
                 data-testid={`appearance-theme-${t.id}`}
               >
@@ -71,17 +68,44 @@ export function AppearanceSettings() {
                           ? "bg-[linear-gradient(180deg,#16321f_0%,#0a1a22_40%,#050b12_100%)]"
                           : t.id === "fathom-light"
                             ? "bg-[linear-gradient(180deg,#fdf6e3_0%,#eaf5ee_40%,#cfe9e6_100%)]"
-                            : "bg-[oklch(0.98_0.008_250)]"
+                            : t.id === "letterpress-light"
+                              ? "bg-[linear-gradient(180deg,#fdfaf2_0%,#f4efe3_55%,#e9e0cb_100%)]"
+                              : t.id === "letterpress-dark"
+                                ? "bg-[linear-gradient(180deg,#2a211a_0%,#161210_55%,#0e0b08_100%)]"
+                                : t.id === "cascade-light"
+                                  ? "bg-[linear-gradient(160deg,#ffffff_0%,#e6f1f4_50%,#c9e5ec_100%)]"
+                                  : t.id === "cascade-dark"
+                                    ? "bg-[linear-gradient(160deg,#12303c_0%,#060d12_60%,#041418_100%)]"
+                                    : "bg-[oklch(0.98_0.008_250)]"
                   }`}
                 >
                   {t.id === "fancy" ? (
                     <span className="text-2xl drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">✨🌈💅</span>
                   ) : isFathom ? (
-                    locked ? (
-                      <FathomGauge percent={fathomProgress} />
-                    ) : (
-                      <div className="h-6 w-6 rounded-full bg-[#e0a940] shadow-[0_0_10px_rgba(224,169,64,0.6)]" />
-                    )
+                    <div className="h-6 w-6 rounded-full bg-[#e0a940] shadow-[0_0_10px_rgba(224,169,64,0.6)]" />
+                  ) : isLetterpress ? (
+                    <span
+                      className="font-serif text-2xl"
+                      style={{ color: t.id === "letterpress-light" ? "#26211a" : "#e8e0cf" }}
+                    >
+                      Aa<span style={{ color: t.id === "letterpress-light" ? "#bc3f1e" : "#e06535" }}>.</span>
+                    </span>
+                  ) : isCascade ? (
+                    <div
+                      className="h-7 w-10 rounded-2xl border"
+                      style={{
+                        background:
+                          t.id === "cascade-light"
+                            ? "rgba(255,255,255,0.45)"
+                            : "rgba(255,255,255,0.08)",
+                        borderColor:
+                          t.id === "cascade-light"
+                            ? "rgba(255,255,255,0.85)"
+                            : "rgba(255,255,255,0.22)",
+                        boxShadow:
+                          "inset 0 1px 0 rgba(255,255,255,0.7), 0 4px 10px rgba(11,143,168,0.25)",
+                      }}
+                    />
                   ) : (
                     <div className="flex gap-1.5">
                       <div className="h-6 w-6 rounded-full bg-[oklch(0.65_0.24_265)]" />
@@ -91,19 +115,12 @@ export function AppearanceSettings() {
                   )}
                 </div>
                 <div className="text-sm font-medium">{t.label}</div>
-                <div className="text-xs text-muted-foreground">
-                  {locked ? `${sessionCount} / ${FATHOM_UNLOCK_THRESHOLD} sessions` : t.desc}
-                </div>
-                {theme === t.id && !locked && (
+                <div className="text-xs text-muted-foreground">{t.desc}</div>
+                {theme === t.id && (
                   <div className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
                     <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
                       <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                  </div>
-                )}
-                {locked && (
-                  <div className="absolute right-3 top-3 text-muted-foreground" aria-label="Locked" title={`Unlocks at ${FATHOM_UNLOCK_THRESHOLD} sessions`}>
-                    🔒
                   </div>
                 )}
               </button>
@@ -150,15 +167,4 @@ export function AppearanceSettings() {
   );
 }
 
-function FathomGauge({ percent }: { percent: number }) {
-  return (
-    <div
-      className="relative h-9 w-9 rounded-full"
-      style={{ background: `conic-gradient(from -90deg, #e0a940 ${percent}%, rgba(255,255,255,0.15) ${percent}% 100%)` }}
-    >
-      <div className="absolute inset-[3px] flex items-center justify-center rounded-full bg-card text-[10px] font-semibold text-foreground">
-        {percent}%
-      </div>
-    </div>
-  );
-}
+

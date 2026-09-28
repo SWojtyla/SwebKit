@@ -9,16 +9,25 @@ import {
     getMonitoringInsights,
     deleteMonitoringInsight,
     openInsightChat,
+    getMonitoringSilences,
+    createMonitoringSilence,
+    deleteMonitoringSilence,
+    muteMonitoringRule,
+    getMonitoringHistorySummary,
 } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
+import { formatLocalDateTime } from "@/lib/datetime";
 import { useMonitoringStreamApi } from "@/lib/monitoring-stream-context";
 import type {
     MonitoringAlertRule,
+    MonitoringSilence,
     AlertFiredEvent,
+    AlertResolvedEvent,
     AlertSignalStatus,
     AlertEvaluatedEvent,
     ProactiveInsightReadyEvent,
     ProactiveInsightStatusEvent,
+    PendingActionProposedEvent,
 } from "../api";
 
 // ── Monitoring hooks ──────────────────────────────────────────────────────────
@@ -78,6 +87,80 @@ export function useMonitoringHistory() {
     });
 }
 
+/** Ops-dashboard aggregate over the durable history (monitoring-closed-loop item 4):
+ * firings/hour, severity split, open incidents, MTTR. The Ops tab mounts the consumer,
+ * so no `enabled` gate is needed — it only fetches while visible. */
+export function useMonitoringHistorySummary(windowHours: number) {
+    return useQuery({
+        queryKey: ["monitoring", "history-summary", windowHours],
+        queryFn: ({ signal }) => getMonitoringHistorySummary(windowHours, signal),
+        refetchInterval: 30_000,
+    });
+}
+
+/** Persisted silence windows (monitoring-closed-loop item 3). Modest poll — the windows
+ * change only on user action; the firing-side check is server-side anyway. */
+export function useMonitoringSilences() {
+    return useQuery({
+        queryKey: ["monitoring", "silences"],
+        queryFn: ({ signal }) => getMonitoringSilences(signal),
+        refetchInterval: 30_000,
+    });
+}
+
+export function useCreateMonitoringSilence() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (silence: Omit<MonitoringSilence, "id">) =>
+            createMonitoringSilence(silence),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["monitoring", "silences"] });
+        },
+        onError: (error) =>
+            notify("error", "Couldn't create the silence", String(error)),
+    });
+}
+
+export function useDeleteMonitoringSilence() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (id: string) => deleteMonitoringSilence(id),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["monitoring", "silences"] });
+        },
+        onError: (error) =>
+            notify("error", "Couldn't delete the silence", String(error)),
+    });
+}
+
+/** Sets or clears a rule's per-rule mute. `until: null` unmutes. The rules query refreshes so
+ * the row's muted badge updates; a firing during the mute lands in history flagged
+ * `suppressed` (audit trail), but no toast or AI investigation. */
+export function useMuteMonitoringRule() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: ({ id, until }: { id: string; until: string | null }) =>
+            muteMonitoringRule(id, until),
+        onSuccess: (rule, { until }) => {
+            qc.invalidateQueries({ queryKey: ["monitoring", "rules"] });
+            notify(
+                "info",
+                until === null ? "Rule unmuted" : "Rule muted",
+                until === null
+                    ? `"${rule.name}" will alert normally.`
+                    : `"${rule.name}" is muted until ${formatLocalDateTime(until)}.`,
+                undefined,
+                "/monitoring",
+            );
+        },
+        onError: (error) =>
+            notify("error", "Couldn't update the rule mute", String(error)),
+    });
+}
+
 /**
  * Persisted AI investigation reports backing the Monitoring "AI Reports" tab
  * (ai-insight-reports). The query is invalidated by `useMonitoringStream`'s
@@ -134,20 +217,27 @@ export interface MonitoringEvaluationState {
  *
  * Each frame is a `{kind, event}` envelope (workspace-intelligence Module 4) so the one stream
  * carries `AlertFiredEvent` (`kind: "alertFired"`), `ProactiveInsightReadyEvent`
- * (`kind: "proactiveInsightReady"`), `AlertEvaluatedEvent` (`kind: "evaluationCompleted"`), and
- * `ProactiveInsightStatusEvent` (`kind: "proactiveInsightStatus"`).
+ * (`kind: "proactiveInsightReady"`), `AlertEvaluatedEvent` (`kind: "evaluationCompleted"`),
+ * `ProactiveInsightStatusEvent` (`kind: "proactiveInsightStatus"`), `AlertResolvedEvent`
+ * (`kind: "alertResolved"` — the recovery signal when a firing rule evaluates Ok again), and
+ * `PendingActionProposedEvent` (`kind: "pendingActionProposed"` — an opted-in investigation just
+ * parked a confirmable remediation proposal).
  */
 export function useMonitoringStream(
     onEvent: (evt: AlertFiredEvent) => void,
     onInsightReady?: (evt: ProactiveInsightReadyEvent) => void,
     onEvaluation?: (evt: AlertEvaluatedEvent) => void,
     onInsightStatus?: (evt: ProactiveInsightStatusEvent) => void,
+    onResolved?: (evt: AlertResolvedEvent) => void,
+    onPendingActionProposed?: (evt: PendingActionProposedEvent) => void,
 ) {
     const stream = useMonitoringStreamApi();
     const onEventEffect = useEffectEvent(onEvent);
     const onInsightReadyEffect = useEffectEvent((evt: ProactiveInsightReadyEvent) => onInsightReady?.(evt));
     const onEvaluationEffect = useEffectEvent((evt: AlertEvaluatedEvent) => onEvaluation?.(evt));
     const onInsightStatusEffect = useEffectEvent((evt: ProactiveInsightStatusEvent) => onInsightStatus?.(evt));
+    const onResolvedEffect = useEffectEvent((evt: AlertResolvedEvent) => onResolved?.(evt));
+    const onPendingActionProposedEffect = useEffectEvent((evt: PendingActionProposedEvent) => onPendingActionProposed?.(evt));
 
     // Highest seq this subscription has already consumed — replaying only newer frames keeps
     // a StrictMode re-subscribe from double-appending buffered events into subscriber state.
@@ -167,6 +257,12 @@ export function useMonitoringStream(
             } else if (frame.kind === "proactiveInsightStatus") {
                 onInsightStatusEffect(
                     frame.event as ProactiveInsightStatusEvent,
+                );
+            } else if (frame.kind === "alertResolved") {
+                onResolvedEffect(frame.event as AlertResolvedEvent);
+            } else if (frame.kind === "pendingActionProposed") {
+                onPendingActionProposedEffect(
+                    frame.event as PendingActionProposedEvent,
                 );
             }
         }, cursorRef.current);

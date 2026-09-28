@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Plus, Search, X } from "lucide-react";
 import { useProfile, useUpdateProfile } from "@/lib/hooks";
 import {
     useSqlAdHocTest,
@@ -8,6 +8,7 @@ import {
 } from "@/lib/hooks/useSql";
 import { useNotification } from "@/components/layout/notification-context";
 import type { SqlConnectionEntry, SqlDatabaseInfo } from "@/lib/types";
+import { parseDeclaredObjectsText } from "@/lib/sql-declared";
 import { DraftInput } from "./DraftInput";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { ProfileListLayout } from "./ProfileListLayout";
@@ -15,13 +16,14 @@ import { ProfileListLayout } from "./ProfileListLayout";
 /** A connection is worth confirming removal of once it has a real server — an untouched
  * "New Connection" placeholder can go without the extra click (same rule RedisSettings uses). */
 function isConfigured(conn: SqlConnectionEntry): boolean {
-    return conn.server.trim() !== "";
+    // server is typed string but can arrive null from persisted profiles.json
+    return (conn.server ?? "").trim() !== "";
 }
 
 /** Grouping key for the collapsible server headers — connections are per-database entries,
  * so several rows can share one server. Entries still being typed group under "(no server)". */
 function serverGroupKey(conn: SqlConnectionEntry): string {
-    return conn.server.trim().toLowerCase() || "";
+    return (conn.server ?? "").trim().toLowerCase();
 }
 
 export function SqlSettings() {
@@ -176,6 +178,15 @@ export function SqlSettings() {
                                                 server: server.serverFqdn,
                                                 database:
                                                     server.databases[0] ?? "",
+                                                // ARM discovery knows exactly which
+                                                // resource this is — carry the scope
+                                                // onto the saved entry so access
+                                                // requests can reference it.
+                                                subscriptionId:
+                                                    server.subscriptionId,
+                                                resourceGroup:
+                                                    server.resourceGroup,
+                                                resourceId: server.resourceId,
                                             });
                                             notify(
                                                 "success",
@@ -208,6 +219,12 @@ export function SqlSettings() {
                                                             displayName: db,
                                                             server: server.serverFqdn,
                                                             database: db,
+                                                            subscriptionId:
+                                                                server.subscriptionId,
+                                                            resourceGroup:
+                                                                server.resourceGroup,
+                                                            resourceId:
+                                                                server.resourceId,
                                                         });
                                                         notify(
                                                             "success",
@@ -315,8 +332,8 @@ function ConnectionRow({
     const test = useSqlAdHocTest();
     const browse = useSqlBrowseDatabases();
     const [formValues, setFormValues] = useState({
-        server: connection.server,
-        database: connection.database,
+        server: connection.server ?? "",
+        database: connection.database ?? "",
     });
     const [browseOpen, setBrowseOpen] = useState(false);
 
@@ -381,6 +398,29 @@ function ConnectionRow({
                 />
             </div>
 
+            <div>
+                <DraftInput
+                    type="text"
+                    value={connection.resourceId ?? ""}
+                    onCommit={(v) => onUpdate({ resourceId: v || null })}
+                    className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                    placeholder="Azure resource ID (optional)"
+                    data-testid={`sql-resource-id-${connection.id}`}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                    Filled automatically when you add a server from Azure
+                    discovery — the access report uses it to scope access
+                    requests. Leave empty if unknown; it's never guessed from
+                    the hostname.
+                </p>
+            </div>
+
+            <DeclaredObjectsEditor
+                connectionId={connection.id}
+                value={connection.declaredObjects ?? []}
+                onCommit={(entries) => onUpdate({ declaredObjects: entries })}
+            />
+
             <label className="flex items-center gap-2 text-sm">
                 <input
                     type="checkbox"
@@ -401,7 +441,13 @@ function ConnectionRow({
                 <button
                     onClick={() => test.mutate(formValues)}
                     disabled={test.isPending || !formValues.server.trim()}
-                    title={test.isPending ? "Testing…" : !formValues.server.trim() ? "Enter a server first" : undefined}
+                    title={
+                        test.isPending
+                            ? "Testing…"
+                            : !formValues.server.trim()
+                              ? "Enter a server first"
+                              : undefined
+                    }
                     className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                     data-testid={`sql-test-connection-${connection.id}`}
                 >
@@ -413,7 +459,13 @@ function ConnectionRow({
                         browse.mutate(formValues);
                     }}
                     disabled={browse.isPending || !formValues.server.trim()}
-                    title={browse.isPending ? "Loading…" : !formValues.server.trim() ? "Enter a server first" : undefined}
+                    title={
+                        browse.isPending
+                            ? "Loading…"
+                            : !formValues.server.trim()
+                              ? "Enter a server first"
+                              : undefined
+                    }
                     className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                     data-testid={`sql-browse-databases-${connection.id}`}
                 >
@@ -514,6 +566,142 @@ function ConnectionRow({
                     onCancel={onCancelRemove}
                     testId={`sql-remove-confirm-${connection.id}`}
                 />
+            )}
+        </div>
+    );
+}
+
+/** Editor for the connection's declared objects — "schema.name" or "exec:schema.name",
+ * one per line. A textarea (not per-line inputs) because pasting a list is the normal
+ * way this fills in; commit is on blur/unmount like DraftInput since every write is a
+ * full profile save. Invalid lines refuse to commit rather than silently dropping text
+ * the user typed — the committed list below stays authoritative meanwhile. */
+function DeclaredObjectsEditor({
+    connectionId,
+    value,
+    onCommit,
+}: {
+    connectionId: string;
+    value: string[];
+    onCommit: (entries: string[]) => void;
+}) {
+    const testId = `sql-declared-objects-${connectionId}`;
+    const [draft, setDraft] = useState(() => value.join("\n"));
+    const [error, setError] = useState<string | null>(null);
+    const committedRef = useRef(value.join("\n"));
+
+    const draftRef = useRef(draft);
+    const onCommitRef = useRef(onCommit);
+    useEffect(() => {
+        draftRef.current = draft;
+        onCommitRef.current = onCommit;
+    });
+
+    // Same re-sync rule as DraftInput: reconcile whenever the stored value diverges from
+    // what we last committed — a save echo or a normalized commit must never fight typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => {
+        const joined = value.join("\n");
+        if (joined !== committedRef.current) {
+            committedRef.current = joined;
+            setDraft(joined);
+            setError(null);
+        }
+    });
+
+    // Collapsing the row or switching settings tabs unmounts without a blur — commit a
+    // fully-valid draft then; a draft with invalid lines is left to die rather than
+    // silently saving a truncated list.
+    useEffect(() => {
+        return () => {
+            const { entries, invalid } = parseDeclaredObjectsText(
+                draftRef.current,
+            );
+            if (
+                invalid.length === 0 &&
+                entries.join("\n") !== committedRef.current
+            ) {
+                onCommitRef.current(entries);
+            }
+        };
+    }, []);
+
+    const commit = () => {
+        const { entries, invalid } = parseDeclaredObjectsText(draft);
+        if (invalid.length > 0) {
+            setError(
+                `Not valid "schema.name" entries: ${invalid.join(", ")} — fix or remove these lines.`,
+            );
+            return;
+        }
+        setError(null);
+        const canonical = entries.join("\n");
+        if (canonical !== draft) {
+            setDraft(canonical);
+            draftRef.current = canonical;
+        }
+        if (canonical === committedRef.current) return;
+        committedRef.current = canonical;
+        onCommit(entries);
+    };
+
+    return (
+        <div>
+            <label htmlFor={testId} className="mb-1 block text-sm font-medium">
+                Declared objects
+            </label>
+            <textarea
+                id={testId}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commit}
+                rows={3}
+                spellCheck={false}
+                placeholder={"prd.v_orders\nexec:prd.p_recalc"}
+                className="w-full rounded-md border bg-card px-3 py-1.5 font-mono text-xs"
+                data-testid={testId}
+            />
+            {error && (
+                <p
+                    className="mt-1 text-xs text-destructive"
+                    data-testid={`${testId}-error`}
+                >
+                    {error}
+                </p>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">
+                One <code>schema.name</code> per line (prefix a procedure with{" "}
+                <code>exec:</code>). For connections where catalog browsing is
+                denied, declared objects still appear in the schema tree —
+                columns load lazily on expand, needing only SELECT on the
+                object.
+            </p>
+            {value.length > 0 && (
+                <div
+                    className="mt-1 flex flex-wrap gap-1"
+                    data-testid={`${testId}-list`}
+                >
+                    {value.map((entry) => (
+                        <span
+                            key={entry}
+                            className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[11px]"
+                            data-testid={`${testId}-entry-${entry}`}
+                        >
+                            {entry}
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    onCommit(value.filter((e) => e !== entry))
+                                }
+                                className="text-muted-foreground hover:text-destructive"
+                                aria-label={`Remove ${entry}`}
+                                data-testid={`${testId}-remove-${entry}`}
+                            >
+                                <X className="h-3 w-3" />
+                            </button>
+                        </span>
+                    ))}
+                </div>
             )}
         </div>
     );

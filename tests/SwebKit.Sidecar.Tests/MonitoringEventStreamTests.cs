@@ -190,6 +190,29 @@ public class MonitoringEventStreamTests
     }
 
     [Fact]
+    public async Task RunAsync_KeepsThePendingActionProposedEnvelope()
+    {
+        var (context, body) = BuildContext();
+        var stream = new MonitoringEventStream();
+        var run = stream.RunAsync(context, CancellationToken.None, NoKeepAlive);
+
+        // The monitoring-closed-loop frame useMonitoringStream's onPendingActionProposed parses —
+        // field names are the wire contract for the "AI proposes X" invalidation + toast.
+        stream.Enqueue("pendingActionProposed", new PendingActionProposedEvent(
+            "r1", DateTimeOffset.UtcNow, "High DLQ depth", "proactive-r1-1",
+            "act-1", "PurgeServiceBusDeadLetters", "Purge 3 dead-lettered messages", "High"));
+        stream.Complete();
+        await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var text = body.Text;
+        Assert.Contains("\"kind\":\"pendingActionProposed\"", text);
+        Assert.Contains("\"ruleId\":\"r1\"", text);
+        Assert.Contains("\"sessionId\":\"proactive-r1-1\"", text);
+        Assert.Contains("\"actionId\":\"act-1\"", text);
+        Assert.Contains("\"actionType\":\"PurgeServiceBusDeadLetters\"", text);
+    }
+
+    [Fact]
     public async Task RunAsync_SetsSseResponseHeaders()
     {
         var (context, body) = BuildContext();

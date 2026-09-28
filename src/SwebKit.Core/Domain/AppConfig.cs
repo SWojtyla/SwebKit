@@ -1,9 +1,29 @@
+using SwebKit.Core.Security;
+
 namespace SwebKit.Core.Domain;
 
 public class AppConfig
 {
+    /// <summary>
+    /// The access-request webhook for this environment (access-awareness Phase 4) — where
+    /// "Send request" on a denied access-report row POSTs. The trigger URL itself never
+    /// lands here (it embeds a SAS sig); only the credential-store key does. Null when
+    /// nothing is configured — the request dialog then offers copy only.
+    /// </summary>
+    public AccessRequestConfig? AccessRequest { get; set; }
+
     public string Name { get; set; } = "Default";
+
+    /// <summary>Flags the profile as production — the shell shows a destructive-tinted PRD badge
+    /// and banner, and mutation surfaces (e.g. AKS) tighten their confirmations.</summary>
     public bool IsProduction { get; set; }
+
+    /// <summary>Free-form environment tag (e.g. <c>dev</c>/<c>stg</c>/<c>prd</c>) shown on the
+    /// shell's environment badge. When set it is authoritative — the badge classifier only falls
+    /// back to <see cref="IsProduction"/> and then <see cref="Name"/> heuristics when this is
+    /// blank. Named "Tag" (not "Environment") so it can't collide with the API Client's request
+    /// environments (<c>ApiEnvironment</c>).</summary>
+    public string? EnvironmentTag { get; set; }
     public List<SbEntityLink> ServiceBusEntityLinks { get; set; } = [];
     public AksConfig? AksConfig { get; set; }
     public RedisConfig? RedisConfig { get; set; }

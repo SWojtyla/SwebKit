@@ -68,7 +68,13 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       const nextMru = [item.id, ...mru.filter((id) => id !== item.id)].slice(0, MAX_MRU);
       setMru(nextMru);
       saveMru(nextMru);
-      navigate(item.to, { state: item.state });
+      // Action items own their effect — `run` may navigate (deep link) or just
+      // mutate state (Toggle demo mode). nav/resource items navigate directly.
+      if (item.run) {
+        item.run();
+      } else if (item.to) {
+        navigate(item.to, { state: item.state });
+      }
       onClose();
     },
     [mru, navigate, onClose],
@@ -99,7 +105,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       overlayTestId="command-palette-overlay"
       dialogTestId="command-palette"
       ariaLabel="Command palette"
-      dialogClassName="w-full max-w-lg rounded-lg border bg-card shadow-lg"
+      dialogClassName="w-full max-w-lg rounded-lg border bg-popover shadow-lg"
       onClose={onClose}
       onOverlayKeyDown={(e) => {
         if (e.key === "Escape") {

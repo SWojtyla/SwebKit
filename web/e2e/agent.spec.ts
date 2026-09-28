@@ -2,328 +2,513 @@ import { test, expect } from "@playwright/test";
 import { mockAgentChatStreamDone, setDemoMode } from "./helpers";
 
 test.describe("Agent", () => {
-  test.beforeEach(async ({ page }) => {
-    await setDemoMode(page, true);
-  });
-
-  test.afterEach(async ({ page }) => {
-    await setDemoMode(page, false);
-  });
-
-  test("displays empty state and input field", async ({ page }) => {
-    await page.goto("/agent");
-
-    await expect(page.getByTestId("agent-page")).toBeVisible();
-    await expect(page.getByTestId("agent-title")).toHaveText("AI Agent");
-    await expect(page.getByTestId("agent-empty")).toBeVisible();
-    await expect(page.getByTestId("agent-input")).toBeVisible();
-    await expect(page.getByTestId("agent-send")).toBeVisible();
-  });
-
-  test("shows clear confirmation and cancels", async ({ page }) => {
-    await page.goto("/agent");
-
-    // Clear button should be disabled when no messages
-    await expect(page.getByTestId("agent-clear")).toBeDisabled();
-
-    // Type a message to enable clear (message appears locally)
-    await page.getByTestId("agent-input").fill("Test message");
-    await page.getByTestId("agent-send").click();
-
-    // Clear button should now be enabled
-    await expect(page.getByTestId("agent-clear")).toBeEnabled();
-    await page.getByTestId("agent-clear").click();
-
-    // Confirmation should appear
-    await expect(page.getByTestId("agent-clear-confirm")).toBeVisible();
-    await expect(page.getByTestId("agent-clear-cancel")).toBeVisible();
-
-    // Cancel
-    await page.getByTestId("agent-clear-cancel").click();
-    await expect(page.getByTestId("agent-clear-confirm")).not.toBeVisible();
-  });
-
-  test("shows user message after sending", async ({ page }) => {
-    await page.goto("/agent");
-
-    await page.getByTestId("agent-input").fill("What is Kubernetes?");
-    await page.getByTestId("agent-send").click();
-
-    // The empty state should disappear
-    await expect(page.getByTestId("agent-empty")).not.toBeVisible();
-
-    // A user message should appear
-    const messages = page.getByTestId("agent-messages");
-    await expect(messages.locator("div.bg-primary")).toBeVisible();
-  });
-
-  test("shows loading indicator while waiting for response", async ({ page }) => {
-    await page.goto("/agent");
-
-    await page.getByTestId("agent-input").fill("Hello");
-    await page.getByTestId("agent-send").click();
-
-    // Loading indicator should appear (even if briefly)
-    // The agent endpoint will fail since no LLM is configured, but loading state should show
-    await expect(page.getByTestId("agent-loading")).toBeVisible({ timeout: 2000 }).catch(() => {
-      // Loading might have already passed - check for either loading or an error message
-    });
-  });
-
-  test("shows error message when no LLM is configured", async ({ page }) => {
-    await page.goto("/agent");
-
-    await page.getByTestId("agent-input").fill("Test question");
-    await page.getByTestId("agent-send").click();
-
-    // Wait for either loading or error response
-    // Since no LLM profile is configured, the agent should return an error
-    await page.waitForTimeout(3000);
-
-    // An error message should appear (red-tinted bubble)
-    const errorBubble = page.locator("[data-testid^='agent-message-msg-']").filter({ hasText: "Error" });
-    await expect(errorBubble).toBeVisible({ timeout: 5000 }).catch(() => {
-      // If no error appears, at least verify the loading indicator appeared
-    });
-  });
-
-  test("pending action card confirms and shows the apply result", async ({ page }) => {
-    const pendingAction = {
-      id: "action-1",
-      type: "DeleteRequest",
-      summary: "Delete request 'Get token'",
-      target: "Request 'Get token' (r1)",
-      risk: "High",
-      preview: "Name: Get token\nMethod: Post\nURL: https://api.example.com/token",
-      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
-    };
-    let confirmed = false;
-    await page.route("**/api/agent/pending-approvals", async (route) => {
-      await route.fulfill({ json: confirmed ? [] : [pendingAction] });
-    });
-    await page.route("**/api/agent/pending-approvals/action-1/confirm", async (route) => {
-      confirmed = true;
-      await route.fulfill({
-        json: { isSuccess: true, errorMessage: null, resultSummary: "Deleted request 'Get token'" },
-      });
+    test.beforeEach(async ({ page }) => {
+        await setDemoMode(page, true);
     });
 
-    await page.goto("/agent");
-
-    await expect(page.getByTestId("pending-action-action-1")).toBeVisible();
-    await expect(page.getByTestId("pending-action-summary-action-1")).toHaveText("Delete request 'Get token'");
-    await expect(page.getByTestId("pending-action-risk-action-1")).toHaveText(/High risk/);
-    await expect(page.getByTestId("pending-action-origin-action-1")).toHaveText(
-      "Proposed from: API Client · Request 'Get token' (r1)",
-    );
-
-    // High-risk actions require an extra explicit confirmation step, proportional to what's being
-    // approved (unit 7.1) — the first click doesn't apply the action yet.
-    await page.getByTestId("pending-action-confirm-action-1").click();
-    await expect(page.getByTestId("pending-action-high-risk-confirm-action-1")).toBeVisible();
-    await page.getByTestId("pending-action-high-risk-confirm-yes-action-1").click();
-
-    await expect(page.getByTestId("pending-action-result-action-1")).toHaveText("Deleted request 'Get token'");
-  });
-
-  test("pending action card rejects and removes the card", async ({ page }) => {
-    const pendingAction = {
-      id: "action-2",
-      type: "DeleteRequest",
-      summary: "Delete request 'Old request'",
-      target: "Request 'Old request' (r2)",
-      risk: "High",
-      preview: "Name: Old request",
-      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
-    };
-    let rejected = false;
-    await page.route("**/api/agent/pending-approvals", async (route) => {
-      await route.fulfill({ json: rejected ? [] : [pendingAction] });
-    });
-    await page.route("**/api/agent/pending-approvals/action-2/reject", async (route) => {
-      rejected = true;
-      await route.fulfill({ json: { rejected: true } });
+    test.afterEach(async ({ page }) => {
+        await setDemoMode(page, false);
     });
 
-    await page.goto("/agent");
-    await expect(page.getByTestId("pending-action-action-2")).toBeVisible();
+    test("displays empty state and input field", async ({ page }) => {
+        await page.goto("/agent");
 
-    await page.getByTestId("pending-action-reject-action-2").click();
-
-    await expect(page.getByTestId("pending-action-action-2")).not.toBeVisible();
-  });
-
-  test("external MCP tool call renders as a pending action and confirms once", async ({ page }) => {
-    // agent-mcp-evolution Phase 2b: a non-readOnly external tool call surfaces as an
-    // ExternalMcpCall pending action — same card as propose_* tools, origin mapped to the
-    // external server, one click to confirm (Low risk — destructiveHint would map to High).
-    const pendingAction = {
-      id: "action-mcp",
-      type: "ExternalMcpCall",
-      summary: "Run 'restart_gateway' on external MCP server 'azure'",
-      target: "azure/restart_gateway",
-      risk: "Low",
-      preview: "{\"region\":\"westeurope\"}",
-      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
-    };
-    let confirmed = false;
-    await page.route("**/api/agent/pending-approvals", async (route) => {
-      await route.fulfill({ json: confirmed ? [] : [pendingAction] });
-    });
-    await page.route("**/api/agent/pending-approvals/action-mcp/confirm", async (route) => {
-      confirmed = true;
-      await route.fulfill({
-        json: { isSuccess: true, errorMessage: null, resultSummary: "Gateway restarted" },
-      });
+        await expect(page.getByTestId("agent-page")).toBeVisible();
+        await expect(page.getByTestId("agent-title")).toHaveText("AI Agent");
+        await expect(page.getByTestId("agent-empty")).toBeVisible();
+        await expect(page.getByTestId("agent-input")).toBeVisible();
+        await expect(page.getByTestId("agent-send")).toBeVisible();
     });
 
-    await page.goto("/agent");
+    test("shows clear confirmation and cancels", async ({ page }) => {
+        await page.goto("/agent");
 
-    await expect(page.getByTestId("pending-action-action-mcp")).toBeVisible();
-    await expect(page.getByTestId("pending-action-summary-action-mcp")).toHaveText(
-      "Run 'restart_gateway' on external MCP server 'azure'",
-    );
-    await expect(page.getByTestId("pending-action-origin-action-mcp")).toHaveText(
-      "Proposed from: External MCP · azure/restart_gateway",
-    );
+        // Clear button should be disabled when no messages
+        await expect(page.getByTestId("agent-clear")).toBeDisabled();
 
-    await page.getByTestId("pending-action-confirm-action-mcp").click();
+        // Type a message to enable clear (message appears locally)
+        await page.getByTestId("agent-input").fill("Test message");
+        await page.getByTestId("agent-send").click();
 
-    await expect(page.getByTestId("pending-action-result-action-mcp")).toHaveText("Gateway restarted");
-  });
+        // Clear button should now be enabled
+        await expect(page.getByTestId("agent-clear")).toBeEnabled();
+        await page.getByTestId("agent-clear").click();
 
-  test("assistant replies render markdown, not literal syntax characters", async ({ page }) => {
-    await mockAgentChatStreamDone(page, {
-      text: "Here's what I found:\n\n- **pod-a** is `Running`\n- pod-b is `CrashLoopBackOff`\n\n```\nkubectl logs pod-b\n```",
+        // Confirmation should appear
+        await expect(page.getByTestId("agent-clear-confirm")).toBeVisible();
+        await expect(page.getByTestId("agent-clear-cancel")).toBeVisible();
+
+        // Cancel
+        await page.getByTestId("agent-clear-cancel").click();
+        await expect(page.getByTestId("agent-clear-confirm")).not.toBeVisible();
     });
 
-    await page.goto("/agent");
-    await page.getByTestId("agent-input").fill("what's the status?");
-    await page.getByTestId("agent-send").click();
+    test("shows user message after sending", async ({ page }) => {
+        await page.goto("/agent");
 
-    const reply = page.getByTestId("agent-messages").locator("li", { hasText: "pod-a" });
-    await expect(reply).toBeVisible();
-    await expect(page.getByTestId("agent-messages").locator("strong", { hasText: "pod-a" })).toBeVisible();
-    await expect(page.getByTestId("agent-messages").locator("code", { hasText: "kubectl logs pod-b" })).toBeVisible();
-    // Never the raw markdown syntax as literal text — confirms it was actually parsed, not just
-    // dumped as a monospace string like before this module.
-    await expect(page.getByTestId("agent-messages")).not.toContainText("**pod-a**");
-  });
+        await page.getByTestId("agent-input").fill("What is Kubernetes?");
+        await page.getByTestId("agent-send").click();
 
-  test("a reply with tool steps shows a collapsed 'Show reasoning' disclosure that expands", async ({ page }) => {
-    await mockAgentChatStreamDone(page, {
-      text: "The pod is healthy.",
-      steps: [
-        { type: "tool_call", toolName: "get_pod_status", summary: "Calling get_pod_status" },
-        { type: "tool_result", toolName: "get_pod_status", summary: "Running", elapsed: "00:00:00.1200000" },
-      ],
+        // The empty state should disappear
+        await expect(page.getByTestId("agent-empty")).not.toBeVisible();
+
+        // A user message should appear
+        const messages = page.getByTestId("agent-messages");
+        await expect(messages.locator("div.bg-primary")).toBeVisible();
     });
 
-    await page.goto("/agent");
-    await page.getByTestId("agent-input").fill("is the pod healthy?");
-    await page.getByTestId("agent-send").click();
+    test("shows loading indicator while waiting for response", async ({
+        page,
+    }) => {
+        await page.goto("/agent");
 
-    const toggle = page.getByTestId("agent-reasoning-trace-toggle");
-    await expect(toggle).toBeVisible();
-    await expect(toggle).toHaveText("Show reasoning (2 steps)");
-    await expect(page.getByTestId("agent-reasoning-trace-steps")).not.toBeVisible();
+        await page.getByTestId("agent-input").fill("Hello");
+        await page.getByTestId("agent-send").click();
 
-    await toggle.click();
-    await expect(page.getByTestId("agent-reasoning-trace-steps")).toContainText("Calling get_pod_status");
-    await expect(page.getByTestId("agent-reasoning-trace-steps")).toContainText("Running");
-  });
-
-  test("a failed tool call is called out in the collapsed toggle label and styled distinctly when expanded", async ({ page }) => {
-    await mockAgentChatStreamDone(page, {
-      text: "I couldn't check the queue, but the pod looks healthy.",
-      steps: [
-        { type: "tool_call", toolName: "get_pod_status", summary: "Calling get_pod_status" },
-        { type: "tool_result", toolName: "get_pod_status", summary: "Running", elapsed: "00:00:00.1000000" },
-        { type: "tool_call", toolName: "get_queue_stats", summary: "Calling get_queue_stats" },
-        {
-          type: "tool_result",
-          toolName: "get_queue_stats",
-          summary: '{"error":"Queue \'orders\' not found."}',
-          elapsed: "00:00:00.2000000",
-          isFailure: true,
-        },
-      ],
+        // Loading indicator should appear (even if briefly)
+        // The agent endpoint will fail since no LLM is configured, but loading state should show
+        await expect(page.getByTestId("agent-loading"))
+            .toBeVisible({ timeout: 2000 })
+            .catch(() => {
+                // Loading might have already passed - check for either loading or an error message
+            });
     });
 
-    await page.goto("/agent");
-    await page.getByTestId("agent-input").fill("is the pod healthy?");
-    await page.getByTestId("agent-send").click();
+    test("shows error message when no LLM is configured", async ({ page }) => {
+        await page.goto("/agent");
 
-    // A failed data source isn't buried behind the disclosure — the toggle itself says so before
-    // the user ever expands it (unit 7.4).
-    const toggle = page.getByTestId("agent-reasoning-trace-toggle");
-    await expect(toggle).toHaveText("Show reasoning (4 steps, 1 failed)");
+        await page.getByTestId("agent-input").fill("Test question");
+        await page.getByTestId("agent-send").click();
 
-    await toggle.click();
-    await expect(page.getByTestId("agent-reasoning-trace-step-failed")).toContainText("not found");
-    await expect(page.getByTestId("agent-reasoning-trace-step-failed")).toHaveCount(1);
-  });
+        // Wait for either loading or error response
+        // Since no LLM profile is configured, the agent should return an error
+        await page.waitForTimeout(3000);
 
-  test("a reply with no tool steps shows no reasoning disclosure at all", async ({ page }) => {
-    await mockAgentChatStreamDone(page, { text: "Just a plain chat answer, no tools used." });
-
-    await page.goto("/agent");
-    await page.getByTestId("agent-input").fill("hi");
-    await page.getByTestId("agent-send").click();
-
-    await expect(page.getByTestId("agent-messages")).toContainText("Just a plain chat answer");
-    await expect(page.getByTestId("agent-reasoning-trace-toggle")).toHaveCount(0);
-  });
-
-  test("a summarized turn shows the inline 'earlier parts summarized' notice", async ({ page }) => {
-    await mockAgentChatStreamDone(page, { text: "Continuing from where we left off.", summarized: true });
-
-    await page.goto("/agent");
-    await page.getByTestId("agent-input").fill("what happened earlier?");
-    await page.getByTestId("agent-send").click();
-
-    await expect(page.getByTestId("agent-summarized-notice")).toContainText(
-      "Earlier parts of this conversation were summarized",
-    );
-  });
-
-  test("streamed replies assemble multiple token events into the final text", async ({ page }) => {
-    // Playwright's route.fulfill() sends the whole mocked body in one response, so this can't
-    // observe true network-level progressive rendering timing (that's the one part of Module 8's
-    // test-plan.md scope that stays manual — see technical-plan.md Module 7/8). What it does verify
-    // end-to-end: several separate SSE "token" events, each carrying one fragment, get parsed and
-    // concatenated into the exact final text — not dropped, reordered, or merged incorrectly.
-    const tokens = ["The ", "pod ", "is ", "healthy."];
-    const events = [
-      ...tokens.map((token) => ({ kind: "token", token })),
-      { kind: "done", result: { text: tokens.join(""), elapsedMs: 5, status: "done", error: false } },
-    ];
-    await page.route("**/api/agent/chat/stream", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "text/event-stream",
-        body: events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
-      });
+        // An error message should appear (red-tinted bubble)
+        const errorBubble = page
+            .locator("[data-testid^='agent-message-msg-']")
+            .filter({ hasText: "Error" });
+        await expect(errorBubble)
+            .toBeVisible({ timeout: 5000 })
+            .catch(() => {
+                // If no error appears, at least verify the loading indicator appeared
+            });
     });
 
-    await page.goto("/agent");
-    await page.getByTestId("agent-input").fill("status?");
-    await page.getByTestId("agent-send").click();
+    test("pending action card confirms and shows the apply result", async ({
+        page,
+    }) => {
+        const pendingAction = {
+            id: "action-1",
+            type: "DeleteRequest",
+            summary: "Delete request 'Get token'",
+            target: "Request 'Get token' (r1)",
+            risk: "High",
+            preview:
+                "Name: Get token\nMethod: Post\nURL: https://api.example.com/token",
+            expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+        };
+        let confirmed = false;
+        await page.route("**/api/agent/pending-approvals", async (route) => {
+            await route.fulfill({ json: confirmed ? [] : [pendingAction] });
+        });
+        await page.route(
+            "**/api/agent/pending-approvals/action-1/confirm",
+            async (route) => {
+                confirmed = true;
+                await route.fulfill({
+                    json: {
+                        isSuccess: true,
+                        errorMessage: null,
+                        resultSummary: "Deleted request 'Get token'",
+                    },
+                });
+            },
+        );
 
-    await expect(page.getByTestId("agent-messages")).toContainText("The pod is healthy.");
-  });
+        await page.goto("/agent");
 
-  test("Enter key sends message, Shift+Enter adds newline", async ({ page }) => {
-    await page.goto("/agent");
+        await expect(page.getByTestId("pending-action-action-1")).toBeVisible();
+        await expect(
+            page.getByTestId("pending-action-summary-action-1"),
+        ).toHaveText("Delete request 'Get token'");
+        await expect(
+            page.getByTestId("pending-action-risk-action-1"),
+        ).toHaveText(/High risk/);
+        await expect(
+            page.getByTestId("pending-action-origin-action-1"),
+        ).toHaveText("Proposed from: API Client · Request 'Get token' (r1)");
 
-    const input = page.getByTestId("agent-input");
-    await input.fill("Test");
-    await input.press("Enter");
+        // High-risk actions require an extra explicit confirmation step, proportional to what's being
+        // approved (unit 7.1) — the first click doesn't apply the action yet.
+        await page.getByTestId("pending-action-confirm-action-1").click();
+        await expect(
+            page.getByTestId("pending-action-high-risk-confirm-action-1"),
+        ).toBeVisible();
+        await page
+            .getByTestId("pending-action-high-risk-confirm-yes-action-1")
+            .click();
 
-    // Message should be sent (empty state disappears)
-    await expect(page.getByTestId("agent-empty")).not.toBeVisible();
+        await expect(
+            page.getByTestId("pending-action-result-action-1"),
+        ).toHaveText("Deleted request 'Get token'");
+    });
 
-    // Input should be cleared
-    await expect(input).toHaveValue("");
-  });
+    test("pending action card rejects and removes the card", async ({
+        page,
+    }) => {
+        const pendingAction = {
+            id: "action-2",
+            type: "DeleteRequest",
+            summary: "Delete request 'Old request'",
+            target: "Request 'Old request' (r2)",
+            risk: "High",
+            preview: "Name: Old request",
+            expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+        };
+        let rejected = false;
+        await page.route("**/api/agent/pending-approvals", async (route) => {
+            await route.fulfill({ json: rejected ? [] : [pendingAction] });
+        });
+        await page.route(
+            "**/api/agent/pending-approvals/action-2/reject",
+            async (route) => {
+                rejected = true;
+                await route.fulfill({ json: { rejected: true } });
+            },
+        );
+
+        await page.goto("/agent");
+        await expect(page.getByTestId("pending-action-action-2")).toBeVisible();
+
+        await page.getByTestId("pending-action-reject-action-2").click();
+
+        await expect(
+            page.getByTestId("pending-action-action-2"),
+        ).not.toBeVisible();
+    });
+
+    test("external MCP tool call renders as a pending action and confirms once", async ({
+        page,
+    }) => {
+        // agent-mcp-evolution Phase 2b: a non-readOnly external tool call surfaces as an
+        // ExternalMcpCall pending action — same card as propose_* tools, origin mapped to the
+        // external server, one click to confirm (Low risk — destructiveHint would map to High).
+        const pendingAction = {
+            id: "action-mcp",
+            type: "ExternalMcpCall",
+            summary: "Run 'restart_gateway' on external MCP server 'azure'",
+            target: "azure/restart_gateway",
+            risk: "Low",
+            preview: '{"region":"westeurope"}',
+            expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+        };
+        let confirmed = false;
+        await page.route("**/api/agent/pending-approvals", async (route) => {
+            await route.fulfill({ json: confirmed ? [] : [pendingAction] });
+        });
+        await page.route(
+            "**/api/agent/pending-approvals/action-mcp/confirm",
+            async (route) => {
+                confirmed = true;
+                await route.fulfill({
+                    json: {
+                        isSuccess: true,
+                        errorMessage: null,
+                        resultSummary: "Gateway restarted",
+                    },
+                });
+            },
+        );
+
+        await page.goto("/agent");
+
+        await expect(
+            page.getByTestId("pending-action-action-mcp"),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId("pending-action-summary-action-mcp"),
+        ).toHaveText("Run 'restart_gateway' on external MCP server 'azure'");
+        await expect(
+            page.getByTestId("pending-action-origin-action-mcp"),
+        ).toHaveText("Proposed from: External MCP · azure/restart_gateway");
+
+        await page.getByTestId("pending-action-confirm-action-mcp").click();
+
+        await expect(
+            page.getByTestId("pending-action-result-action-mcp"),
+        ).toHaveText("Gateway restarted");
+    });
+
+    test("assistant replies render markdown, not literal syntax characters", async ({
+        page,
+    }) => {
+        await mockAgentChatStreamDone(page, {
+            text: "Here's what I found:\n\n- **pod-a** is `Running`\n- pod-b is `CrashLoopBackOff`\n\n```\nkubectl logs pod-b\n```",
+        });
+
+        await page.goto("/agent");
+        await page.getByTestId("agent-input").fill("what's the status?");
+        await page.getByTestId("agent-send").click();
+
+        const reply = page
+            .getByTestId("agent-messages")
+            .locator("li", { hasText: "pod-a" });
+        await expect(reply).toBeVisible();
+        await expect(
+            page
+                .getByTestId("agent-messages")
+                .locator("strong", { hasText: "pod-a" }),
+        ).toBeVisible();
+        await expect(
+            page
+                .getByTestId("agent-messages")
+                .locator("code", { hasText: "kubectl logs pod-b" }),
+        ).toBeVisible();
+        // Never the raw markdown syntax as literal text — confirms it was actually parsed, not just
+        // dumped as a monospace string like before this module.
+        await expect(page.getByTestId("agent-messages")).not.toContainText(
+            "**pod-a**",
+        );
+    });
+
+    test("a reply with tool steps shows a collapsed 'Show reasoning' disclosure that expands", async ({
+        page,
+    }) => {
+        await mockAgentChatStreamDone(page, {
+            text: "The pod is healthy.",
+            steps: [
+                {
+                    type: "tool_call",
+                    toolName: "get_pod_status",
+                    summary: "Calling get_pod_status",
+                },
+                {
+                    type: "tool_result",
+                    toolName: "get_pod_status",
+                    summary: "Running",
+                    elapsed: "00:00:00.1200000",
+                },
+            ],
+        });
+
+        await page.goto("/agent");
+        await page.getByTestId("agent-input").fill("is the pod healthy?");
+        await page.getByTestId("agent-send").click();
+
+        const toggle = page.getByTestId("agent-reasoning-trace-toggle");
+        await expect(toggle).toBeVisible();
+        await expect(toggle).toHaveText("Show reasoning (2 steps)");
+        await expect(
+            page.getByTestId("agent-reasoning-trace-steps"),
+        ).not.toBeVisible();
+
+        await toggle.click();
+        await expect(
+            page.getByTestId("agent-reasoning-trace-steps"),
+        ).toContainText("Calling get_pod_status");
+        await expect(
+            page.getByTestId("agent-reasoning-trace-steps"),
+        ).toContainText("Running");
+    });
+
+    test("a failed tool call is called out in the collapsed toggle label and styled distinctly when expanded", async ({
+        page,
+    }) => {
+        await mockAgentChatStreamDone(page, {
+            text: "I couldn't check the queue, but the pod looks healthy.",
+            steps: [
+                {
+                    type: "tool_call",
+                    toolName: "get_pod_status",
+                    summary: "Calling get_pod_status",
+                },
+                {
+                    type: "tool_result",
+                    toolName: "get_pod_status",
+                    summary: "Running",
+                    elapsed: "00:00:00.1000000",
+                },
+                {
+                    type: "tool_call",
+                    toolName: "get_queue_stats",
+                    summary: "Calling get_queue_stats",
+                },
+                {
+                    type: "tool_result",
+                    toolName: "get_queue_stats",
+                    summary: '{"error":"Queue \'orders\' not found."}',
+                    elapsed: "00:00:00.2000000",
+                    isFailure: true,
+                },
+            ],
+        });
+
+        await page.goto("/agent");
+        await page.getByTestId("agent-input").fill("is the pod healthy?");
+        await page.getByTestId("agent-send").click();
+
+        // A failed data source isn't buried behind the disclosure — the toggle itself says so before
+        // the user ever expands it (unit 7.4).
+        const toggle = page.getByTestId("agent-reasoning-trace-toggle");
+        await expect(toggle).toHaveText("Show reasoning (4 steps, 1 failed)");
+
+        await toggle.click();
+        await expect(
+            page.getByTestId("agent-reasoning-trace-step-failed"),
+        ).toContainText("not found");
+        await expect(
+            page.getByTestId("agent-reasoning-trace-step-failed"),
+        ).toHaveCount(1);
+    });
+
+    test("a reply with no tool steps shows no reasoning disclosure at all", async ({
+        page,
+    }) => {
+        await mockAgentChatStreamDone(page, {
+            text: "Just a plain chat answer, no tools used.",
+        });
+
+        await page.goto("/agent");
+        await page.getByTestId("agent-input").fill("hi");
+        await page.getByTestId("agent-send").click();
+
+        await expect(page.getByTestId("agent-messages")).toContainText(
+            "Just a plain chat answer",
+        );
+        await expect(
+            page.getByTestId("agent-reasoning-trace-toggle"),
+        ).toHaveCount(0);
+    });
+
+    test("a summarized turn shows the inline 'earlier parts summarized' notice", async ({
+        page,
+    }) => {
+        await mockAgentChatStreamDone(page, {
+            text: "Continuing from where we left off.",
+            summarized: true,
+        });
+
+        await page.goto("/agent");
+        await page.getByTestId("agent-input").fill("what happened earlier?");
+        await page.getByTestId("agent-send").click();
+
+        await expect(page.getByTestId("agent-summarized-notice")).toContainText(
+            "Earlier parts of this conversation were summarized",
+        );
+    });
+
+    test("streamed replies assemble multiple token events into the final text", async ({
+        page,
+    }) => {
+        // Playwright's route.fulfill() sends the whole mocked body in one response, so this can't
+        // observe true network-level progressive rendering timing (that's the one part of Module 8's
+        // test-plan.md scope that stays manual — see technical-plan.md Module 7/8). What it does verify
+        // end-to-end: several separate SSE "token" events, each carrying one fragment, get parsed and
+        // concatenated into the exact final text — not dropped, reordered, or merged incorrectly.
+        const tokens = ["The ", "pod ", "is ", "healthy."];
+        const events = [
+            ...tokens.map((token) => ({ kind: "token", token })),
+            {
+                kind: "done",
+                result: {
+                    text: tokens.join(""),
+                    elapsedMs: 5,
+                    status: "done",
+                    error: false,
+                },
+            },
+        ];
+        await page.route("**/api/agent/chat/stream", async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: "text/event-stream",
+                body: events
+                    .map((e) => `data: ${JSON.stringify(e)}\n\n`)
+                    .join(""),
+            });
+        });
+
+        await page.goto("/agent");
+        await page.getByTestId("agent-input").fill("status?");
+        await page.getByTestId("agent-send").click();
+
+        await expect(page.getByTestId("agent-messages")).toContainText(
+            "The pod is healthy.",
+        );
+    });
+
+    test("a wall of pending proposals can't push the conversation off-screen — messages scroll, composer stays", async ({
+        page,
+    }) => {
+        // Regression: the pending-actions strip had no height cap and the conversation
+        // column couldn't scroll — a batch of proposals filled the whole viewport and the
+        // composer plus the tail of the conversation were clipped and unreachable.
+        const actions = Array.from({ length: 8 }, (_, i) => ({
+            id: `action-${i}`,
+            type: "CreateAlertRule",
+            summary: `Create alert rule 'rule-${i}'`,
+            target: `rule-${i}`,
+            risk: "Low",
+            preview: `Name: rule-${i}`,
+            expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+        }));
+        await page.route("**/api/agent/pending-approvals", async (route) => {
+            await route.fulfill({ json: actions });
+        });
+        const longReply = Array.from(
+            { length: 80 },
+            (_, i) => `Line ${i + 1} of a very long answer.`,
+        ).join("\n");
+        await mockAgentChatStreamDone(page, { text: longReply });
+
+        await page.goto("/agent");
+        await page.getByTestId("agent-input").fill("hi");
+        await page.getByTestId("agent-send").click();
+
+        const messages = page.getByTestId("agent-messages");
+        await expect(messages).toContainText("Line 80 of a very long answer.");
+
+        // Composer stays on screen under the proposal stack.
+        await expect(page.getByTestId("agent-input")).toBeVisible();
+        await expect(page.getByTestId("agent-send")).toBeVisible();
+
+        // The proposals strip is capped and scrolls internally — all cards still present.
+        const feed = page.getByTestId("pending-actions-list");
+        await expect(
+            feed.locator("[data-testid^='pending-action-action-']"),
+        ).toHaveCount(8);
+        expect((await feed.boundingBox())!.height).toBeLessThan(400);
+
+        // The conversation auto-follows to its end…
+        await expect(
+            messages.locator("text=Line 80 of a very long answer."),
+        ).toBeInViewport();
+        // …and the user can scroll back up and return to the end.
+        await messages.hover();
+        await page.mouse.wheel(0, -4000);
+        await expect(
+            messages.locator("text=Line 1 of a very long answer."),
+        ).toBeInViewport();
+        await page.mouse.wheel(0, 8000);
+        await expect(
+            messages.locator("text=Line 80 of a very long answer."),
+        ).toBeInViewport();
+    });
+
+    test("Enter key sends message, Shift+Enter adds newline", async ({
+        page,
+    }) => {
+        await page.goto("/agent");
+
+        const input = page.getByTestId("agent-input");
+        await input.fill("Test");
+        await input.press("Enter");
+
+        // Message should be sent (empty state disappears)
+        await expect(page.getByTestId("agent-empty")).not.toBeVisible();
+
+        // Input should be cleared
+        await expect(input).toHaveValue("");
+    });
 });

@@ -95,7 +95,7 @@ export function GitDrawer({ onClose }: GitDrawerProps) {
         aria-label="Git"
         tabIndex={-1}
         style={{ width }}
-        className="absolute inset-y-0 right-0 z-40 flex flex-col border-l bg-card shadow-lg outline-none"
+        className="absolute inset-y-0 right-0 z-40 flex flex-col border-l bg-popover shadow-lg outline-none"
         data-testid="api-client-git-panel"
       >
         <div

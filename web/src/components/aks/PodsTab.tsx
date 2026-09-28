@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useNavigate } from "react-router";
+import { Bell } from "lucide-react";
 import { useAksPods, useAksDeletePod, useAksPodMetrics } from "@/lib/hooks";
 import { showNotification } from "@/lib/tauri-bridge";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
-import { useAksActions, useAksNav } from "./shared/aks-workspace-context";
+import { useAksActions, useAksCluster, useAksNav } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
 import type { PodInfo, PodMetricInfo } from "@/lib/types";
 
@@ -85,6 +87,8 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
   const deleteMutation = useAksDeletePod();
   const nav = useAksNav();
   const actions = useAksActions();
+  const cluster = useAksCluster();
+  const navigate = useNavigate();
   const ws = useMemo(() => ({ ...nav, ...actions }), [nav, actions]);
   const prevStatusesRef = useRef<Map<string, string>>(new Map());
   const prevNsRef = useRef(ns);
@@ -138,6 +142,40 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     });
   }, [ws, deleteMutation]);
 
+  // "Watch this" deep link (monitoring-closed-loop): opens Monitoring → New Rule prefilled with
+  // this surface's context (namespace + cluster), source and a sensible threshold — the rule is
+  // still editable in the dialog before it's saved.
+  const watchNamespace = useCallback(() => {
+    navigate("/monitoring", {
+      state: {
+        prefillRule: {
+          name: `Pod restarts — ${ns}`,
+          source: "AksPodRestartRate",
+          aksPodParams: {
+            namespace: ns,
+            kubeconfigContext: cluster.currentContext ?? "",
+            restartThreshold: 5,
+          },
+        },
+      },
+    });
+  }, [navigate, ns, cluster.currentContext]);
+
+  const watchPod = useCallback((pod: PodInfo) => {
+    navigate("/monitoring", {
+      state: {
+        prefillRule: {
+          name: `Pod health — ${pod.namespace}`,
+          source: "AksPodHealth",
+          aksPodParams: {
+            namespace: pod.namespace,
+            kubeconfigContext: cluster.currentContext ?? "",
+          },
+        },
+      },
+    });
+  }, [navigate, cluster.currentContext]);
+
   const buildMenu = useCallback((pod: PodInfo): ContextMenuItem[] => [
     { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(pod.name) },
     { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("pod", pod.name, pod.namespace) },
@@ -148,9 +186,10 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     { label: "Open shell in pod", icon: ">", onClick: () => ws.setShellPod(pod) },
     { label: "Port-forward…", icon: "→", onClick: () => ws.openPortForward(pod) },
     { label: "Ask AI about this pod", icon: "✨", onClick: () => ws.setAskAiPod(pod) },
+    { label: "Watch pod health…", icon: "🔔", onClick: () => watchPod(pod) },
     { label: "", separator: true, onClick: () => {} },
     { label: "Delete Pod", icon: "✕", onClick: () => handleDelete(pod), destructive: true },
-  ], [ws, handleDelete]);
+  ], [ws, handleDelete, watchPod]);
 
   const handleRowClick = useCallback((pod: PodInfo) => ws.setPodKey(pod), [ws]);
   const handleRowContextMenu = useCallback(
@@ -229,6 +268,15 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
           />
           Hide completed pods
         </label>
+        <button
+          onClick={watchNamespace}
+          className="ml-auto flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          title={`Create an alert rule watching pod restarts in ${ns}`}
+          data-testid="pods-watch-namespace"
+        >
+          <Bell className="h-3 w-3" />
+          Watch restarts
+        </button>
       </div>
       <ResourceTable
         data={visiblePods}

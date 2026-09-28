@@ -2,6 +2,7 @@ using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools;
@@ -9,6 +10,11 @@ namespace SwebKit.Agents.Tools;
 /// <summary>
 /// Composite tool that analyzes Service Bus queue health by fetching stats and dead-letter
 /// messages in parallel, then computing a plain-English health summary.
+/// Deliberately NOT <see cref="IAccessAwareTool"/>: the two legs exercise different capabilities
+/// (stats = <c>servicebus.manage</c> via the admin client, dead-letter peek =
+/// <c>servicebus.peek</c>), so a single Capability would mis-attribute an observed denial to the
+/// wrong report row. It still rethrows authz failures so the registry emits a structured
+/// access_denied result.
 /// </summary>
 public sealed class AnalyzeQueueHealthTool : IAgentTool
 {
@@ -63,6 +69,12 @@ public sealed class AnalyzeQueueHealthTool : IAgentTool
         try
         {
             return await AnalyzeWithClientAsync(queueName, _pool.GetOrCreate(nsToUse), nsToUse, ct);
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result instead of
+            // flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {
@@ -169,6 +181,12 @@ public sealed class AnalyzeQueueHealthTool : IAgentTool
                 dead_letter_sample = dlMessageList,
                 health_summary = healthSummary
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Authz failures propagate to the registry classifier rather than being folded into
+            // per-section errors the model can't distinguish from a transient failure.
+            throw;
         }
         catch (Exception ex)
         {

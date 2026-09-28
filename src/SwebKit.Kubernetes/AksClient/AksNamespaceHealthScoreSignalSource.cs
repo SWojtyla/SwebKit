@@ -15,18 +15,22 @@ public sealed class AksNamespaceHealthScoreSignalSource : PodSignalSourceBase
 
     protected override AlertSignalResult Evaluate(MonitoringAlertRule rule, string ns, IReadOnlyList<PodInfo> pods)
     {
-        if (pods.Count == 0)
+        // Finished pods (Job/CronJob leftovers waiting for cleanup, phase Succeeded)
+        // are not workload health — a namespace that just ran its batch schedule must
+        // not score worse for it. Failed pods still count: that IS the signal.
+        var live = pods.Where(p => p.Phase != "Succeeded").ToList();
+        if (live.Count == 0)
             return new AlertSignalResult(AlertSignalStatus.Ok);
 
         var threshold = rule.AksPodParams?.HealthScoreThreshold ?? 0.25;
-        var notReady = pods.Count(p => p.ReadyContainers < p.TotalContainers || p.Phase != "Running");
-        var score = (double)notReady / pods.Count;
+        var notReady = live.Count(p => p.ReadyContainers < p.TotalContainers || p.Phase != "Running");
+        var score = (double)notReady / live.Count;
         if (score < threshold)
             return new AlertSignalResult(AlertSignalStatus.Ok);
 
         var pct = (int)(score * 100);
         return new AlertSignalResult(AlertSignalStatus.Firing,
             $"{pct}% of pods not ready (threshold {(int)(threshold * 100)}%)",
-            $"{notReady}/{pods.Count} pods not ready");
+            $"{notReady}/{live.Count} pods not ready");
     }
 }

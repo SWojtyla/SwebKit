@@ -27,5 +27,13 @@ public class ServiceBusNamespace
     /// </summary>
     public SbTransportType TransportType { get; set; } = SbTransportType.Amqp;
 
+    /// <summary>
+    /// Optional full ARM resource id of the namespace
+    /// (/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ServiceBus/namespaces/{name}).
+    /// Never derived from <see cref="FullyQualifiedNamespace"/> — used to scope access-request
+    /// artifacts for Entra-authenticated namespaces (access-awareness Phase 3a).
+    /// </summary>
+    public string? ResourceId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

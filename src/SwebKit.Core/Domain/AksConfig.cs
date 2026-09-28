@@ -11,6 +11,14 @@ public class AksConfig
     public int MemoryBarCeilingMi { get; set; } = 512;
     public int AutoRefreshIntervalSeconds { get; set; } = 30;
 
+    /// <summary>
+    /// Optional full ARM resource id of the AKS cluster
+    /// (/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ContainerService/managedClusters/{name}).
+    /// Never derived from the kubeconfig context name — scopes access-request artifacts
+    /// (access-awareness Phase 3a).
+    /// </summary>
+    public string? ResourceId { get; set; }
+
     // Pod Health Monitor
     public List<string> MonitoredNamespaces { get; set; } = [];
     public bool MonitoringEnabled { get; set; }

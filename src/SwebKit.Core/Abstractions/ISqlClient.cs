@@ -32,6 +32,16 @@ public interface ISqlClient : IAsyncDisposable
     Task<IReadOnlyList<string>> GetMyPermissionsAsync(string? database, CancellationToken ct = default);
 
     /// <summary>
+    /// Result-set column metadata for one object via <c>SELECT TOP 0 *</c> — reads no rows and
+    /// needs only SELECT on the object, never VIEW DEFINITION, so it works on declared objects
+    /// in locked-down environments where the catalog is hidden. Errors propagate per object
+    /// (229/230 = SELECT denied on that object; endpoints classify through AccessAdvisor and
+    /// surface them per node rather than failing the whole tree).
+    /// </summary>
+    Task<IReadOnlyList<SqlColumnInfo>> GetObjectColumnsAsync(
+        string schemaName, string objectName, string? database, CancellationToken ct = default);
+
+    /// <summary>
     /// Executes <paramref name="sql"/> and returns up to <paramref name="maxRows"/> rows.
     /// When <paramref name="allowWrites"/> is false the statement batch is classified first and
     /// any mutating statement throws <see cref="SqlWriteGuardException"/> before anything executes.

@@ -132,7 +132,7 @@
   --aurora-3: oklch(0.85 0.22 95);
 }
 
-/* ── Fathom Theme (unlockable — see Settings → Appearance) ──────────────
+/* ── Fathom Theme ──────────────────────────────────────────────────────
    Ocean and gold, not gold-on-black: warm light at the surface fading into
    cold dark water below. Dark ("Abyss") and light ("Shallows") are the same
    gold-to-water gradient read from opposite ends, not a flat hue swap — see
@@ -237,6 +237,410 @@
   background:
     radial-gradient(ellipse 90% 45% at 50% -10%, rgba(184, 137, 46, 14%), transparent 60%),
     linear-gradient(180deg, rgba(255, 250, 240, 60%) 0%, transparent 40%, rgba(26, 143, 138, 6%) 100%);
+}
+
+/* ── Letterpress Theme (prototype) ─────────────────────────────────────
+   Editorial print: warm matte paper, ink, hairline rules and a vermilion
+   stamp accent — the deliberate opposite of Aurora's glass and glow.
+   Day is a fresh sheet of laid paper; Night is the same page by candlelight
+   (espresso ground, ember accent) — not a hue inversion but a relighting.
+   Serif display heads + grotesque body is the classic editorial pairing;
+   0.25rem radius and visible hairline borders give it the crisp "printed
+   rule" feel. Hand-tuned hex like Fathom, to keep the mockup pixel-identical. ── */
+.letterpress-light {
+  --background: #f4efe3;
+  --foreground: #26211a;
+  --card: #fbf7ec;
+  --card-foreground: #26211a;
+  --primary: #bc3f1e;
+  --primary-foreground: #fbf3e6;
+  --primary-glow: rgba(188, 63, 30, 18%);
+  --secondary: #e9e0cb;
+  --secondary-foreground: #453b2f;
+  --muted: #ece4d1;
+  --muted-foreground: #7c6f5c;
+  --accent: #e5d9bf;
+  --accent-foreground: #26211a;
+  --destructive: #9c2b19;
+  --destructive-foreground: #fbf3e6;
+  --success: #527a52;
+  --success-foreground: #f2f7ee;
+  --warning: #a67c2e;
+  --warning-foreground: #2a1d08;
+  --info: #4f6e8c;
+  --info-foreground: #f0f5f8;
+  --border: rgba(38, 33, 26, 16%);
+  --input: rgba(38, 33, 26, 12%);
+  --ring: #bc3f1e;
+  --sidebar: #ebe2cd;
+  --sidebar-foreground: #6b5f4c;
+  --sidebar-active: rgba(188, 63, 30, 12%);
+  --header: rgba(244, 239, 227, 85%);
+  --popover: #fbf7ec;
+  --popover-foreground: #26211a;
+  --radius: 0.25rem;
+  --shadow-sm: 0 1px 2px rgba(38, 33, 26, 8%);
+  --shadow-md: 0 2px 8px rgba(38, 33, 26, 10%), 0 1px 2px rgba(38, 33, 26, 8%);
+  --shadow-lg: 0 8px 24px rgba(38, 33, 26, 14%), 0 2px 6px rgba(38, 33, 26, 8%);
+  --shadow-glow: 0 2px 12px rgba(188, 63, 30, 22%);
+  --aurora-1: #bc3f1e;
+  --aurora-2: #a67c2e;
+  --aurora-3: #4f6e8c;
+}
+
+.letterpress-dark {
+  --background: #161210;
+  --foreground: #e8e0cf;
+  --card: #1e1915;
+  --card-foreground: #e8e0cf;
+  --primary: #e06535;
+  --primary-foreground: #241109;
+  --primary-glow: rgba(224, 101, 53, 28%);
+  --secondary: #292019;
+  --secondary-foreground: #ded3bd;
+  --muted: #241e18;
+  --muted-foreground: #9d8f77;
+  --accent: #2e261d;
+  --accent-foreground: #e8e0cf;
+  --destructive: #d4694f;
+  --destructive-foreground: #220f08;
+  --success: #8aab7f;
+  --success-foreground: #14200f;
+  --warning: #cf9c47;
+  --warning-foreground: #241608;
+  --info: #7e9db4;
+  --info-foreground: #0c1a22;
+  --border: rgba(232, 224, 207, 14%);
+  --input: rgba(232, 224, 207, 10%);
+  --ring: #e06535;
+  --sidebar: #120e0b;
+  --sidebar-foreground: #9d8f77;
+  --sidebar-active: rgba(224, 101, 53, 14%);
+  --header: rgba(22, 18, 16, 82%);
+  --popover: #1e1915;
+  --popover-foreground: #e8e0cf;
+  --radius: 0.25rem;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 35%);
+  --shadow-md: 0 3px 10px rgba(0, 0, 0, 40%), 0 1px 3px rgba(0, 0, 0, 28%);
+  --shadow-lg: 0 10px 32px rgba(0, 0, 0, 45%), 0 3px 8px rgba(0, 0, 0, 30%);
+  --shadow-glow: 0 0 24px rgba(224, 101, 53, 22%);
+  --aurora-1: #e06535;
+  --aurora-2: #cf9c47;
+  --aurora-3: #7e9db4;
+}
+
+/* The signature move: the aurora glow becomes a vignette on paper. Day pools
+   warm light at the top of the sheet and darkens the desk edges; Night is a
+   candle — a low ember wash overhead with the corners falling away to black. */
+.letterpress-light .aurora-bg::before {
+  opacity: 1;
+  background:
+    radial-gradient(ellipse 100% 60% at 50% -12%, rgba(255, 251, 240, 70%), transparent 65%),
+    radial-gradient(ellipse 130% 90% at 50% 115%, rgba(101, 80, 50, 10%), transparent 60%),
+    linear-gradient(180deg, transparent 55%, rgba(38, 33, 26, 4%) 100%);
+}
+
+.letterpress-dark .aurora-bg::before {
+  opacity: 1;
+  background:
+    radial-gradient(ellipse 85% 45% at 50% -8%, rgba(224, 101, 53, 9%), transparent 60%),
+    radial-gradient(ellipse 140% 100% at 50% 118%, rgba(0, 0, 0, 45%), transparent 55%);
+}
+
+/* Serif display heads over a grotesque body — the classic editorial pairing.
+   All-system stack: Iowan/Palatino where present, Georgia elsewhere. */
+.letterpress-light h1,
+.letterpress-light h2,
+.letterpress-light h3,
+.letterpress-dark h1,
+.letterpress-dark h2,
+.letterpress-dark h3 {
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  letter-spacing: -0.015em;
+}
+
+/* Matte, not glass: paper doesn't blur what's behind it. The header keeps a
+   hair of translucency like a vellum overlay; cards sit flat on the sheet. */
+.letterpress-light .glass-card,
+.letterpress-dark .glass-card {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.letterpress-light ::-webkit-scrollbar-thumb {
+  background: rgba(38, 33, 26, 25%);
+}
+
+.letterpress-light ::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+.letterpress-dark ::-webkit-scrollbar-thumb {
+  background: rgba(232, 224, 207, 20%);
+}
+
+.letterpress-dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* Print-shop palette for YAML/YAML-adjacent tokens. */
+.letterpress-light .yml-viewer .yml-key {
+  color: #4f6e8c;
+}
+
+.letterpress-light .yml-viewer .yml-string {
+  color: #527a52;
+}
+
+.letterpress-light .yml-viewer .yml-number {
+  color: #a67c2e;
+}
+
+.letterpress-light .yml-viewer .yml-bool {
+  color: #bc3f1e;
+}
+
+.letterpress-light .yml-viewer .yml-comment {
+  color: #8a7d68;
+}
+
+.letterpress-dark .yml-viewer .yml-key {
+  color: #8fb3cf;
+}
+
+.letterpress-dark .yml-viewer .yml-string {
+  color: #8aab7f;
+}
+
+.letterpress-dark .yml-viewer .yml-number {
+  color: #cf9c47;
+}
+
+.letterpress-dark .yml-viewer .yml-bool {
+  color: #e06535;
+}
+
+.letterpress-dark .yml-viewer .yml-comment {
+  color: #6f6250;
+}
+
+.letterpress-light {
+  --cm-key: #4f6e8c;
+  --cm-string: #527a52;
+  --cm-number: #a67c2e;
+  --cm-bool: #bc3f1e;
+  --cm-null: #7c6f5c;
+  --cm-punct: #7c6f5c;
+  --cm-comment: #8a7d68;
+  --cm-tag: #bc3f1e;
+  --cm-attr: #a67c2e;
+  --cm-invalid: #9c2b19;
+  --cm-gutter: #7c6f5c;
+  --cm-active-line: rgba(188, 63, 30, 6%);
+}
+
+.letterpress-dark {
+  --cm-key: #8fb3cf;
+  --cm-string: #8aab7f;
+  --cm-number: #cf9c47;
+  --cm-bool: #e06535;
+  --cm-null: #9d8f77;
+  --cm-punct: #9d8f77;
+  --cm-comment: #6f6250;
+  --cm-tag: #e06535;
+  --cm-attr: #cf9c47;
+  --cm-invalid: #d4694f;
+  --cm-gutter: #6f6250;
+  --cm-active-line: rgba(224, 101, 53, 8%);
+}
+
+/* ── Cascade Theme (prototype) ─────────────────────────────────────────
+   Liquid glass: surfaces are translucent panes over slowly drifting
+   caustic light — the aurora background layer becomes light refracting
+   through water instead of a glow. Cards carry a specular top edge baked
+   into the shadow tokens (the bright rim where light catches the glass),
+   and the radius grows to 1rem so every surface reads fluid, not flat.
+   Clear is frost over glacier water; Deep is the same pane at night —
+   translucent white over near-black, edges doing the describing. ── */
+.cascade-light {
+  --background: #e6f1f4;
+  --foreground: #0f2833;
+  --card: rgba(255, 255, 255, 55%);
+  --card-foreground: #0f2833;
+  --primary: #0b8fa8;
+  --primary-foreground: #f0fafc;
+  --primary-glow: rgba(11, 143, 168, 22%);
+  --secondary: rgba(255, 255, 255, 60%);
+  --secondary-foreground: #1c4356;
+  --muted: rgba(216, 233, 238, 70%);
+  --muted-foreground: #577b88;
+  --accent: rgba(211, 233, 239, 75%);
+  --accent-foreground: #0f2833;
+  --destructive: #d95d50;
+  --destructive-foreground: #fdf3f1;
+  --success: #2e9e7b;
+  --success-foreground: #f0faf6;
+  --warning: #b98a2e;
+  --warning-foreground: #2e200a;
+  --info: #3d84ab;
+  --info-foreground: #f0f8fc;
+  --border: rgba(255, 255, 255, 65%);
+  --input: rgba(15, 40, 51, 12%);
+  --ring: #0b8fa8;
+  --sidebar: rgba(226, 240, 243, 70%);
+  --sidebar-foreground: #5a7d88;
+  --sidebar-active: rgba(11, 143, 168, 12%);
+  --header: rgba(232, 243, 246, 55%);
+  --popover: rgba(247, 252, 253, 92%);
+  --popover-foreground: #0f2833;
+  --radius: 1rem;
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 70%), 0 1px 2px rgba(23, 68, 84, 8%);
+  --shadow-md: inset 0 1px 0 rgba(255, 255, 255, 75%), 0 4px 16px rgba(23, 68, 84, 10%), 0 1px 3px rgba(23, 68, 84, 7%);
+  --shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 75%), 0 16px 40px rgba(23, 68, 84, 14%), 0 4px 10px rgba(23, 68, 84, 8%);
+  --shadow-glow: 0 0 28px rgba(11, 143, 168, 20%);
+  --aurora-1: #0b8fa8;
+  --aurora-2: #22b8cf;
+  --aurora-3: #5fc9de;
+}
+
+.cascade-dark {
+  --background: #060d12;
+  --foreground: #dceef3;
+  --card: rgba(255, 255, 255, 4%);
+  --card-foreground: #dceef3;
+  --primary: #38c8de;
+  --primary-foreground: #052730;
+  --primary-glow: rgba(56, 200, 222, 30%);
+  --secondary: rgba(255, 255, 255, 6%);
+  --secondary-foreground: #cfe6ec;
+  --muted: rgba(255, 255, 255, 4%);
+  --muted-foreground: #7da6b0;
+  --accent: rgba(56, 200, 222, 12%);
+  --accent-foreground: #dff5f8;
+  --destructive: #e07a68;
+  --destructive-foreground: #260f0b;
+  --success: #4fc497;
+  --success-foreground: #06251a;
+  --warning: #d4a24a;
+  --warning-foreground: #261a06;
+  --info: #5fb4d6;
+  --info-foreground: #06212c;
+  --border: rgba(255, 255, 255, 10%);
+  --input: rgba(255, 255, 255, 7%);
+  --ring: #38c8de;
+  --sidebar: rgba(5, 12, 16, 55%);
+  --sidebar-foreground: #7da6b0;
+  --sidebar-active: rgba(56, 200, 222, 12%);
+  --header: rgba(6, 13, 18, 50%);
+  --popover: rgba(11, 22, 28, 92%);
+  --popover-foreground: #dceef3;
+  --radius: 1rem;
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 6%), 0 1px 3px rgba(0, 0, 0, 35%);
+  --shadow-md: inset 0 1px 0 rgba(255, 255, 255, 7%), 0 6px 20px rgba(0, 0, 0, 42%), 0 1px 4px rgba(0, 0, 0, 28%);
+  --shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 7%), 0 18px 48px rgba(0, 0, 0, 48%), 0 5px 12px rgba(0, 0, 0, 32%);
+  --shadow-glow: 0 0 32px rgba(56, 200, 222, 25%);
+  --aurora-1: #38c8de;
+  --aurora-2: #4fc497;
+  --aurora-3: #5fb4d6;
+}
+
+/* The signature move: light drifting through water. Patches of aqua light
+   wander slowly across the fixed background layer — not decoration on top of
+   the surface but refraction *through* it. Kept faint enough to stay
+   readable; the motion, not the brightness, is what reads as water. */
+.cascade-light .aurora-bg::before {
+  opacity: 1;
+  background:
+    radial-gradient(ellipse 55% 40% at 25% 15%, rgba(95, 201, 222, 18%), transparent 60%),
+    radial-gradient(ellipse 45% 35% at 75% 45%, rgba(34, 184, 207, 14%), transparent 60%),
+    radial-gradient(ellipse 50% 30% at 45% 95%, rgba(11, 143, 168, 12%), transparent 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, 45%) 0%, transparent 30%);
+  animation: cascade-drift 26s ease-in-out infinite alternate;
+}
+
+.cascade-dark .aurora-bg::before {
+  opacity: 1;
+  background:
+    radial-gradient(ellipse 55% 40% at 25% 15%, rgba(56, 200, 222, 8%), transparent 60%),
+    radial-gradient(ellipse 45% 35% at 75% 45%, rgba(95, 180, 214, 7%), transparent 60%),
+    radial-gradient(ellipse 50% 30% at 45% 95%, rgba(56, 200, 222, 6%), transparent 55%);
+  animation: cascade-drift 26s ease-in-out infinite alternate;
+}
+
+@keyframes cascade-drift {
+  0% { background-position: 0% 0%, 0% 0%, 0% 0%, 0 0; }
+  50% { background-position: 7% -4%, -5% 6%, 4% -7%, 0 0; }
+  100% { background-position: -6% 5%, 8% -4%, -5% 6%, 0 0; }
+}
+
+/* Real glass needs refraction, not just tint: heavier blur + saturation so
+   whatever drifts behind a pane bends softly through it. */
+.cascade-light .glass,
+.cascade-light .glass-card {
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+}
+
+.cascade-dark .glass,
+.cascade-dark .glass-card {
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+}
+
+.cascade-light ::-webkit-scrollbar-thumb {
+  background: rgba(11, 143, 168, 30%);
+}
+
+.cascade-dark ::-webkit-scrollbar-thumb {
+  background: rgba(56, 200, 222, 25%);
+}
+
+.cascade-light ::-webkit-scrollbar-thumb:hover,
+.cascade-dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* Water palette for YAML tokens. */
+.cascade-light .yml-viewer .yml-key { color: #0b7d94; }
+.cascade-light .yml-viewer .yml-string { color: #2e8a6c; }
+.cascade-light .yml-viewer .yml-number { color: #a3691f; }
+.cascade-light .yml-viewer .yml-bool { color: #0b8fa8; }
+.cascade-light .yml-viewer .yml-comment { color: #6b8f9a; }
+
+.cascade-dark .yml-viewer .yml-key { color: #5fd0e3; }
+.cascade-dark .yml-viewer .yml-string { color: #4fc497; }
+.cascade-dark .yml-viewer .yml-number { color: #d4a24a; }
+.cascade-dark .yml-viewer .yml-bool { color: #38c8de; }
+.cascade-dark .yml-viewer .yml-comment { color: #5d828d; }
+
+.cascade-light {
+  --cm-key: #0b7d94;
+  --cm-string: #2e8a6c;
+  --cm-number: #a3691f;
+  --cm-bool: #0b8fa8;
+  --cm-null: #577b88;
+  --cm-punct: #577b88;
+  --cm-comment: #6b8f9a;
+  --cm-tag: #d95d50;
+  --cm-attr: #a3691f;
+  --cm-invalid: #d95d50;
+  --cm-gutter: #577b88;
+  --cm-active-line: rgba(11, 143, 168, 7%);
+}
+
+.cascade-dark {
+  --cm-key: #5fd0e3;
+  --cm-string: #4fc497;
+  --cm-number: #d4a24a;
+  --cm-bool: #38c8de;
+  --cm-null: #7da6b0;
+  --cm-punct: #7da6b0;
+  --cm-comment: #5d828d;
+  --cm-tag: #e07a68;
+  --cm-attr: #d4a24a;
+  --cm-invalid: #e07a68;
+  --cm-gutter: #5d828d;
+  --cm-active-line: rgba(56, 200, 222, 8%);
 }
 
 /* Comic Sans. On purpose. This is not a professional theme. */

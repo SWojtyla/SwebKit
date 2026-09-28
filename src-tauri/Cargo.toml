@@ -22,3 +22,8 @@ keyring = { version = "3", features = ["sync-secret-service", "vendored", "windo
 portable-pty = "0.9"
 base64 = "0.22"
 tauri-plugin-notification = "2"
+# Deep links (swebkit://): single-instance MUST come before deep-link and carry the
+# "deep-link" feature on Windows — that's the piece that forwards a second launch's
+# swebkit:// argv to the running instance instead of starting a duplicate app.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"

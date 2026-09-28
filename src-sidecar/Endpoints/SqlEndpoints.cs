@@ -3,6 +3,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Security;
 using SwebKit.Sql;
 
 namespace SwebKit.Sidecar.Endpoints;
@@ -23,6 +24,7 @@ public static class SqlEndpoints
         app.MapGet("/api/sql/{connectionId}/schema", GetSchemaAsync);
         app.MapPost("/api/sql/{connectionId}/query", ExecuteQueryAsync);
         app.MapGet("/api/sql/{connectionId}/tables/{schema}/{table}/rows", GetTableRowsAsync);
+        app.MapGet("/api/sql/{connectionId}/objects/{schema}/{name}/columns", GetObjectColumnsAsync);
         app.MapGet("/api/sql/queries", GetSavedQueriesAsync);
         app.MapPost("/api/sql/queries", SaveQueryAsync);
         app.MapDelete("/api/sql/queries/{queryId}", DeleteQueryAsync);
@@ -239,6 +241,47 @@ public static class SqlEndpoints
         return Results.Ok(result);
     }
 
+    // ── Lazy object-column introspection (declared objects) ────────────────────
+
+    /// <summary>
+    /// Column metadata for a single schema-qualified object via SELECT TOP 0 — the lazy
+    /// path the tree hits when a declared object expands. Failures ride in the payload
+    /// (Denied/Error) rather than the status code: one permission-denied or mistyped
+    /// object must never take the whole schema tree down.
+    /// </summary>
+    internal static async Task<IResult> GetObjectColumnsAsync(
+        string connectionId,
+        string schema,
+        string name,
+        string? database,
+        ProfileRepository profile,
+        ISqlConnectionPool pool,
+        DemoModeService demo,
+        ILogger<Program> logger,
+        CancellationToken ct)
+    {
+        var connection = ResolveConnection(connectionId, profile, demo);
+        if (connection is null) return ApiErrors.NotFound("Connection not found");
+
+        var client = await pool.GetOrCreateAsync(connection, ct);
+        try
+        {
+            var columns = await client.GetObjectColumnsAsync(schema, name, database, ct);
+            return Results.Ok(new SqlObjectColumnsResult(schema, name, columns, Denied: false, Denial: null, Error: null));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            if (AccessAdvisor.TryCreateDenial(ex, "Sql", out var denial))
+            {
+                return Results.Ok(new SqlObjectColumnsResult(schema, name, [], Denied: true, Denial: denial, Error: null));
+            }
+            logger.LogWarning(ex, "Column introspection failed for {Schema}.{Name} on connection {ConnectionId}",
+                schema, name, connectionId);
+            return Results.Ok(new SqlObjectColumnsResult(
+                schema, name, [], Denied: false, Denial: null, Error: ConnectionTestError.Describe(ex)));
+        }
+    }
+
     // ── Saved queries & history ────────────────────────────────────────────────
 
     internal static async Task<IResult> GetSavedQueriesAsync(
@@ -396,6 +439,16 @@ public static class SqlEndpoints
     }
 
     public sealed record SqlQueryRequest(string? Sql, string? Database, int? MaxRows);
+
+    /// <summary>Per-object column-introspection result — always 200 once the connection
+    /// resolves; <see cref="Denied"/>/<see cref="Error"/> carry per-object failures.</summary>
+    public sealed record SqlObjectColumnsResult(
+        string Schema,
+        string Name,
+        IReadOnlyList<SqlColumnInfo> Columns,
+        bool Denied,
+        AccessDenial? Denial,
+        string? Error);
     public sealed record SqlAdHocRequest(string? Server, string? Database);
     public sealed record SaveSqlQueryRequest(string? Name, string? Folder, string? Sql, string? ConnectionId);
     public sealed record SqlCompletionContextRequest(string? Sql, int CursorOffset);

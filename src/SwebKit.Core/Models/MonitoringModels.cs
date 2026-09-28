@@ -1,3 +1,5 @@
+using SwebKit.Core.Security;
+
 namespace SwebKit.Core.Models;
 
 public enum AlertRuleSource
@@ -32,6 +34,18 @@ public sealed class MonitoringAlertRule
     /// investigation (ProactiveInsightService). Default true preserves the pre-flag
     /// auto-investigate behavior; rules persisted before the flag existed deserialize to true.</summary>
     public bool AiInvestigationEnabled { get; set; } = true;
+    /// <summary>Per-rule opt-in (monitoring-closed-loop 1b): when true, a background
+    /// investigation of a firing may also call the whitelisted <c>propose_*</c> tools to park
+    /// confirmable remediation actions. Default FALSE — today's posture
+    /// is unchanged for existing rules, and even when enabled every proposal still needs explicit
+    /// user confirmation before anything mutates.</summary>
+    public bool AutoFixProposalsEnabled { get; set; }
+    /// <summary>Per-rule snooze (monitoring-closed-loop item 3): while set and in the future,
+    /// a firing of this rule is suppressed at the engine's firing stage — the event still
+    /// records and streams, but with <see cref="AlertFiredEvent.Suppressed"/> set, so
+    /// notifications and proactive investigations downgrade to audit entries. Null or a past
+    /// timestamp means "not muted".</summary>
+    public DateTimeOffset? MutedUntil { get; set; }
     public DateTimeOffset? LastEvaluatedAt { get; set; }
     public DateTimeOffset? LastFiredAt { get; set; }
 }
@@ -65,6 +79,13 @@ public sealed class StorageAlertParams
     public long BlobCountThreshold { get; set; } = 1000;
 }
 
+/// <summary>
+/// Raised when a rule's signal source returns <see cref="AlertSignalStatus.Firing"/> past its
+/// cooldown — including firings suppressed by a silence window or a per-rule mute. Those set
+/// <see cref="Suppressed"/>/<see cref="SuppressedBy"/> (additive trailing members — the SSE
+/// serializer emits camelCase and old clients simply ignore them); listeners decide how loudly
+/// to surface the firing, while history and the proactive-insight audit trail still see it.
+/// </summary>
 public sealed record AlertFiredEvent(
     string RuleId,
     string RuleName,
@@ -73,7 +94,61 @@ public sealed record AlertFiredEvent(
     string Message,
     string Detail,
     DateTimeOffset FiredAt,
-    string ProfileName);
+    string ProfileName,
+    bool Suppressed = false,
+    /// <summary>Human-readable cause when <see cref="Suppressed"/> is set — e.g. the silence
+    /// window's reason or "rule muted until …". Null for a normal firing.</summary>
+    string? SuppressedBy = null);
+
+/// <summary>Raised when a rule that previously fired evaluates <see cref="AlertSignalStatus.Ok"/>
+/// again — the recovery counterpart of <see cref="AlertFiredEvent"/>. Without it a firing dot on
+/// the UI (or an open incident in the durable history) had no closing signal: an Ok
+/// <c>evaluationCompleted</c> frame can't distinguish "never fired" from "recovered".</summary>
+public sealed record AlertResolvedEvent(
+    string RuleId,
+    string RuleName,
+    AlertRuleSource Source,
+    AlertSeverity Severity,
+    DateTimeOffset ResolvedAt,
+    /// <summary>The Ok evaluation's own message (e.g. the recovered reading), when the source
+    /// produced one.</summary>
+    string? Message = null);
+
+/// <summary>One row of the durable alert history (<c>monitoring-history.json</c>) — the
+/// permanent incident record behind the volatile in-memory ring buffer. <see cref="Kind"/>
+/// distinguishes a firing from its recovery and from a firing that a silence/mute suppressed.</summary>
+public enum AlertHistoryKind { Fired, Resolved, Suppressed }
+
+public sealed class AlertHistoryEntry
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string RuleId { get; set; } = string.Empty;
+    public string RuleName { get; set; } = string.Empty;
+    public AlertRuleSource Source { get; set; }
+    public AlertSeverity Severity { get; set; }
+    public AlertHistoryKind Kind { get; set; }
+    public DateTimeOffset At { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
+/// <summary>A time window during which matching rules fire suppressed
+/// (monitoring-closed-loop item 3). <see cref="RuleIds"/> null or empty means the silence
+/// covers <em>every</em> rule (a full maintenance window); a populated list scopes it to those
+/// rule ids only. Suppression is evaluated at firing time, so a window that lapses mid-tick
+/// simply stops matching on the next evaluation — no expiry machinery needed.</summary>
+public sealed class MonitoringSilence
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public DateTimeOffset StartUtc { get; set; }
+    public DateTimeOffset EndUtc { get; set; }
+    /// <summary>Null/empty = applies to all rules.</summary>
+    public List<string>? RuleIds { get; set; }
+    public string Reason { get; set; } = string.Empty;
+
+    public bool AppliesTo(string ruleId, DateTimeOffset now) =>
+        StartUtc <= now && now < EndUtc
+        && (RuleIds is null || RuleIds.Count == 0 || RuleIds.Contains(ruleId));
+}
 
 public enum AlertSignalStatus { Ok, Firing, Skipped, Error }
 
@@ -121,12 +196,29 @@ public sealed class ProactiveInsightReport
     /// <summary>Model-assessed severity ("low" | "medium" | "high"), distinct from the rule's own
     /// <see cref="AlertSeverity"/>. Null only when the model didn't assess one (non-JSON output).</summary>
     public string? Severity { get; set; }
+    /// <summary>Legacy evidence as plain strings — kept populated for back-compat (older
+    /// frontends, the seeded chat transcript). Reports persisted before
+    /// <see cref="EvidenceItems"/> existed are coerced into items on read by
+    /// <c>ProactiveInsightReportRepository</c>, so consumers can rely on
+    /// <see cref="EvidenceItems"/> alone.</summary>
     public List<string> Evidence { get; set; } = [];
+    /// <summary>Structured evidence (agent-colleague item 1): each entry keeps the finding
+    /// text plus the producing tool, a server-stamped capture time, and optional navigable
+    /// <see cref="EvidenceItem.View"/>/"watch this" <see cref="EvidenceItem.Watch"/> hints.</summary>
+    public List<EvidenceItem> EvidenceItems { get; set; } = [];
+    /// <summary>Access denials the investigation's tool loop hit (agent-colleague item 2) —
+    /// the parsed form of every <c>{"status":"access_denied"}</c> tool result, so the report
+    /// can render an actionable "grant X on Y" card instead of burying 403s in prose.</summary>
+    public List<AccessGap> AccessGaps { get; set; } = [];
     public List<string> SuggestedNextSteps { get; set; } = [];
     public ProposedFix? ProposedFix { get; set; }
     /// <summary>Audit trail of which tools the investigation loop actually called.</summary>
     public List<string> ToolsUsed { get; set; } = [];
     public bool HitMaxRounds { get; set; }
+    /// <summary>Ids of the pending actions the investigation parked via
+    /// <c>propose_*</c> tools (monitoring-closed-loop 1c) — the linkage that lets a report card
+    /// render confirm/reject UI against the action store.</summary>
+    public List<string> PendingActionIds { get; set; } = [];
     /// <summary>Structured result JSON (model-driven path) or raw investigate_workspace_issue
     /// output (fallback path) — the payload the seeded chat session carries for follow-up
     /// questions. Not rendered in the reports UI.</summary>

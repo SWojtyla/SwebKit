@@ -4,6 +4,7 @@ using System.Text.Json;
 using SwebKit.Agents;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Security;
 using SwebKit.Sidecar.Endpoints;
 
 namespace SwebKit.Sidecar.Services;
@@ -31,6 +32,7 @@ public sealed class SidecarAgentChatService
     private readonly AgentContextBudgetPlanner _budgetPlanner;
     private readonly Acp.AcpAgentHost? _acpHost;
     private readonly ExternalMcpToolSource? _mcpToolSource;
+    private readonly AgentExchangeBuffer? _exchanges;
 
     /// <summary>History count for the global <c>/agent</c> page's session. Kept for existing call
     /// sites (<see cref="AgentEndpoints.GetStatus"/>); prefer <see cref="GetHistoryCount"/> for new
@@ -45,7 +47,8 @@ public sealed class SidecarAgentChatService
         AgentToolCallOrchestrator toolOrchestrator,
         AgentContextBudgetPlanner budgetPlanner,
         Acp.AcpAgentHost? acpHost = null,
-        ExternalMcpToolSource? mcpToolSource = null)
+        ExternalMcpToolSource? mcpToolSource = null,
+        AgentExchangeBuffer? exchangeBuffer = null)
     {
         _modelClient = modelClient;
         _settings = settings;
@@ -55,6 +58,7 @@ public sealed class SidecarAgentChatService
         _budgetPlanner = budgetPlanner;
         _acpHost = acpHost;
         _mcpToolSource = mcpToolSource;
+        _exchanges = exchangeBuffer;
     }
 
     /// <summary>Composition-root convenience overload that builds the default collaborators from the
@@ -67,7 +71,8 @@ public sealed class SidecarAgentChatService
         ProfileRepository profiles,
         UserSettingsRepository settings,
         DemoModeService demo,
-        ExternalMcpToolSource? mcpToolSource = null)
+        ExternalMcpToolSource? mcpToolSource = null,
+        AgentExchangeBuffer? exchangeBuffer = null)
         : this(
             modelClient,
             settings,
@@ -75,7 +80,8 @@ public sealed class SidecarAgentChatService
             new AgentSystemPromptBuilder(profiles, demo),
             new AgentToolCallOrchestrator(toolRegistry),
             new AgentContextBudgetPlanner(modelClient),
-            mcpToolSource: mcpToolSource)
+            mcpToolSource: mcpToolSource,
+            exchangeBuffer: exchangeBuffer)
     {
     }
 
@@ -178,12 +184,16 @@ public sealed class SidecarAgentChatService
         string? scope = null,
         CancellationToken ct = default)
     {
-        var (session, request, steps, toolExecutor, summarized, sw) =
+        var (session, request, steps, toolExecutor, summarized, _, accessDenials, sw) =
             await BeginTurnAsync(sessionId, userMessage, context, mode, scope, ct);
 
         try
         {
             var result = await _modelClient.ChatAsync(request, toolExecutor, ct);
+            // Attach the orchestrator-collected denials so downstream consumers (the reply
+            // below, report pipelines reusing this turn's result) see them on the result
+            // itself — agent-colleague item 2.
+            result.AccessDenials = accessDenials;
             _sessions.Append(session, new AgentMessage { Role = "assistant", Content = result.Text });
 
             // Providers that run their own tool loop (ACP) report steps on the result instead of
@@ -203,6 +213,7 @@ public sealed class SidecarAgentChatService
                 Summarized = summarized,
                 ContextUsagePercent = GetContextUsagePercent(sessionId),
                 SuggestedScope = result.SuggestedScope,
+                AccessDenials = result.AccessDenials,
             };
         }
         catch (Exception ex)
@@ -237,7 +248,7 @@ public sealed class SidecarAgentChatService
         string? scope = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var (session, request, steps, toolExecutor, summarized, _) =
+        var (session, request, steps, toolExecutor, summarized, exchangeId, accessDenials, _) =
             await BeginTurnAsync(sessionId, userMessage, context, mode, scope, ct);
 
         var stream = _modelClient.ChatStreamAsync(request, toolExecutor, ct);
@@ -283,9 +294,19 @@ public sealed class SidecarAgentChatService
 
                 if (current!.Kind == AgentStreamEventKind.Done && current.Result is not null)
                 {
+                    // Chat-level access gaps ride the Done result itself (agent-colleague
+                    // item 2) — the stream contract is additive, so older clients ignore them.
+                    current.Result.AccessDenials = accessDenials;
                     _sessions.Append(session, new AgentMessage { Role = "assistant", Content = current.Result.Text });
                     if (current.Result.Steps is { Count: > 0 })
                         steps.AddRange(current.Result.Steps);
+                    // agent-colleague item 5: retain the exchange under this turn's exchangeId so
+                    // a later thumbs-down resolves to real context instead of trusting the client
+                    // to echo it back. Record BEFORE yielding — the event id must resolve the
+                    // moment the client can see it.
+                    _exchanges?.Record(
+                        exchangeId, sessionId, context?.FeatureArea, mode, scope,
+                        userMessage, current.Result.Text, steps, current.Result.ToolsUsed);
                     yield return new AgentStreamEvent
                     {
                         Kind = AgentStreamEventKind.Done,
@@ -293,6 +314,7 @@ public sealed class SidecarAgentChatService
                         Steps = steps,
                         Summarized = summarized,
                         ContextUsagePercent = GetContextUsagePercent(sessionId),
+                        ExchangeId = exchangeId,
                     };
                     continue;
                 }
@@ -387,9 +409,18 @@ public sealed class SidecarAgentChatService
         };
 
         var steps = new List<AgentChatStep>();
-        var toolExecutor = _toolOrchestrator.BuildStepTrackingToolExecutor(tools, steps, context?.Selection, externalExecutors);
+        // Per-turn collector for {"status":"access_denied"} tool results (agent-colleague
+        // item 2) — the executor appends parsed AccessGaps; both send paths attach them to
+        // the result/reply so chat-level gaps are available alongside the report's.
+        var accessDenials = new List<AccessGap>();
+        var toolExecutor = _toolOrchestrator.BuildStepTrackingToolExecutor(tools, steps, context?.Selection, externalExecutors, accessDenials);
 
-        return new TurnSetup(session, request, steps, toolExecutor, summarized, sw);
+        // Minted per turn (agent-colleague item 5): the id stamped on the terminal Done event and
+        // the ring-buffer key a thumbs-down resolves through. Generated even when no buffer is
+        // wired (tests constructing via the convenience overload) so the wire shape is uniform.
+        var exchangeId = Guid.NewGuid().ToString("N");
+
+        return new TurnSetup(session, request, steps, toolExecutor, summarized, exchangeId, accessDenials, sw);
     }
 
     private sealed record TurnSetup(
@@ -398,6 +429,8 @@ public sealed class SidecarAgentChatService
         List<AgentChatStep> Steps,
         Func<string, JsonElement, CancellationToken, Task<string>>? ToolExecutor,
         bool Summarized,
+        string ExchangeId,
+        List<AccessGap> AccessDenials,
         Stopwatch Elapsed);
 }
 
@@ -443,4 +476,9 @@ public sealed class SidecarAgentReply
     /// (and always null for request/response providers — their tool loop only ever sees the
     /// resolved allowlist, so there is no fence for them to hit).</summary>
     public string? SuggestedScope { get; init; }
+
+    /// <summary>Access denials this turn's tool calls produced (agent-colleague item 2) — the
+    /// same parsed <see cref="AccessGap"/> list the report pipeline persists, surfaced on the
+    /// reply so chat-level gaps are actionable too. Empty when nothing was denied.</summary>
+    public IReadOnlyList<AccessGap> AccessDenials { get; init; } = [];
 }

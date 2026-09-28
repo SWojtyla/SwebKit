@@ -2,6 +2,7 @@ using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Models;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Redis;
@@ -11,7 +12,7 @@ namespace SwebKit.Agents.Tools.Redis;
 /// parallel, then computing a plain-English health summary — the Redis analogue of
 /// AnalyzeQueueHealthTool.
 /// </summary>
-public sealed class AnalyzeCacheHealthTool : IAgentTool
+public sealed class AnalyzeCacheHealthTool : IAccessAwareTool
 {
     private readonly AppStateService _appState;
     private readonly ProfileRepository _profiles;
@@ -32,6 +33,15 @@ public sealed class AnalyzeCacheHealthTool : IAgentTool
         "plain-English health_summary field (Healthy, Warning, or Critical).";
 
     public FeatureArea FeatureArea => FeatureArea.Redis;
+
+    // INFO/SLOWLOG are data-plane commands — matching the report's redis.data row.
+    public string Capability => AccessCapabilities.RedisData;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        var cacheId = arguments.TryGetProperty("cache_id", out var c) ? c.GetString() : null;
+        return RedisToolContext.ResolveCache(_appState, _profiles, cacheId)?.Id;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -78,6 +88,12 @@ public sealed class AnalyzeCacheHealthTool : IAgentTool
                 }),
                 health_summary = healthSummary,
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of folding it into a Critical summary.
+            throw;
         }
         catch (Exception ex)
         {

@@ -1,6 +1,9 @@
 export interface AksConfig {
     kubeconfigPath: string | null;
     kubeconfigContext: string | null;
+    /** Optional full ARM resource id of the cluster — scopes access-request artifacts.
+     * Never derived from the kubeconfig context name. */
+    resourceId?: string | null;
     defaultNamespace: string;
     watchedDeployments: string[];
     logBufferSize: number;

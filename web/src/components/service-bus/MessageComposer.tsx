@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Send, Calendar, FileText, Save, RotateCcw } from "lucide-react";
-import { useSbSendMessage, useSbScheduleMessage, useSbSaveTemplate } from "@/lib/hooks";
+import { useSbSendMessage, useSbScheduleMessage, useSbSaveTemplate, useSbResubmitEditedDlq } from "@/lib/hooks";
 import { useNotification } from "@/components/layout/notification-context";
 import type { SbEntityInfo, SbMessage, SbMessageTemplate, ServiceBusNamespace } from "@/lib/types";
 import { TemplatePicker } from "./TemplatePicker";
@@ -8,7 +8,12 @@ import { EntityPathInput } from "./EntityPathInput";
 import { MessageBodyEditor } from "./MessageBodyEditor";
 import { sendableEntityPath } from "./resendHelpers";
 
-export type ComposerMode = "compose" | "replay" | "edit" | "schedule";
+/**
+ * `editResubmit` is the DLQ repair path: the edited message goes to the target entity and the
+ * sidecar settles the dead-lettered original by sequence number — vs. `edit`/`replay`, which only
+ * send a copy and would leave the pre-edit original in the DLQ as a duplicate.
+ */
+export type ComposerMode = "compose" | "replay" | "edit" | "editResubmit" | "schedule";
 
 interface Props {
   mode: ComposerMode;
@@ -36,10 +41,12 @@ interface PropertyRow {
 export function MessageComposer({ mode, nsId, namespaces, entity, sourceMessage, initialTemplate, onClose }: Props) {
   const sendMutation = useSbSendMessage();
   const scheduleMutation = useSbScheduleMessage();
+  const resubmitEditedMutation = useSbResubmitEditedDlq();
   const saveTemplateMutation = useSbSaveTemplate();
   const { notify } = useNotification();
 
   const isSchedule = mode === "schedule";
+  const isEditResubmit = mode === "editResubmit";
 
   const [targetNsId, setTargetNsId] = useState(nsId ?? "");
   const [targetEntityPath, setTargetEntityPath] = useState(entity ? sendableEntityPath(entity) : "");
@@ -153,7 +160,7 @@ export function MessageComposer({ mode, nsId, namespaces, entity, sourceMessage,
 
   const onSend = async () => {
     setError(null);
-    if (!targetNsId) {
+    if (!isEditResubmit && !targetNsId) {
       setError("Select a target namespace");
       return;
     }
@@ -169,7 +176,20 @@ export function MessageComposer({ mode, nsId, namespaces, entity, sourceMessage,
     const message = buildMessage();
 
     try {
-      if (isSchedule) {
+      if (isEditResubmit) {
+        if (!nsId || !entity || sourceMessage?.sequenceNumber == null) {
+          setError("No dead-lettered message selected to settle");
+          return;
+        }
+        await resubmitEditedMutation.mutateAsync({
+          nsId,
+          entityPath: entity.entityPath,
+          sequenceNumber: sourceMessage.sequenceNumber,
+          message,
+          targetEntityPath,
+        });
+        notify("success", "Edited message sent — DLQ original settled");
+      } else if (isSchedule) {
         const scheduledEnqueueTime = new Date(scheduledTime).toISOString();
         await scheduleMutation.mutateAsync({
           nsId: targetNsId,
@@ -190,7 +210,10 @@ export function MessageComposer({ mode, nsId, namespaces, entity, sourceMessage,
     }
   };
 
-  const isPending = sendMutation.isPending || scheduleMutation.isPending;
+  const isPending =
+    sendMutation.isPending ||
+    scheduleMutation.isPending ||
+    resubmitEditedMutation.isPending;
 
   return (
     <div className="flex h-full flex-col" data-testid="message-composer">
@@ -266,28 +289,43 @@ export function MessageComposer({ mode, nsId, namespaces, entity, sourceMessage,
           </div>
         )}
 
-        {/* Target selectors */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Target Namespace</label>
-            <select
-              data-testid="composer-target-ns"
-              value={targetNsId}
-              onChange={(e) => setTargetNsId(e.target.value)}
-              className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
-            >
-              <option value="">Select namespace...</option>
-              {namespaces.map((ns) => (
-                <option key={ns.id} value={ns.id}>
-                  {ns.alias || ns.fullyQualifiedNamespace}
-                </option>
-              ))}
-            </select>
+        {/* editResubmit settles the DLQ original — the point, not a side effect — so say it
+            on the tin before the send button carries the implication alone. */}
+        {isEditResubmit && (
+          <div
+            className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground"
+            data-testid="composer-edit-resubmit-note"
+          >
+            Sends the edited message to the target entity and removes the original
+            (seq #{sourceMessage?.sequenceNumber}) from the dead-letter queue.
           </div>
+        )}
+
+        {/* Target selectors — editResubmit stays in the source namespace (the settle half only
+            exists there), so the namespace picker is hidden rather than ignored. */}
+        <div className={isEditResubmit ? "" : "grid grid-cols-2 gap-3"}>
+          {!isEditResubmit && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Target Namespace</label>
+              <select
+                data-testid="composer-target-ns"
+                value={targetNsId}
+                onChange={(e) => setTargetNsId(e.target.value)}
+                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+              >
+                <option value="">Select namespace...</option>
+                {namespaces.map((ns) => (
+                  <option key={ns.id} value={ns.id}>
+                    {ns.alias || ns.fullyQualifiedNamespace}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">Target Entity</label>
             <EntityPathInput
-              nsId={targetNsId || null}
+              nsId={(isEditResubmit ? nsId : targetNsId) || null}
               value={targetEntityPath}
               onChange={setTargetEntityPath}
               testId="composer-target-entity"
@@ -466,14 +504,27 @@ export function MessageComposer({ mode, nsId, namespaces, entity, sourceMessage,
         </button>
         <button
           onClick={onSend}
-          disabled={isPending}
-          title={isPending ? "Sending…" : undefined}
+          disabled={
+            isPending ||
+            (isEditResubmit && sourceMessage?.sequenceNumber == null)
+          }
+          title={
+            isPending
+              ? "Sending…"
+              : isEditResubmit && sourceMessage?.sequenceNumber == null
+                ? "Select a dead-lettered message first — its original is what gets settled"
+                : undefined
+          }
           className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
           data-testid="composer-send"
         >
           {isSchedule ? (
             <>
               <Calendar className="h-3 w-3" /> Schedule
+            </>
+          ) : isEditResubmit ? (
+            <>
+              <Send className="h-3 w-3" /> Resubmit
             </>
           ) : (
             <>

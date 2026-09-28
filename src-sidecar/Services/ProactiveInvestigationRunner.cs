@@ -1,8 +1,10 @@
 using System.Text.Json;
 using SwebKit.Agents;
+using SwebKit.Agents.Tools;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Security;
 using SwebKit.Sidecar.Endpoints;
 
 namespace SwebKit.Sidecar.Services;
@@ -19,7 +21,16 @@ public sealed record ProactiveInvestigationResult(
     ProposedFix? ProposedFix,
     string RawText,
     IReadOnlyList<string> ToolsUsed,
-    bool HitMaxRounds);
+    bool HitMaxRounds,
+    /// <summary>The structured form of <see cref="Evidence"/> (agent-colleague item 1) — same
+    /// findings, plus tool/link/watch hints when the model emitted them. Plain-string output
+    /// degrades to text-only items.</summary>
+    IReadOnlyList<EvidenceItem> EvidenceItems,
+    /// <summary>Access denials the run's tool loop hit (agent-colleague item 2) — collected by
+    /// the step-tracking executor from <c>{"status":"access_denied"}</c> results, not parsed
+    /// out of the model's prose, so they're complete even when the model forgets to report
+    /// them.</summary>
+    IReadOnlyList<AccessGap> AccessGaps);
 
 /// <summary>
 /// Runs one bounded, model-driven investigation for a fired alert — the Module 2 replacement for
@@ -34,7 +45,8 @@ public sealed record ProactiveInvestigationResult(
 /// <item><b>Workspace scope:</b> every configured area's tools are visible (no context fence), the
 /// same visibility the "search across my whole workspace" escalation grants a user turn.</item>
 /// <item><b>Round + wall-clock caps:</b> <c>AgentModelRequest.MaxToolRounds</c> (same 5 the chat
-/// clients use) plus a hard wall-clock cancellation (90s default) — a slow or looping
+/// clients use) plus a hard wall-clock cancellation (5-minute default — long enough for a cold
+/// ACP process spawn + handshake to finish inside the budget) — a slow or looping
 /// investigation gives up rather than burning the provider.</item>
 /// </list>
 ///
@@ -46,10 +58,41 @@ public sealed record ProactiveInvestigationResult(
 /// </summary>
 public sealed class ProactiveInvestigationRunner
 {
-    private static readonly TimeSpan DefaultInvestigationBudget = TimeSpan.FromSeconds(90);
+    /// <summary>Five minutes, not the original 90s: an ACP-backed run spends part of the budget
+    /// on cold process spawn (<c>npx</c> download/start), the <c>initialize</c> handshake and
+    /// <c>session/new</c> before the agent makes its first tool call — a warm run fits in 90s,
+    /// a cold one reliably didn't, so the rich path silently degenerated to the shallow
+    /// single-shot fallback after every sidecar restart.</summary>
+    private static readonly TimeSpan DefaultInvestigationBudget = TimeSpan.FromMinutes(5);
 
     /// <summary>Same cap the chat clients use internally (AgentModelRequest.MaxToolRounds default).</summary>
     private const int MaxToolRounds = 5;
+
+    /// <summary>Shared evidence-object contract (agent-colleague items 1+3) appended to every
+    /// prompt that drafts the structured report: entries may stay plain strings, or carry a
+    /// finding plus navigable "view"/"watch" hints. Views are (kind, params) — never URLs —
+    /// and only whitelisted kinds/params survive; watches only cover sources the alert-rule
+    /// dialog supports (no arbitrary query rules — a non-goal per the plan).</summary>
+    internal const string EvidenceLinkContract = """
+
+        Each evidence entry may be a plain string, or an object that adds optional navigation
+        hints the report UI can resolve for the reader:
+          {"text": "the finding", "tool": "tool_name",
+           "view": {"kind": "<kind>", "params": { ... }},
+           "watch": {"source": "<AlertRuleSource name>", "params": { ... }}}
+        "view" rules — emit kind + params, never a URL:
+          serviceBus: ns (required); optional entity, entityName, view ("active"|"dlq"), msg, seq
+          sql:        connection (required); optional database, table ("schema.name")
+          aks:        ns, tab, pod, yaml, helm, container, logs, logsNs (at least one)
+          monitoring: tab ("rules"|"history"|"ops"|"reports"), report
+          redis:      cache (required); optional tab
+        "watch" rules — only when a continuing alert rule would catch a recurrence, and only
+        for these sources: AksPodHealth, AksPodRestartRate, AksNamespaceHealthScore,
+        ServiceBusDlqDepth, ServiceBusActiveDepth, ServiceBusDeadSubscription,
+        RedisMemoryUsage, RedisConnectedClients. Params use that source's rule param names
+        (e.g. namespace/kubeconfigContext for AKS, namespaceConnectionAlias/entityPath for
+        Service Bus, connectionAlias for Redis). Omit "watch" for anything else.
+        """;
 
     private const string InvestigationInstructions = """
 
@@ -80,7 +123,7 @@ public sealed class ProactiveInvestigationRunner
         For every workspace resource you inspected beyond the alerting one, include an evidence
         entry saying whether it is implicated in or ruled out of the root cause.
         No prose, no markdown fences — the JSON object only.
-        """;
+        """ + EvidenceLinkContract;
 
     /// <summary>The map-less instructions variant: no declared map covers the fired resource, so
     /// there are no relationships to follow — the model has to find likely neighbors from live
@@ -116,10 +159,31 @@ public sealed class ProactiveInvestigationRunner
         For every workspace resource you inspected beyond the alerting one, include an evidence
         entry saying whether it is implicated in or ruled out of the root cause.
         No prose, no markdown fences — the JSON object only.
+        """ + EvidenceLinkContract;
+
+    /// <summary>Appended to the investigation instructions only when the fired rule opted into
+    /// autofix proposals — "prefer proposing over describing" (monitoring-closed-loop 1b). The
+    /// per-run cap is also hard-enforced in <c>ProposalParking</c>; the prompt copy exists so the
+    /// model doesn't waste calls past it.</summary>
+    private const string AutofixProposalsAddendum = """
+
+        ## Autofix proposals (this alert's rule opted in)
+        If your evidence supports a concrete remediation, prefer proposing it with a propose_*
+        tool over merely describing it — each proposal parks a confirmable action card the user
+        can approve straight from your report. Rules:
+        - Propose at most 3 actions, and only ones genuinely supported by what you observed.
+        - Prefer recoverable remediations (resubmit, restart, delete-a-pod-that-recreates, a
+          minimal manifest patch that restores service now) over destructive ones (purge, flush);
+          propose the destructive variant only when evidence says the data is unrecoverable or
+          disposable. A temporary live patch is worth proposing even when the durable fix belongs
+          in Helm/CI — say so in the evidence so the user knows it will be overwritten later.
+        - A proposal is never executed by you — it waits for explicit user confirmation.
+
         """;
 
     private readonly IAgentModelClient _modelClient;
     private readonly AgentToolCallOrchestrator _toolOrchestrator;
+    private readonly IReadOnlyList<IAgentTool> _allTools;
     private readonly AgentSystemPromptBuilder _promptBuilder;
     private readonly ILogger<ProactiveInvestigationRunner> _logger;
     private readonly TimeSpan _budget;
@@ -127,18 +191,23 @@ public sealed class ProactiveInvestigationRunner
     /// <summary>Builds its orchestrator + prompt builder from the same primitives
     /// <see cref="SidecarAgentChatService"/>'s convenience constructor uses — those collaborators
     /// aren't DI-registered individually, so constructing them here keeps the composition pattern.
+    /// <paramref name="allTools"/> is the DI tool set — the runner needs the concrete
+    /// <see cref="IAgentTool"/>s (not just registry definitions) so the autofix gate can read
+    /// <see cref="IAgentTool.BackgroundProposalEligible"/> without changing the orchestrator.
     /// <paramref name="budget"/> overrides the wall-clock cap (test seam — production uses the
-    /// 90-second default).</summary>
+    /// 5-minute default).</summary>
     public ProactiveInvestigationRunner(
         IAgentModelClient modelClient,
         IAgentToolRegistry toolRegistry,
         ProfileRepository profiles,
         DemoModeService demo,
         ILogger<ProactiveInvestigationRunner> logger,
+        IEnumerable<IAgentTool>? allTools = null,
         TimeSpan? budget = null)
     {
         _modelClient = modelClient;
         _toolOrchestrator = new AgentToolCallOrchestrator(toolRegistry);
+        _allTools = (allTools ?? []).ToList();
         _promptBuilder = new AgentSystemPromptBuilder(profiles, demo);
         _logger = logger;
         _budget = budget ?? DefaultInvestigationBudget;
@@ -151,17 +220,52 @@ public sealed class ProactiveInvestigationRunner
     /// resource matched (auto-match by resource — other projects' maps stay out of context);
     /// <c>null</c> means nothing matched, which switches the instructions to map-less
     /// self-discovery rather than skipping the investigation.</summary>
+    /// <param name="allowAutofixProposals">The fired rule's
+    /// <c>MonitoringAlertRule.AutoFixProposalsEnabled</c> — when true, the whitelist of
+    /// <see cref="IAgentTool.BackgroundProposalEligible"/> propose_* tools joins the otherwise
+    /// read-only set. Off (the default), the run is exactly as read-only as before.</param>
+    /// <param name="sessionId">The report/session id (<c>proactive-{ruleId}-{firedAtMs}</c>,
+    /// computable before the run) — pushed as the ambient
+    /// <see cref="AgentExecutionContext"/> selection so every parked proposal carries its
+    /// provenance (<see cref="PendingAgentAction.Origin"/>/<see cref="PendingAgentAction.OriginSessionId"/>)
+    /// and its extended expiry.</param>
     public async Task<ProactiveInvestigationResult?> InvestigateAsync(
         AlertFiredEvent evt,
         string startingResourceHint,
         WorkspaceMap? map,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool allowAutofixProposals = false,
+        string? sessionId = null)
     {
         var tools = _toolOrchestrator.ResolveTools(
             hasToolCalling: true,
             normalizedMode: AgentToolCallOrchestrator.NormalizeMode(null),
             context: null,
             normalizedScope: AgentToolCallOrchestrator.WorkspaceScope);
+
+        // Opted-in rules additionally see the BackgroundProposalEligible whitelist — the only
+        // Mutate-kind tools a background run may ever reach. Filtering happens here (not in the
+        // orchestrator's mode gate) because eligibility is per-run, driven by the fired rule —
+        // the tool *objects* are the source of truth, and every one of them only parks a
+        // PendingAgentAction, so the read-only posture is preserved end-to-end.
+        if (allowAutofixProposals)
+        {
+            var known = new HashSet<string>(tools.Select(t => t.Name), StringComparer.OrdinalIgnoreCase);
+            tools = [.. tools, .. _allTools
+                .Where(t => t.Kind == ToolKind.Mutate && t.BackgroundProposalEligible && !known.Contains(t.Name))
+                .Select(t => new ToolDefinition
+                {
+                    Name = t.Name,
+                    Description = t.Description,
+                    ParametersSchema = t.ParametersSchema,
+                    Kind = t.Kind,
+                    Risk = t.Risk,
+                    RequiredCapability = t.RequiredCapability,
+                    FeatureArea = t.FeatureArea,
+                    BackgroundProposalEligible = true,
+                })];
+        }
+
         if (tools.Count == 0)
         {
             _logger.LogWarning("Proactive investigation for rule {RuleId} resolved zero tools — nothing to investigate with.", evt.RuleId);
@@ -171,10 +275,26 @@ public sealed class ProactiveInvestigationRunner
         var systemPrompt =
             _promptBuilder.Build(null, AgentToolCallOrchestrator.NormalizeMode(null), AgentToolCallOrchestrator.WorkspaceScope, hasToolCalling: true,
                 maps: map is null ? [] : [map], forBackgroundInvestigation: true)
-            + (map is null ? InvestigationInstructionsNoMap : InvestigationInstructions);
+            + (map is null ? InvestigationInstructionsNoMap : InvestigationInstructions)
+            + (allowAutofixProposals ? AutofixProposalsAddendum : string.Empty);
 
         var steps = new List<AgentChatStep>();
-        var toolExecutor = _toolOrchestrator.BuildStepTrackingToolExecutor(tools, steps);
+        // The provenance stamp rides the same ambient-selection channel the orchestrator already
+        // pushes around every tool call — propose_* tools read it to tag Origin/OriginSessionId
+        // (and the 24h alert-context expiry) on everything they park this run.
+        var selection = sessionId is null
+            ? null
+            : new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [PendingActionProvenance.OriginKey] = PendingActionProvenance.InvestigationOrigin,
+                [PendingActionProvenance.SessionIdKey] = sessionId,
+            };
+        // Per-turn denial collector (agent-colleague item 2): every access_denied tool result —
+        // thrown or known-denial short-circuit — lands here, then rides AgentChatResult.
+        // AccessDenials into the result record. Collection is executor-side (not prompt-side)
+        // so gaps are complete even when the model's summary forgets one.
+        var accessDenials = new List<AccessGap>();
+        var toolExecutor = _toolOrchestrator.BuildStepTrackingToolExecutor(tools, steps, selection, accessDenials: accessDenials);
 
         var request = new AgentModelRequest
         {
@@ -182,6 +302,10 @@ public sealed class ProactiveInvestigationRunner
             UserMessage = BuildUserMessage(evt, startingResourceHint),
             Tools = tools,
             MaxToolRounds = MaxToolRounds,
+            // Same stamp the step-tracking executor carries — but Selection is also what the ACP
+            // client bakes into the MCP bridge URL, so without this an agent-side propose_* call
+            // would park actions that can't be linked back to this report.
+            Selection = selection,
         };
 
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -191,11 +315,14 @@ public sealed class ProactiveInvestigationRunner
         try
         {
             result = await _modelClient.ChatAsync(request, toolExecutor, budget.Token);
+            result.AccessDenials = accessDenials;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
+            // steps only counts calls through the local executor — ACP agents run their tool
+            // loop agent-side, so this reads 0 even when the agent was mid-investigation.
             _logger.LogWarning(
-                "Proactive investigation for rule {RuleId} ({RuleName}) hit the {Seconds}s budget — {Tools} tool calls made before cancellation.",
+                "Proactive investigation for rule {RuleId} ({RuleName}) hit the {Seconds}s budget — {Tools} locally-executed tool calls recorded before cancellation.",
                 evt.RuleId, evt.RuleName, (int)_budget.TotalSeconds,
                 steps.Count(s => s.Type == "tool_call"));
             return null;
@@ -223,7 +350,7 @@ public sealed class ProactiveInvestigationRunner
             ? result.ToolsUsed
             : steps.Where(s => s.Type == "tool_call" && s.ToolName is not null).Select(s => s.ToolName!).Distinct().ToList();
 
-        return ParseStructuredOutput(result.Text, toolsUsed, result.HitMaxRounds);
+        return ParseStructuredOutput(result.Text, toolsUsed, result.HitMaxRounds, result.AccessDenials);
     }
 
     /// <summary>Parses the model's JSON-object output into a <see cref="ProactiveInvestigationResult"/>.
@@ -232,8 +359,11 @@ public sealed class ProactiveInvestigationRunner
     /// of a live tool loop, so the parsed fields flow into the same report shape either way.
     /// A model that returns non-JSON prose still yields a usable result: the raw text becomes the
     /// hypothesis (truncated) with empty structured fields.</summary>
+    /// <param name="accessGaps">Denials the tool loop collected — empty for the fallback path,
+    /// which runs no tool loop of its own.</param>
     internal ProactiveInvestigationResult ParseStructuredOutput(
-        string text, IReadOnlyList<string> toolsUsed, bool hitMaxRounds)
+        string text, IReadOnlyList<string> toolsUsed, bool hitMaxRounds,
+        IReadOnlyList<AccessGap>? accessGaps = null)
     {
         text = text.Trim();
         var json = ExtractFirstJsonObject(text);
@@ -247,18 +377,29 @@ public sealed class ProactiveInvestigationRunner
                 ProposedFix: null,
                 RawText: text,
                 ToolsUsed: toolsUsed,
-                HitMaxRounds: hitMaxRounds);
+                HitMaxRounds: hitMaxRounds,
+                EvidenceItems: [],
+                AccessGaps: accessGaps ?? []);
         }
 
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+
+            // agent-colleague item 1: evidence entries may be plain strings or objects with
+            // text/tool/view/watch hints — parsed permissively (invalid links drop, findings
+            // never do). The legacy string list stays filled with just the texts.
+            var evidenceItems = root.TryGetProperty("evidence", out var ev)
+                ? EvidenceItemParser.Parse(ev, DateTimeOffset.UtcNow)
+                : [];
+            var evidenceTexts = evidenceItems.Select(i => i.Text).ToList();
+
             return new ProactiveInvestigationResult(
                 Hypothesis: root.TryGetProperty("hypothesis", out var h) && h.ValueKind == JsonValueKind.String
                     ? h.GetString() ?? text
                     : text,
-                Evidence: ReadStringArray(root, "evidence"),
+                Evidence: evidenceTexts,
                 Severity: root.TryGetProperty("severity", out var s) && s.ValueKind == JsonValueKind.String
                     ? s.GetString()
                     : null,
@@ -266,7 +407,9 @@ public sealed class ProactiveInvestigationRunner
                 ProposedFix: ReadProposedFix(root),
                 RawText: text,
                 ToolsUsed: toolsUsed,
-                HitMaxRounds: hitMaxRounds);
+                HitMaxRounds: hitMaxRounds,
+                EvidenceItems: evidenceItems,
+                AccessGaps: accessGaps ?? []);
         }
         catch (JsonException ex)
         {
@@ -279,7 +422,9 @@ public sealed class ProactiveInvestigationRunner
                 ProposedFix: null,
                 RawText: text,
                 ToolsUsed: toolsUsed,
-                HitMaxRounds: hitMaxRounds);
+                HitMaxRounds: hitMaxRounds,
+                EvidenceItems: [],
+                AccessGaps: accessGaps ?? []);
         }
     }
 

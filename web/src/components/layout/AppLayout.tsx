@@ -22,26 +22,34 @@ import {
     Beaker,
     Keyboard,
     Waves,
+    Feather,
+    Droplets,
     Clock,
+    AlertTriangle,
 } from "lucide-react";
 import { CommandPalette } from "./CommandPalette";
+import { PinnedRail } from "./PinnedRail";
+import { setNotificationBellSlot } from "./notification-bell-slot";
+import { EnvironmentBadge } from "./EnvironmentBadge";
 import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
 import { GlobalAgentPanel } from "@/components/agent/GlobalAgentPanel";
 import { DemoTour } from "./DemoTour";
 import {
     useDemoMode,
     useHealth,
+    useProfile,
     useToggleDemoMode,
     useUserSettings,
     useUpdateUserSettings,
     useWorkspaceWarmup,
 } from "@/lib/hooks";
+import { classifyEnvironment, environmentBadgeTitle } from "@/lib/env-badge";
 import {
     loadViewPreference,
     saveViewPreference,
 } from "@/lib/stores/panel-preferences";
 import { notifyScreenRouteChanged } from "@/lib/stores/screen-state";
-import { FATHOM_UNLOCK_THRESHOLD } from "@/lib/types";
+import { initDeepLinks, type DeepLinkContext } from "@/lib/deep-links";
 import { useSettingsStore, isTheme } from "@/lib/stores/settings";
 import { useAgentPanelStore } from "@/lib/stores/agent-panel";
 import { useMonitoringStream } from "@/lib/hooks/useMonitoring";
@@ -101,6 +109,10 @@ export function AppLayout() {
 
     const { data: health } = useHealth();
     const { data: demoData } = useDemoMode();
+    // Environment badge (ux-power-pack §3): one classification drives the top-bar
+    // pill, the status-bar label and — for PRD — the banner under the header.
+    const { data: profile } = useProfile();
+    const env = profile ? classifyEnvironment(profile.config) : null;
     const serviceHealth = useServiceHealth();
     const toggleDemoMode = useToggleDemoMode();
     const { theme, toggleTheme, setTheme } = useSettingsStore();
@@ -170,6 +182,21 @@ export function AppLayout() {
     // deliberately don't toast, so an event can't double-notify.
     useMonitoringStream(
         (evt) => {
+            // A firing suppressed by a silence window or rule mute is audit info only
+            // (monitoring-closed-loop item 3): quiet in-app toast, no OS notification —
+            // making noise here would defeat the point of silencing.
+            if (evt.suppressed) {
+                notify(
+                    "info",
+                    `${evt.ruleName} — silenced`,
+                    evt.suppressedBy
+                        ? `${evt.message} (${evt.suppressedBy})`
+                        : evt.message,
+                    undefined,
+                    "/monitoring",
+                );
+                return;
+            }
             void showNotification(evt.ruleName, evt.message);
             notify(
                 evt.severity === "Critical" ? "error" : "success",
@@ -207,58 +234,22 @@ export function AppLayout() {
                 "/monitoring",
             );
         },
-    );
-
-    // Fathom's "thank you" moment: sessionCount lands on the threshold exactly once (it only ever
-    // increments), so this fires on the one launch that crosses it and never again — no separate
-    // "already celebrated" flag needed server-side.
-    const firedFathomToastRef = useRef(false);
-    useEffect(() => {
-        if (firedFathomToastRef.current || !userSettings) return;
-        if (
-            userSettings.sessionCount === FATHOM_UNLOCK_THRESHOLD &&
-            userSettings.fathomUnlocked
-        ) {
-            firedFathomToastRef.current = true;
+        undefined,
+        // An opted-in investigation parked a remediation proposal (monitoring-closed-loop 1c) —
+        // invalidate the approvals list instantly so the pending card shows without waiting for
+        // the 30s poll or the finished report, and toast "AI proposes X" so it surfaces even when
+        // nobody is watching the monitoring page.
+        (proposal) => {
+            queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
             notify(
-                "success",
-                "New depth reached",
-                "Fathom is unlocked in Settings → Appearance — thanks for taking SwebKit this deep.",
+                "info",
+                `AI proposes a fix — ${proposal.ruleName}`,
+                proposal.summary,
+                undefined,
+                "/monitoring?tab=reports",
             );
-        }
-    }, [userSettings, notify]);
-
-    // Hidden six-click gesture on the status bar version number: sets a developer-only override
-    // that skips the session-count gate on this machine, without any visible UI for it elsewhere.
-    const versionClicksRef = useRef(0);
-    const versionClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-        null,
+        },
     );
-    const handleVersionClick = useCallback(() => {
-        versionClicksRef.current += 1;
-        if (versionClickTimerRef.current)
-            clearTimeout(versionClickTimerRef.current);
-        versionClickTimerRef.current = setTimeout(() => {
-            versionClicksRef.current = 0;
-        }, 1500);
-
-        if (versionClicksRef.current >= 6) {
-            versionClicksRef.current = 0;
-            if (userSettings && !userSettings.fathomDeveloperOverride) {
-                updateUserSettings.mutate(
-                    (prev) => ({ ...prev, fathomDeveloperOverride: true }),
-                    {
-                        onSuccess: () =>
-                            notify(
-                                "success",
-                                "Developer override armed",
-                                "Fathom is unlocked for this profile only.",
-                            ),
-                    },
-                );
-            }
-        }
-    }, [userSettings, updateUserSettings, notify]);
 
     // The sidecar previously had no recovery path if it crashed mid-session: `restart_sidecar`
     // existed as a Tauri command but nothing ever called it, so a crash silently broke the app
@@ -326,15 +317,46 @@ export function AppLayout() {
         };
     }, [queryClient, notify]);
 
+    // `swebkit://` deep links (distribution-onboarding): the Tauri deep-link and
+    // single-instance plugins emit URL events; cold-start links are queued Rust-side and
+    // drained by initDeepLinks. Alias resolution reads the latest profile via the ref so
+    // links arriving before (or after) a profile reload both resolve correctly.
+    const deepLinkContextRef = useRef<DeepLinkContext>({});
+    useEffect(() => {
+        deepLinkContextRef.current = {
+            serviceBusNamespaces: profile?.serviceBusNamespaces,
+            sqlConnections: profile?.config.sqlConfig?.connections,
+        };
+    }, [profile]);
+
+    useEffect(() => {
+        let disposed = false;
+        let unlisten: (() => void) | undefined;
+        void initDeepLinks({
+            navigate,
+            notify: (message) => notify("info", "Deep link", message),
+            context: () => deepLinkContextRef.current,
+        }).then((dispose) => {
+            if (disposed) dispose();
+            else unlisten = dispose;
+        });
+        return () => {
+            disposed = true;
+            unlisten?.();
+        };
+    }, [navigate, notify]);
+
     const contextTitle =
         navItems.find((n) => n.to === location.pathname)?.label ?? "SwebKit";
-    const areaHealth = ([
-        { id: "service-bus", label: "Service Bus" },
-        { id: "aks", label: "AKS" },
-        { id: "redis", label: "Redis" },
-        { id: "sql", label: "SQL" },
-        { id: "storage", label: "Storage" },
-    ] as const).map((area) => ({
+    const areaHealth = (
+        [
+            { id: "service-bus", label: "Service Bus" },
+            { id: "aks", label: "AKS" },
+            { id: "redis", label: "Redis" },
+            { id: "sql", label: "SQL" },
+            { id: "storage", label: "Storage" },
+        ] as const
+    ).map((area) => ({
         ...area,
         state: serviceHealth[area.id]?.connectivity ?? "checking",
     }));
@@ -428,6 +450,15 @@ export function AppLayout() {
                         </NavLink>
                     ))}
                 </nav>
+                <PinnedRail collapsed={navCollapsed} />
+                {/* Docked notification bell: NotificationSystem portals the bell +
+                    history popover into this footer slot so it shares layout with
+                    the rail instead of floating over the last pinned item. */}
+                <div
+                    ref={setNotificationBellSlot}
+                    className="flex shrink-0 justify-center border-t p-2"
+                    data-testid="notification-bell-slot"
+                />
             </aside>
 
             <div className="flex flex-1 flex-col overflow-hidden">
@@ -442,6 +473,7 @@ export function AppLayout() {
                     >
                         {contextTitle}
                     </span>
+                    {env && <EnvironmentBadge env={env} />}
                     <button
                         onClick={() => setPaletteOpen(true)}
                         className="flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground transition-all hover:border-primary/30 hover:bg-accent"
@@ -477,6 +509,12 @@ export function AppLayout() {
                             ) : theme === "fathom-dark" ||
                               theme === "fathom-light" ? (
                                 <Waves className="h-4 w-4" />
+                            ) : theme === "letterpress-light" ||
+                              theme === "letterpress-dark" ? (
+                                <Feather className="h-4 w-4" />
+                            ) : theme === "cascade-light" ||
+                              theme === "cascade-dark" ? (
+                                <Droplets className="h-4 w-4" />
                             ) : (
                                 <Moon className="h-4 w-4" />
                             )}
@@ -516,6 +554,16 @@ export function AppLayout() {
                     </div>
                 </header>
 
+                {env?.tier === "prd" && (
+                    <div
+                        className="flex items-center gap-2 border-b bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive"
+                        data-testid="env-prd-banner"
+                    >
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        Production profile — mutations guarded
+                    </div>
+                )}
+
                 <main className="flex-1 overflow-auto">
                     <Outlet />
                 </main>
@@ -550,52 +598,62 @@ export function AppLayout() {
                         className="flex min-w-0 items-center gap-3"
                         data-testid="status-bar-area-health"
                     >
-                        {areaHealth.map(
-                            ({ id, label, state }) => {
-                                const stateLabel = {
-                                    "not-configured": "Not configured",
-                                    checking: "Checking",
-                                    connected: "Connected",
-                                    degraded: "Degraded",
-                                    unavailable: "Unavailable",
-                                }[state];
-                                const stateClass =
-                                    state === "connected"
-                                        ? "fill-success text-success"
-                                        : state === "checking" || state === "degraded"
-                                          ? "fill-warning text-warning"
-                                          : state === "not-configured"
-                                            ? "fill-muted-foreground text-muted-foreground"
-                                            : "fill-destructive text-destructive";
+                        {areaHealth.map(({ id, label, state }) => {
+                            const stateLabel = {
+                                "not-configured": "Not configured",
+                                checking: "Checking",
+                                connected: "Connected",
+                                degraded: "Degraded",
+                                unavailable: "Unavailable",
+                            }[state];
+                            const stateClass =
+                                state === "connected"
+                                    ? "fill-success text-success"
+                                    : state === "checking" ||
+                                        state === "degraded"
+                                      ? "fill-warning text-warning"
+                                      : state === "not-configured"
+                                        ? "fill-muted-foreground text-muted-foreground"
+                                        : "fill-destructive text-destructive";
 
-                                return (
-                                    <div
-                                        key={id}
-                                        className="flex items-center gap-1"
-                                        data-testid={`status-bar-health-${id}`}
-                                        aria-label={`${label}: ${stateLabel}`}
-                                        title={`${label}: ${stateLabel}`}
-                                    >
-                                        <Circle
-                                            className={`h-1.5 w-1.5 ${stateClass}`}
-                                        />
-                                        <span>{label}</span>
-                                    </div>
-                                );
-                            },
-                        )}
+                            return (
+                                <div
+                                    key={id}
+                                    className="flex items-center gap-1"
+                                    data-testid={`status-bar-health-${id}`}
+                                    aria-label={`${label}: ${stateLabel}`}
+                                    title={`${label}: ${stateLabel}`}
+                                >
+                                    <Circle
+                                        className={`h-1.5 w-1.5 ${stateClass}`}
+                                    />
+                                    <span>{label}</span>
+                                </div>
+                            );
+                        })}
                     </div>
-                    {health?.version && (
-                        <span onClick={handleVersionClick}>
-                            v{health.version}
-                        </span>
-                    )}
+                    {health?.version && <span>v{health.version}</span>}
                     {isDemoMode && (
                         <span
                             className="text-warning"
                             data-testid="status-bar-demo"
                         >
                             Demo Mode
+                        </span>
+                    )}
+                    {env && (
+                        <span
+                            className={
+                                env.tier === "prd"
+                                    ? "font-semibold text-destructive"
+                                    : env.tier === "stg"
+                                      ? "text-warning"
+                                      : ""
+                            }
+                            title={environmentBadgeTitle(env)}
+                            data-testid="status-bar-env"
+                        >
+                            {env.label}
                         </span>
                     )}
                     <span
@@ -615,7 +673,15 @@ export function AppLayout() {
                                 ? "Fathom · Abyss"
                                 : theme === "fathom-light"
                                   ? "Fathom · Shallows"
-                                  : "Light"}{" "}
+                                  : theme === "letterpress-light"
+                                    ? "Letterpress · Day"
+                                    : theme === "letterpress-dark"
+                                      ? "Letterpress · Night"
+                                      : theme === "cascade-light"
+                                        ? "Cascade · Clear"
+                                        : theme === "cascade-dark"
+                                          ? "Cascade · Deep"
+                                          : "Light"}{" "}
                         theme
                     </span>
                     <span>SwebKit</span>

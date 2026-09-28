@@ -83,7 +83,7 @@ export function DemoTour() {
   return (
     <div className="pointer-events-none fixed inset-0 z-[100]" data-testid="demo-tour-overlay">
       <TourSpotlight target={step.target} />
-      <div className="pointer-events-auto fixed bottom-6 left-1/2 w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border bg-card p-4 shadow-2xl" data-testid="demo-tour-card">
+      <div className="pointer-events-auto fixed bottom-6 left-1/2 w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border bg-popover p-4 shadow-2xl" data-testid="demo-tour-card">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-semibold text-primary">
             <MapPin className="h-4 w-4" />

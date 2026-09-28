@@ -6,6 +6,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 using SwebKit.Sidecar.Endpoints;
 
@@ -37,6 +38,8 @@ internal sealed class FailingPermissionsSqlClient(ISqlClient inner) : ISqlClient
     public Task<bool> TestConnectionAsync(CancellationToken ct = default) => inner.TestConnectionAsync(ct);
     public Task<IReadOnlyList<string>> GetMyPermissionsAsync(string? database, CancellationToken ct = default) =>
         throw new InvalidOperationException("permission probe denied");
+    public Task<IReadOnlyList<SqlColumnInfo>> GetObjectColumnsAsync(string schemaName, string objectName, string? database, CancellationToken ct = default) =>
+        inner.GetObjectColumnsAsync(schemaName, objectName, database, ct);
     public Task<IReadOnlyList<SqlDatabaseInfo>> ListDatabasesAsync(CancellationToken ct = default) => inner.ListDatabasesAsync(ct);
     public Task<SqlSchemaModel> GetSchemaAsync(string? database, CancellationToken ct = default) => inner.GetSchemaAsync(database, ct);
     public Task<SqlQueryResult> ExecuteQueryAsync(string sql, string? database, int maxRows, bool allowWrites, CancellationToken ct = default) =>
@@ -148,7 +151,7 @@ public class SqlEndpointsTests : IDisposable
     }
 
     [Fact]
-    public async Task GetSchema_RestrictedDemoConnection_ReportsMetadataHidden()
+    public async Task GetSchema_RestrictedDemoConnection_ReportsMetadataHidden_WithDeclaredObjects()
     {
         var (profile, demo, pool, _) = Build(demoMode: true);
         pool.ClientFactory = demo.GetSqlClient;
@@ -157,8 +160,14 @@ public class SqlEndpointsTests : IDisposable
             DemoModeService.DemoSqlConnectionIdRestricted, null, profile, pool, demo, CancellationToken.None);
 
         var ok = Assert.IsType<Ok<SqlSchemaModel>>(result);
-        Assert.Empty(ok.Value!.Schemas);           // what sys.objects returns without VIEW DEFINITION
-        Assert.True(ok.Value.MetadataHidden);       // but SELECT/EXECUTE grants exist → hidden, not empty
+        // demo-sql-prd declares prd.v_orders / exec:prd.p_recalc / prd.v_audit — a hidden
+        // catalog means those declarations are the entire tree, and every one is flagged.
+        var prd = Assert.Single(ok.Value!.Schemas);
+        Assert.Equal("prd", prd.Name);
+        Assert.All(prd.Objects, o => Assert.True(o.IsDeclared));
+        Assert.Contains(prd.Objects, o => o.Name == "v_orders");
+        Assert.Contains(prd.Objects, o => o.Name == "p_recalc" && o.Kind == "proc");
+        Assert.True(ok.Value.MetadataHidden);       // declared objects aren't catalog metadata
         Assert.Contains("SELECT", ok.Value.EffectivePermissions);
         Assert.DoesNotContain("VIEW DEFINITION", ok.Value.EffectivePermissions);
     }
@@ -259,6 +268,74 @@ public class SqlEndpointsTests : IDisposable
         // 20 canned order rows exist; the clamp means we never get more than the hard cap.
         Assert.Equal(20, ok.Value!.Rows.Count);
         queries.Dispose();
+    }
+
+    // ── Lazy object-column introspection ───────────────────────────────────────
+
+    [Fact]
+    public async Task GetObjectColumns_UnknownConnection_ReturnsNotFound_WithoutTouchingThePool()
+    {
+        var (profile, demo, pool, _) = Build();
+
+        var result = await SqlEndpoints.GetObjectColumnsAsync(
+            "nope", "dbo", "t", null, profile, pool, demo,
+            NullLogger<Program>.Instance, CancellationToken.None);
+
+        Assert.Equal(404, ((IStatusCodeHttpResult)result).StatusCode);
+        Assert.Empty(pool.Calls);
+    }
+
+    [Fact]
+    public async Task GetObjectColumns_KnownObject_ReturnsColumns()
+    {
+        var (profile, demo, pool, _) = Build();
+
+        var result = await SqlEndpoints.GetObjectColumnsAsync(
+            ConnectionId, "dbo", "customers", null, profile, pool, demo,
+            NullLogger<Program>.Instance, CancellationToken.None);
+
+        var ok = Assert.IsType<Ok<SqlEndpoints.SqlObjectColumnsResult>>(result);
+        Assert.False(ok.Value!.Denied);
+        Assert.Null(ok.Value.Error);
+        Assert.Contains(ok.Value.Columns, c => c.Name == "id");
+    }
+
+    [Fact]
+    public async Task GetObjectColumns_PerObjectDenial_ReturnsDeniedPayload_NotHttpError()
+    {
+        // A per-object denial must ride in the payload — an HTTP error would fail the whole
+        // tree view rather than just the one object the identity can't see.
+        var (profile, demo, pool, _) = Build(demoMode: true);
+        pool.ClientFactory = demo.GetSqlClient;
+
+        var result = await SqlEndpoints.GetObjectColumnsAsync(
+            DemoModeService.DemoSqlConnectionIdRestricted, "prd", "v_audit", null,
+            profile, pool, demo, NullLogger<Program>.Instance, CancellationToken.None);
+
+        var ok = Assert.IsType<Ok<SqlEndpoints.SqlObjectColumnsResult>>(result);
+        Assert.True(ok.Value!.Denied);
+        Assert.Empty(ok.Value.Columns);
+        Assert.NotNull(ok.Value.Denial);
+        Assert.Equal("Sql", ok.Value.Denial!.FeatureArea);
+        // Detail carries the server's message ("SELECT permission was denied…");
+        // RequiredAccess is the area remedy ("database permissions" + SqlGrant kind).
+        Assert.Contains("SELECT", ok.Value.Denial.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(AccessRemedyKind.SqlGrant, ok.Value.Denial.Remedy!.Kind);
+    }
+
+    [Fact]
+    public async Task GetObjectColumns_GrantedDeclaredObject_OnRestrictedConnection_ReturnsColumns()
+    {
+        var (profile, demo, pool, _) = Build(demoMode: true);
+        pool.ClientFactory = demo.GetSqlClient;
+
+        var result = await SqlEndpoints.GetObjectColumnsAsync(
+            DemoModeService.DemoSqlConnectionIdRestricted, "prd", "v_orders", null,
+            profile, pool, demo, NullLogger<Program>.Instance, CancellationToken.None);
+
+        var ok = Assert.IsType<Ok<SqlEndpoints.SqlObjectColumnsResult>>(result);
+        Assert.False(ok.Value!.Denied);
+        Assert.Contains(ok.Value.Columns, c => c.Name == "total");
     }
 
     // ── Saved queries ──────────────────────────────────────────────────────────

@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, AlertCircle, Loader2, Sparkles, X } from "lucide-react";
 import { SkeletonRows } from "@/components/shared/Skeleton";
+import { firedEventToHistoryEntry } from "../../lib/api";
 import type {
     AlertSignalStatus,
     MonitoringAlertRule,
     AlertFiredEvent,
+    AlertHistoryEntry,
+    AlertResolvedEvent,
     AlertEvaluatedEvent,
     ProactiveInsightReadyEvent,
     ProactiveInsightStatusEvent,
@@ -22,6 +25,7 @@ import {
     useMonitoringInsights,
     useDeleteMonitoringInsight,
     useOpenInsightChat,
+    useMuteMonitoringRule,
     useMonitoringStream,
     useProactiveInsightsFeed,
     useUpdateSearchParams,
@@ -32,8 +36,11 @@ import { ContextualAssistant } from "../agent/ContextualAssistant";
 import { AlertRuleGroups } from "./AlertRuleGroups";
 import { AlertRuleDialog } from "./AlertRuleDialog";
 import { AlertHistoryPanel } from "./AlertHistoryPanel";
+import { SilencesSection } from "./SilencesSection";
 import { ProactiveInsightCard } from "./ProactiveInsightCard";
 import { AiReportsPanel } from "./AiReportsPanel";
+import { OpsDashboardPanel } from "./OpsDashboardPanel";
+import { buildPrefilledRuleDraft } from "./prefillRule";
 
 // Keeps a burst of proactive insights from pushing the tab strip below the fold — a "+N more"
 // toggle (scrollable once expanded) surfaces the rest without an unbounded list.
@@ -63,24 +70,27 @@ export function MonitoringPage() {
     const createRule = useCreateMonitoringRule();
     const updateRule = useUpdateMonitoringRule();
     const deleteRule = useDeleteMonitoringRule();
+    const muteRule = useMuteMonitoringRule();
     const { notify } = useNotification();
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
 
-    // `?tab=` keeps the rules/history/reports split deep-linkable and restorable;
+    // `?tab=` keeps the rules/history/ops/reports split deep-linkable and restorable;
     // `?report=` selects one persisted AI report inside the reports tab.
     const [searchParams] = useSearchParams();
     const updateParams = useUpdateSearchParams();
-    const activeTab: "rules" | "history" | "reports" =
+    const activeTab: "rules" | "history" | "ops" | "reports" =
         searchParams.get("tab") === "history"
             ? "history"
-            : searchParams.get("tab") === "reports"
-              ? "reports"
-              : "rules";
+            : searchParams.get("tab") === "ops"
+              ? "ops"
+              : searchParams.get("tab") === "reports"
+                ? "reports"
+                : "rules";
     const selectedReportId = searchParams.get("report");
     const setActiveTab = useCallback(
-        (tab: "rules" | "history" | "reports") =>
+        (tab: "rules" | "history" | "ops" | "reports") =>
             updateParams({
                 tab: tab === "rules" ? null : tab,
                 // Keep a selected report when landing on the reports tab; clear it
@@ -111,6 +121,25 @@ export function MonitoringPage() {
             }
         }
     }, [location, rules, navigate, setActiveTab]);
+
+    // "Watch this" deep link (monitoring-closed-loop): feature pages navigate here with
+    // `state: { prefillRule }` carrying a partial rule (source + params/threshold from the
+    // surface's context — e.g. an AKS pod view prefills namespace/restart threshold). It opens
+    // the rule dialog as a *new* rule (id "" → the existing create path), pre-filled but still
+    // fully editable before saving.
+    useEffect(() => {
+        const state = location.state as {
+            prefillRule?: Partial<MonitoringAlertRule>;
+        } | null;
+        if (state?.prefillRule) {
+            /* eslint-disable react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway */
+            setActiveTab("rules");
+            setEditingRule(buildPrefilledRuleDraft(state.prefillRule));
+            setShowEditor(true);
+            /* eslint-enable react-hooks/set-state-in-effect */
+            navigate(location.pathname, { replace: true, state: null });
+        }
+    }, [location, navigate, setActiveTab]);
     // Live status dots, derived from a synthetic evaluation event merged in from the stream + history.
     const [statuses, setStatuses] = useState<Record<string, AlertSignalStatus>>(
         {},
@@ -176,6 +205,19 @@ export function MonitoringPage() {
         (evt) => {
             const key = `${evt.ruleId}|${evt.firedAt}`;
             setInsightStatuses((s) => ({ ...s, [key]: evt }));
+        },
+        // Recovery signal (monitoring-closed-loop 4a): an Ok tick can't clear a Firing dot on
+        // its own — it might just be "nothing new transitioned". alertResolved is the engine's
+        // explicit "the incident is over" frame, so it's safe to land the dot on Ok here.
+        (evt: AlertResolvedEvent) => {
+            setStatuses((s) => ({ ...s, [evt.ruleId]: "Ok" }));
+        },
+        // An opted-in investigation just parked a remediation proposal — refresh the approvals
+        // list immediately rather than on the next 30s poll, so the pending-action card is there
+        // when the user looks. (The toast for this lives in AppLayout's always-mounted
+        // subscription — toasting here too would double-notify.)
+        () => {
+            queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
         },
     );
 
@@ -252,9 +294,22 @@ export function MonitoringPage() {
         });
     };
 
-    const mergedHistory = [...liveEvents, ...history].sort(
-        (a, b) => new Date(b.firedAt).getTime() - new Date(a.firedAt).getTime(),
-    );
+    // History rows are the durable Fired/Suppressed/Resolved entries plus live alertFired
+    // events not yet flushed to the persisted store — deduped by ruleId|at|kind so an event
+    // that already landed in monitoring-history.json doesn't double-render between polls.
+    const mergedHistory = useMemo<AlertHistoryEntry[]>(() => {
+        const persistedKeys = new Set(
+            history.map((h) => `${h.ruleId}|${h.at}|${h.kind}`),
+        );
+        const liveRows = liveEvents
+            .map(firedEventToHistoryEntry)
+            .filter(
+                (e) => !persistedKeys.has(`${e.ruleId}|${e.at}|${e.kind}`),
+            );
+        return [...liveRows, ...history].sort(
+            (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
+        );
+    }, [liveEvents, history]);
 
     const toggleRule = (rule: MonitoringAlertRule) => {
         const nextEnabled = !rule.enabled;
@@ -296,6 +351,14 @@ export function MonitoringPage() {
     const handleDelete = (rule: MonitoringAlertRule) => {
         if (rule.id) deleteRule.mutate(rule.id);
     };
+
+    // Per-rule mute — shared by the rule rows and the history panel's snooze action.
+    const handleMute = (ruleId: string, until: string | null) =>
+        muteRule.mutate({ id: ruleId, until });
+
+    const mutedUntilByRule = Object.fromEntries(
+        rules.map((r) => [r.id, r.mutedUntil]),
+    );
 
     const dismissInsightStatus = (key: string) =>
         setInsightStatuses((s) => {
@@ -417,7 +480,7 @@ export function MonitoringPage() {
             </div>
 
             <div className="flex gap-1 border-b px-6">
-                {(["rules", "history", "reports"] as const).map((tab) => (
+                {(["rules", "history", "ops", "reports"] as const).map((tab) => (
                     <button
                         key={tab}
                         data-testid={`monitoring-tab-${tab}`}
@@ -432,7 +495,9 @@ export function MonitoringPage() {
                             ? `Alert Rules (${rules.length})`
                             : tab === "history"
                               ? `Alert History (${mergedHistory.length})`
-                              : `AI Reports (${insightReports.length})`}
+                              : tab === "ops"
+                                ? "Ops"
+                                : `AI Reports (${insightReports.length})`}
                     </button>
                 ))}
             </div>
@@ -481,8 +546,11 @@ export function MonitoringPage() {
                                     setShowEditor(true);
                                 }}
                                 onDelete={handleDelete}
+                                onMute={handleMute}
                             />
                         )}
+
+                        <SilencesSection rules={rules} />
                     </div>
                 )}
 
@@ -502,8 +570,14 @@ export function MonitoringPage() {
                     ) : historyIsLoading ? (
                         <SkeletonRows count={4} />
                     ) : (
-                        <AlertHistoryPanel events={mergedHistory} />
+                        <AlertHistoryPanel
+                            events={mergedHistory}
+                            onMute={handleMute}
+                            mutedUntilByRule={mutedUntilByRule}
+                        />
                     ))}
+
+                {activeTab === "ops" && <OpsDashboardPanel />}
 
                 {activeTab === "reports" && (
                     <AiReportsPanel

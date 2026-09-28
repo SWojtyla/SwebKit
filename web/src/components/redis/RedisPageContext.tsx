@@ -99,13 +99,42 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     if (state?.cacheId && caches.some((c) => c.id === state.cacheId)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
       setActiveCacheId(state.cacheId);
-      navigate(location.pathname, { replace: true, state: null });
+      navigate(location.pathname + location.search, {
+        replace: true,
+        state: null,
+      });
     }
   }, [location, caches, navigate]);
 
   const redisTreeRef = useRef<HTMLDivElement | null>(null);
   const [searchParams] = useSearchParams();
   const updateParams = useUpdateSearchParams();
+
+  // `?cache=<id>` is the canonical deep link (palette items, PinnedRail). An
+  // explicit param naming a configured cache wins over the persisted
+  // activeCacheId — and over a still-null session selection on mount.
+  useEffect(() => {
+    const cacheParam = searchParams.get("cache");
+    if (
+      cacheParam &&
+      cacheParam !== activeCacheId &&
+      caches.some((c) => c.id === cacheParam)
+    ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- URL-param deep-link consumption; same one-shot class as the state.cacheId consumer above
+      setActiveCacheId(cacheParam);
+    }
+  }, [searchParams, caches, activeCacheId]);
+
+  // Settle `?cache=` on the resolved id: a bare visit becomes shareable and an
+  // invalid deep-link id is corrected. A valid-but-different param is an
+  // inbound deep link — the consumer above applies it, so the URL must not be
+  // snapped back here first (SqlPage's `?connection=` settle mirrors this).
+  useEffect(() => {
+    const cacheParam = searchParams.get("cache");
+    if (!resolvedCacheId || cacheParam === resolvedCacheId) return;
+    if (cacheParam && caches.some((c) => c.id === cacheParam)) return;
+    updateParams({ cache: resolvedCacheId }, { replace: true });
+  }, [resolvedCacheId, searchParams, caches, updateParams]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [pattern, setPattern] = useState("*");
   const [searchInput, setSearchInput] = useState("*");
@@ -602,6 +631,9 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
   const handleCacheChange = useCallback(
     (cacheId: string) => {
       setActiveCacheId(cacheId);
+      // Canonical URL — history gets a real entry per switch (same convention
+      // as SqlPage's ?connection= writes in handleConnectionChange).
+      updateParams({ cache: cacheId });
       setCursor(0);
       setAllKeys([]);
       setSelectedKey(null);
@@ -625,7 +657,7 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
           : prev,
       );
     },
-    [restorePattern, updateProfileMutate],
+    [restorePattern, updateProfileMutate, updateParams],
   );
 
   const connectionValue: RedisConnectionValue = useMemo(

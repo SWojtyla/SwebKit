@@ -7,6 +7,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Services;
 using SwebKit.Sidecar.Endpoints;
 using SwebKit.Sidecar.Services;
 
@@ -25,11 +26,18 @@ internal sealed class FakeToolRegistryForProactiveInsight : IAgentToolRegistry
     /// add entries to send a test down the model-driven path.</summary>
     public List<ToolDefinition> Definitions { get; } = [];
 
+    /// <summary>Tools the registry actually executes when called — lets a test wire a real
+    /// propose_* tool through the runner's tool executor (monitoring-closed-loop) while every
+    /// other tool name keeps returning <see cref="CannedResult"/>.</summary>
+    public Dictionary<string, IAgentTool> RealTools { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     public IReadOnlyList<ToolDefinition> GetDefinitions() => Definitions;
 
     public async Task<string> ExecuteAsync(string toolName, JsonElement arguments, CancellationToken ct)
     {
         Calls.Add((toolName, arguments.Clone()));
+        if (RealTools.TryGetValue(toolName, out var real))
+            return await real.ExecuteAsync(arguments, ct);
         if (BlockUntil is not null)
             await BlockUntil;
         return CannedResult;
@@ -75,7 +83,9 @@ public class ProactiveInsightServiceTests
         var reportRepo = new ProactiveInsightReportRepository();
         var profiles = new ProfileRepository();
         var engine = new MonitoringAlertEvaluationService(
-            ruleRepo, new FakeConnectionPool(), sources, profiles, NullLogger<MonitoringAlertEvaluationService>.Instance);
+            ruleRepo, new FakeConnectionPool(), sources, profiles,
+            new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(),
+            NullLogger<MonitoringAlertEvaluationService>.Instance);
 
         var registry = new FakeToolRegistryForProactiveInsight();
         var modelClient = new ContextBudgetModelClient { OnComplete = _ => "A short hypothesis." };
@@ -188,6 +198,33 @@ public class ProactiveInsightServiceTests
     }
 
     [Fact]
+    public async Task AlertFired_SuppressedByMute_ReportsSkipped_NeverInvestigates()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, engine, ruleRepo, _, _, registry, _, _) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        var rule = AksRule("prod");
+        rule.MutedUntil = DateTimeOffset.UtcNow.AddHours(1);
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        var statuses = new List<ProactiveInsightStatusEvent>();
+        insights.InsightStatus += e => statuses.Add(e);
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
+
+        await engine.RunEvaluationOnceAsync();
+        await insights.DrainAsync();
+
+        // A suppressed firing is audit info only: the investigation never runs, but the
+        // skip is still reported so the suppression is visible rather than a silent drop.
+        var skipped = Assert.Single(statuses);
+        Assert.Equal(ProactiveInsightStage.Skipped, skipped.Stage);
+        Assert.Equal("silenced by maintenance window", skipped.Reason);
+        Assert.Null(ready);
+        Assert.Empty(registry.Calls);
+    }
+
+    [Fact]
     public async Task AlertFired_SuccessfulInvestigation_ReportsStartedBeforeReady()
     {
         using var _sandbox = new AppDataSandbox();
@@ -283,7 +320,7 @@ public class ProactiveInsightServiceTests
         var ruleRepo = new AlertRuleRepository();
         var profiles = new ProfileRepository();
         var signalSource = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
-        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, NullLogger<MonitoringAlertEvaluationService>.Instance);
+        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(), NullLogger<MonitoringAlertEvaluationService>.Instance);
         var registry = new FakeToolRegistryForProactiveInsight();
         var modelClient = new ContextBudgetModelClient { OnComplete = _ => throw new InvalidOperationException("summarizer unreachable") };
         var settings = SettingsWithCapability(AgentCapability.ToolCalling);
@@ -368,6 +405,154 @@ public class ProactiveInsightServiceTests
         Assert.Equal(["restart count 7", "OOMKilled in last state"], ready.Evidence);
     }
 
+    // ── monitoring-closed-loop 1c — proposal linkage ─────────────────────────
+
+    [Fact]
+    public async Task AlertFired_AutofixOptedIn_ParkedProposal_LinksReport_AndRaisesPendingActionProposed()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var ruleRepo = new AlertRuleRepository();
+        var reportRepo = new ProactiveInsightReportRepository();
+        var profiles = new ProfileRepository();
+        var engine = new MonitoringAlertEvaluationService(
+            ruleRepo, new FakeConnectionPool(),
+            [new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing)],
+            profiles, new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(),
+            NullLogger<MonitoringAlertEvaluationService>.Instance);
+
+        var coordinator = new AgentActionCoordinator();
+        var appState = new AppStateService(profiles, new UiStateRepository(),
+            new AppEventBus(NullLogger<AppEventBus>.Instance));
+        var propose = new SwebKit.Agents.Tools.Aks.ProposeRestartAksDeploymentTool(appState, coordinator);
+
+        var registry = new FakeToolRegistryForProactiveInsight();
+        registry.RealTools[propose.Name] = propose;
+
+        var modelClient = new ScriptedInvestigationModelClient
+        {
+            OnChat = async (_, executor, ct) =>
+            {
+                await executor!(propose.Name,
+                    JsonDocument.Parse("""{"deployment":"orders","namespace":"prod"}""").RootElement, ct);
+                return new AgentChatResult
+                {
+                    Text = """{"hypothesis":"stuck rollout after deploy","severity":"medium"}""",
+                    ToolsUsed = [propose.Name],
+                    Elapsed = TimeSpan.Zero,
+                };
+            },
+        };
+        var settings = SettingsWithCapability(AgentCapability.ToolCalling);
+        var chatService = new SidecarAgentChatService(modelClient, new AgentToolRegistry([]), profiles, settings, new DemoModeService());
+        var runner = new ProactiveInvestigationRunner(
+            modelClient, registry, profiles, new DemoModeService(),
+            NullLogger<ProactiveInvestigationRunner>.Instance, allTools: [propose]);
+        var insights = new ProactiveInsightService(
+            engine, ruleRepo, reportRepo, profiles, registry, modelClient, settings, chatService,
+            runner, NullLogger<ProactiveInsightService>.Instance, coordinator);
+
+        var rule = AksRule("prod");
+        rule.AutoFixProposalsEnabled = true;
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        var proposed = new List<PendingActionProposedEvent>();
+        insights.PendingActionProposed += e => proposed.Add(e);
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => ready is not null);
+
+        // The SSE-bound event fired the moment the proposal parked.
+        var evt = Assert.Single(proposed);
+        Assert.Equal(rule.Id, evt.RuleId);
+        Assert.Equal("RestartAksDeployment", evt.ActionType);
+        Assert.Equal(ready!.SessionId, evt.SessionId);
+
+        // The parked action carries the investigation provenance and the extended expiry.
+        var action = Assert.Single(coordinator.GetPendingActions());
+        Assert.Equal("investigation", action.Origin);
+        Assert.Equal(ready.SessionId, action.OriginSessionId);
+        Assert.True(action.ExpiresAt > DateTimeOffset.UtcNow.AddHours(23));
+
+        // …and the persisted report links back to it so the detail view can render the card.
+        var report = Assert.Single(await reportRepo.GetAllAsync());
+        Assert.Equal([action.Id], report.PendingActionIds);
+        Assert.Equal(ready.SessionId, report.SessionId);
+    }
+
+    [Fact]
+    public async Task AlertFired_AutofixNotOptedIn_ProposalToolNeverReachesTheRun()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var ruleRepo = new AlertRuleRepository();
+        var profiles = new ProfileRepository();
+        var engine = new MonitoringAlertEvaluationService(
+            ruleRepo, new FakeConnectionPool(),
+            [new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing)],
+            profiles, new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(),
+            NullLogger<MonitoringAlertEvaluationService>.Instance);
+
+        var coordinator = new AgentActionCoordinator();
+        var appState = new AppStateService(profiles, new UiStateRepository(),
+            new AppEventBus(NullLogger<AppEventBus>.Instance));
+        var propose = new SwebKit.Agents.Tools.Aks.ProposeRestartAksDeploymentTool(appState, coordinator);
+
+        var registry = new FakeToolRegistryForProactiveInsight();
+        registry.RealTools[propose.Name] = propose;
+        // One read tool definition so the runner takes the model-driven path (an empty set
+        // resolves zero tools and falls back to the single-shot probe instead).
+        registry.Definitions.Add(new ToolDefinition
+        {
+            Name = "fake_read",
+            Description = "fake read",
+            ParametersSchema = JsonDocument.Parse("""{ "type": "object", "properties": {} }""").RootElement,
+            FeatureArea = FeatureArea.Aks,
+        });
+
+        var modelClient = new ScriptedInvestigationModelClient
+        {
+            ChatReplyText = """{"hypothesis":"investigated read-only"}""",
+            OnChat = (request, _, _) =>
+            {
+                // The rule did not opt in — even though the tool exists in DI, the run never sees it.
+                Assert.DoesNotContain(request.Tools, t => t.Name == propose.Name);
+                Assert.DoesNotContain("Autofix proposals", request.SystemPrompt);
+                return Task.FromResult(new AgentChatResult
+                {
+                    Text = """{"hypothesis":"investigated read-only"}""",
+                    ToolsUsed = [],
+                    Elapsed = TimeSpan.Zero,
+                });
+            },
+        };
+        var settings = SettingsWithCapability(AgentCapability.ToolCalling);
+        var chatService = new SidecarAgentChatService(modelClient, new AgentToolRegistry([]), profiles, settings, new DemoModeService());
+        var runner = new ProactiveInvestigationRunner(
+            modelClient, registry, profiles, new DemoModeService(),
+            NullLogger<ProactiveInvestigationRunner>.Instance, allTools: [propose]);
+        var insights = new ProactiveInsightService(
+            engine, ruleRepo, new ProactiveInsightReportRepository(), profiles, registry, modelClient,
+            settings, chatService, runner, NullLogger<ProactiveInsightService>.Instance, coordinator);
+
+        var rule = AksRule("prod"); // AutoFixProposalsEnabled defaults to false
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
+        var proposed = 0;
+        insights.PendingActionProposed += _ => proposed++;
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => ready is not null);
+
+        Assert.NotNull(ready);
+        Assert.Equal(0, proposed);
+        Assert.Empty(coordinator.GetPendingActions());
+    }
+
     [Fact]
     public async Task AlertFired_TwoRulesFireInTheSamePass_OnlyOneInvestigationRuns_TheOtherIsDropped()
     {
@@ -378,7 +563,9 @@ public class ProactiveInsightServiceTests
         var aksSource = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
         var sbSource = new FakeSignalSource(AlertRuleSource.ServiceBusDlqDepth, AlertSignalStatus.Firing);
         var engine = new MonitoringAlertEvaluationService(
-            ruleRepo, new FakeConnectionPool(), [aksSource, sbSource], profiles, NullLogger<MonitoringAlertEvaluationService>.Instance);
+            ruleRepo, new FakeConnectionPool(), [aksSource, sbSource], profiles,
+            new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(),
+            NullLogger<MonitoringAlertEvaluationService>.Instance);
 
         var registry = new FakeToolRegistryForProactiveInsight { BlockUntil = gate.Task };
         var modelClient = new ContextBudgetModelClient { OnComplete = _ => "hypothesis" };
@@ -464,7 +651,7 @@ public class ProactiveInsightServiceTests
         var reportRepo = new ProactiveInsightReportRepository();
         var profiles = new ProfileRepository();
         var signalSource = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
-        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, NullLogger<MonitoringAlertEvaluationService>.Instance);
+        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(), NullLogger<MonitoringAlertEvaluationService>.Instance);
         var registry = new FakeToolRegistryForProactiveInsight();
         var modelClient = new ContextBudgetModelClient { OnComplete = _ => throw new InvalidOperationException("summarizer unreachable") };
         var settings = SettingsWithCapability(AgentCapability.ToolCalling);
@@ -599,7 +786,7 @@ public class ProactiveInsightServiceTests
         var reportRepo = new ProactiveInsightReportRepository();
         var profiles = new ProfileRepository();
         var signalSource = new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing);
-        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, NullLogger<MonitoringAlertEvaluationService>.Instance);
+        var engine = new MonitoringAlertEvaluationService(ruleRepo, new FakeConnectionPool(), [signalSource], profiles, new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(), NullLogger<MonitoringAlertEvaluationService>.Instance);
         var registry = new FakeToolRegistryForProactiveInsight();
         var modelClient = new ContextBudgetModelClient { OnComplete = _ => throw new InvalidOperationException("summarizer unreachable") };
         var settings = SettingsWithCapability(AgentCapability.ToolCalling);

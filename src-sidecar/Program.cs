@@ -53,6 +53,7 @@ builder.Services.AddSingleton<UiStateRepository>();
 builder.Services.AddSingleton<SwebKit.Core.Services.AppStateService>();
 builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAppEventBus, SwebKit.Core.Services.AppEventBus>();
 builder.Services.AddSingleton<ConfigurationBundleService>();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.TeamPackService>();
 builder.Services.AddSingleton<SwebKit.Core.Services.SwebKitCollectionImporter>();
 builder.Services.AddSingleton<SwebKit.Core.Services.PostmanCollectionImporter>();
 builder.Services.AddSingleton<SwebKit.Core.Services.SwebKitEnvironmentImporter>();
@@ -88,6 +89,12 @@ builder.Services.AddSingleton<ScheduledMessageRepository>();
 builder.Services.AddSingleton<SwebKit.Core.Configuration.AlertRuleRepository>();
 builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAlertRuleRepository>(
     sp => sp.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>());
+builder.Services.AddSingleton<SwebKit.Core.Configuration.MonitoringSilenceRepository>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IMonitoringSilenceRepository>(
+    sp => sp.GetRequiredService<SwebKit.Core.Configuration.MonitoringSilenceRepository>());
+builder.Services.AddSingleton<SwebKit.Core.Configuration.AlertHistoryRepository>();
+builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAlertHistoryRepository>(
+    sp => sp.GetRequiredService<SwebKit.Core.Configuration.AlertHistoryRepository>());
 
 // Persisted AI insight reports (ai-insight-reports) — the permanent record behind the
 // Monitoring "AI Reports" tab; the seeded chat session it points at stays in-memory.
@@ -97,6 +104,17 @@ builder.Services.AddSingleton<SwebKit.Core.Abstractions.IProactiveInsightReportR
 builder.Services.AddSingleton<SwebKit.Sidecar.Services.SidecarMonitoringConnectionPool>();
 builder.Services.AddSingleton<SwebKit.Core.Abstractions.IMonitoringConnectionPool>(
     sp => sp.GetRequiredService<SwebKit.Sidecar.Services.SidecarMonitoringConnectionPool>());
+
+// Per-environment access report — probes each capability through the existing pooled
+// clients, caches 5 min, feeds the Settings "Access" surface and the agent's
+// known-denial short-circuit.
+builder.Services.AddSingleton<SwebKit.Core.Security.IAccessReportService,
+    SwebKit.Sidecar.Services.AccessReportService>();
+// Access-request webhook sender (Phase 4) — POSTs the rendered body template to the
+// configured trigger URL. The 15s timeout is the only policy: a wedged Power Automate
+// flow must time out honestly, not hang the dialog open.
+builder.Services.AddHttpClient<SwebKit.Sidecar.Services.AccessRequestSender>(
+    client => client.Timeout = SwebKit.Sidecar.Services.AccessRequestSender.Timeout);
 
 // Each signal source is registered both as its concrete type and as IAlertSignalSource so the
 // engine can resolve the full IAlertSignalSource list via DI.
@@ -192,14 +210,21 @@ builder.Services.AddSingleton<IAgentTool, InvestigatePodIssueTool>();
 builder.Services.AddSingleton<IAgentTool, ResolvePodEnvTool>();
 builder.Services.AddSingleton<IAgentTool, GetAksResourceYamlTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApplyAksYamlTool>();
+// monitoring-closed-loop remediations — BackgroundProposalEligible, so an opted-in alert rule's
+// background investigation may park these for confirmation.
+builder.Services.AddSingleton<IAgentTool, ProposeRestartAksDeploymentTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeDeleteAksPodTool>();
 builder.Services.AddSingleton<IAgentTool, GetQueueStatsTool>();
 builder.Services.AddSingleton<IAgentTool, GetQueueMessagesTool>();
 builder.Services.AddSingleton<IAgentTool, AnalyzeQueueHealthTool>();
+builder.Services.AddSingleton<IAgentTool, SwebKit.Agents.Tools.ProposePurgeDeadLettersTool>();
+builder.Services.AddSingleton<IAgentTool, SwebKit.Agents.Tools.ProposeResubmitDeadLettersTool>();
 builder.Services.AddSingleton<IAgentTool, GetRedisKeyInfoTool>();
 builder.Services.AddSingleton<IAgentTool, ListRedisKeysTool>();
 builder.Services.AddSingleton<IAgentTool, AnalyzeCacheHealthTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeDeleteRedisKeyTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeSetRedisKeyTtlTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeFlushRedisDatabaseTool>();
 builder.Services.AddSingleton<IAgentTool, ListStorageBlobsTool>();
 builder.Services.AddSingleton<IAgentTool, GetStorageBlobPropertiesTool>();
 builder.Services.AddSingleton<IAgentTool, AnalyzeStorageHealthTool>();
@@ -222,20 +247,32 @@ builder.Services.AddSingleton<IAgentTool, ProposeExecuteSqlTool>();
 // registered IAgentTool, including this one). Registered last among IAgentTool entries purely for
 // readability — registration order has no bearing on the circular-dependency fix.
 builder.Services.AddSingleton<IAgentTool, InvestigateWorkspaceIssueTool>();
+// agent-colleague item 7 — cross-environment compare over workspace maps (LogicalName correlation).
+builder.Services.AddSingleton<IAgentTool, SwebKit.Agents.Tools.Compare.CompareEnvironmentsTool>();
 
 // Screen state (agent-workspace-awareness Module 1) — the store lives in SwebKit.Agents so the
 // tool can inject it; the endpoint publishes into it, get_screen_state reads it.
 builder.Services.AddSingleton<ScreenStateStore>();
 builder.Services.AddSingleton<IAgentTool, GetScreenStateTool>();
+builder.Services.AddSingleton<IAgentTool, GetScreenDetailTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeCreateAlertRuleTool>();
 builder.Services.AddSingleton<IAgentTool, ListAlertRulesTool>();
 // Lives in the sidecar — the alert-history ring buffer is held by MonitoringAlertEvaluationService.
 builder.Services.AddSingleton<IAgentTool, SwebKit.Sidecar.Services.GetAlertHistoryTool>();
+// Same sidecar precedent: merges the engine's ring buffer + durable history with the pooled
+// AKS client (agent-colleague item 6, "what changed since T?" timeline).
+builder.Services.AddSingleton<IAgentTool, SwebKit.Sidecar.Services.GetChangeTimelineTool>();
 
 builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
 
 builder.Services.AddSingleton<SidecarAgentChatService>();
 builder.Services.AddSingleton<ExternalMcpToolSource>();
+
+// Thumbs-down → regression cases (agent-colleague item 5): the exchange buffer is what
+// POST /api/agent/feedback resolves an exchangeId against; the repository is the persisted
+// agent-feedback.json store behind it and the Settings list/export.
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.AgentExchangeBuffer>();
+builder.Services.AddSingleton<SwebKit.Core.Configuration.AgentFeedbackRepository>();
 
 // Agent action confirm-before-execute flow (ai-augmented-app technical-plan.md Module 3). Wired
 // here as infrastructure even though nothing in the sidecar can propose an action yet — the API
@@ -258,6 +295,9 @@ builder.Services.AddSingleton<IAgentActionExecutor, AksActionExecutor>();
 // sidecar-hosted MonitoringAlertEvaluationService for the post-upsert reload.
 builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Sidecar.Services.MonitoringActionExecutor>();
 builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Sidecar.Services.ExternalMcpActionExecutor>();
+// Lives in the sidecar (not SwebKit.Agents) — it resolves the pooled IServiceBusClient through
+// IServiceBusConnectionPool, the same seam the purge/resubmit endpoints use.
+builder.Services.AddSingleton<IAgentActionExecutor, SwebKit.Sidecar.Services.ServiceBusActionExecutor>();
 builder.Services.AddSingleton<AgentActionApplier>();
 
 // HTTP client used by the API client request executor
@@ -280,7 +320,12 @@ builder.Services.AddHttpClient(HttpRequestExecutor.ClientName)
 
 // API client request execution pipeline
 builder.Services.AddSingleton<ICredentialStore, SidecarCredentialStore>();
-builder.Services.AddSingleton<IKeyVaultSecretResolver, SidecarKeyVaultResolver>();
+// Demo mode swaps resolution entirely (DemoModeService's canned vaults + the *prod*/*restricted*
+// denial rule); outside demo mode DemoAwareKeyVaultResolver is a transparent pass-through.
+builder.Services.AddSingleton<SidecarKeyVaultResolver>();
+builder.Services.AddSingleton<DemoAwareKeyVaultResolver>();
+builder.Services.AddSingleton<IKeyVaultSecretResolver>(
+    sp => sp.GetRequiredService<DemoAwareKeyVaultResolver>());
 builder.Services.AddSingleton<IVariableGeneratorService, VariableGeneratorService>();
 builder.Services.AddSingleton<IVariableSubstitutionService, VariableSubstitutionService>();
 builder.Services.AddSingleton<IAuthInheritanceResolver, AuthInheritanceResolver>();
@@ -430,12 +475,6 @@ if (RedisCredentialMigration.MigrateCaches(profileRepository.Config.RedisConfig,
 await app.Services.GetRequiredService<EnvironmentRepository>().LoadAsync();
 await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
 await userSettingsRepository.LoadAsync();
-// Fathom theme unlock progress: one increment per launch, and the unlock is sticky once earned
-// (a later SessionCount reset — e.g. via settings import — must not re-lock a theme the user
-// already reached, hence checking FathomUnlocked with ||= rather than recomputing from scratch).
-userSettingsRepository.Settings.SessionCount++;
-userSettingsRepository.Settings.FathomUnlocked |= userSettingsRepository.Settings.SessionCount >= UserSettings.FathomUnlockThreshold;
-await userSettingsRepository.SaveAsync();
 await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
 // Force-instantiate now so its constructor subscribes to MonitoringAlertEvaluationService.AlertFired
 // before the first alert can possibly fire — a plain AddSingleton registration alone only makes it
@@ -449,6 +488,10 @@ app.MapSystemEndpoints();
 // ── Config: Profiles, Environments, Collections, User Settings, Import/Export ─
 
 app.MapConfigEndpoints();
+
+// ── Access report (per-environment capability probing) ──────────────────────
+
+app.MapAccessEndpoints();
 
 // ── Service Bus ──────────────────────────────────────────────────────────────
 

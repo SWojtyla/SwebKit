@@ -55,7 +55,9 @@ public class MonitoringEndpointsTests
         var pool = new FakeMonitoringConnectionPool();
         var profile = new ProfileRepository();
         var engine = new MonitoringAlertEvaluationService(
-            repo, pool, [], profile, NullLogger<MonitoringAlertEvaluationService>.Instance);
+            repo, pool, [], profile,
+            new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(),
+            NullLogger<MonitoringAlertEvaluationService>.Instance);
         return (repo, engine);
     }
 
@@ -168,12 +170,103 @@ public class MonitoringEndpointsTests
     // ── History ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public void GetHistory_ReturnsEngineRecentAlerts()
+    public async Task GetHistory_ReturnsEngineRecentAlerts()
     {
         var (_, engine) = Build();
 
-        var result = MonitoringEndpoints.GetHistory(engine);
+        var result = await MonitoringEndpoints.GetHistory(engine, new InMemoryAlertHistoryRepository());
 
         Assert.Empty(result.Value!);
+    }
+
+    // ── Silences + per-rule mute (monitoring-closed-loop item 3) ──────────────
+
+    [Fact]
+    public async Task SilenceEndpoints_CreateListDelete_RoundTrip()
+    {
+        var silences = new InMemoryMonitoringSilenceRepository();
+        var now = DateTimeOffset.UtcNow;
+        var silence = new MonitoringSilence
+        {
+            Id = "",
+            StartUtc = now,
+            EndUtc = now.AddHours(2),
+            Reason = "deploy freeze",
+            RuleIds = ["r1"],
+        };
+
+        var created = await MonitoringEndpoints.CreateSilenceAsync(silence, silences);
+        var createdValue = Assert.IsAssignableFrom<Created<MonitoringSilence>>(created.Result).Value!;
+        Assert.NotEmpty(createdValue.Id);
+
+        var list = await MonitoringEndpoints.GetSilencesAsync(silences);
+        Assert.Single(list.Value!);
+
+        await MonitoringEndpoints.DeleteSilenceAsync(createdValue.Id, silences);
+        Assert.Empty((await MonitoringEndpoints.GetSilencesAsync(silences)).Value!);
+    }
+
+    [Fact]
+    public async Task CreateSilenceAsync_EndNotAfterStart_ReturnsBadRequest()
+    {
+        var silences = new InMemoryMonitoringSilenceRepository();
+        var now = DateTimeOffset.UtcNow;
+
+        var result = await MonitoringEndpoints.CreateSilenceAsync(
+            new MonitoringSilence { StartUtc = now, EndUtc = now }, silences);
+
+        Assert.IsAssignableFrom<BadRequest<string>>(result.Result);
+    }
+
+    [Fact]
+    public async Task MuteRuleAsync_SetsMutedUntil_Persists_AndReturnsUpdatedRule()
+    {
+        var (repo, engine) = Build();
+        await repo.UpsertAsync(NewRule("r1"));
+        var until = DateTimeOffset.UtcNow.AddHours(1);
+
+        var result = await MonitoringEndpoints.MuteRuleAsync("r1", new MuteRuleRequest(until), repo, engine);
+
+        var ok = Assert.IsAssignableFrom<Ok<MonitoringAlertRule>>(result.Result);
+        Assert.Equal(until, ok.Value!.MutedUntil);
+        Assert.Equal(until, (await repo.GetByIdAsync("r1"))!.MutedUntil);
+    }
+
+    [Fact]
+    public async Task MuteRuleAsync_NullUntil_Unmutes()
+    {
+        var (repo, engine) = Build();
+        var rule = NewRule("r1");
+        rule.MutedUntil = DateTimeOffset.UtcNow.AddHours(1);
+        await repo.UpsertAsync(rule);
+
+        var result = await MonitoringEndpoints.MuteRuleAsync("r1", new MuteRuleRequest(null), repo, engine);
+
+        var ok = Assert.IsAssignableFrom<Ok<MonitoringAlertRule>>(result.Result);
+        Assert.Null(ok.Value!.MutedUntil);
+    }
+
+    [Fact]
+    public async Task MuteRuleAsync_PastUntil_NormalizesToUnmuted()
+    {
+        var (repo, engine) = Build();
+        await repo.UpsertAsync(NewRule("r1"));
+
+        var result = await MonitoringEndpoints.MuteRuleAsync(
+            "r1", new MuteRuleRequest(DateTimeOffset.UtcNow.AddMinutes(-5)), repo, engine);
+
+        var ok = Assert.IsAssignableFrom<Ok<MonitoringAlertRule>>(result.Result);
+        Assert.Null(ok.Value!.MutedUntil);
+    }
+
+    [Fact]
+    public async Task MuteRuleAsync_UnknownRule_ReturnsNotFound()
+    {
+        var (repo, engine) = Build();
+
+        var result = await MonitoringEndpoints.MuteRuleAsync(
+            "missing", new MuteRuleRequest(DateTimeOffset.UtcNow.AddHours(1)), repo, engine);
+
+        Assert.IsAssignableFrom<NotFound>(result.Result);
     }
 }

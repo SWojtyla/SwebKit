@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiSend, exportSettings, importSettings } from "../api";
+import { apiFetch, apiSend, exportSettings, importSettings, exportTeamPack, importTeamPack } from "../api";
+import type { TeamPackImportResult } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
 import type {
   ProfileData,
@@ -46,6 +47,10 @@ export function useUpdateProfile() {
     // round-trips and a full settings re-render per character.
     onSuccess: (data) => {
       qc.setQueryData(["profile"], data);
+      // The access report probes the connection graph — a saved profile may have added,
+      // removed or re-scoped connections, so drop the client-side copy (the sidecar
+      // already invalidated its probe cache on save).
+      qc.invalidateQueries({ queryKey: ["access"] });
     },
     // A failed save leaves the cache describing something the server never accepted, so
     // resync rather than letting the UI quietly disagree with disk.
@@ -148,6 +153,39 @@ export function useImportSettings() {
       qc.invalidateQueries({ queryKey: ["config"] });
     },
     onError: (error) => notify("error", "Couldn't import settings", String(error)),
+  });
+}
+
+// ── Team workspace pack ──────────────────────────────────────────────────────
+
+export function useExportTeamPack() {
+  const { notify } = useNotification();
+  return useMutation({
+    mutationFn: exportTeamPack,
+    onError: (error) => notify("error", "Couldn't export team pack", String(error)),
+  });
+}
+
+export type TeamPackImportVariables = {
+  pack: unknown;
+  opts?: { dryRun?: boolean; strategy?: "merge" | "replace" };
+};
+
+export function useImportTeamPack() {
+  const qc = useQueryClient();
+  const { notify } = useNotification();
+  return useMutation<TeamPackImportResult, Error, TeamPackImportVariables>({
+    mutationFn: ({ pack, opts }) => importTeamPack(pack, opts),
+    onSuccess: (_result, variables) => {
+      // Dry runs persist nothing — invalidating would just churn queries for a preview.
+      if (variables.opts?.dryRun) return;
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["collections"] });
+      qc.invalidateQueries({ queryKey: ["environments"] });
+      qc.invalidateQueries({ queryKey: ["sql", "queries"] });
+      qc.invalidateQueries({ queryKey: ["monitoring", "rules"] });
+    },
+    onError: (error) => notify("error", "Couldn't import team pack", String(error)),
   });
 }
 

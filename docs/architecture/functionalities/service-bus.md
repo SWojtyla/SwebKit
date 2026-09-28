@@ -15,6 +15,8 @@
 - Manage reusable message templates: create, apply, rename, duplicate, edit, and delete.
 - View and cancel locally tracked scheduled messages.
 - Complete active or dead-letter messages, manually dead-letter active messages, purge a mode, resubmit DLQ messages, and resend selected active/DLQ messages.
+- **Edit & resubmit** a DLQ message (`POST .../dlq/resubmit-edited`): peek-lock the original, send the edited copy, then complete the original — move semantics, not copy-only. Edited messages can target another entity in the same namespace.
+- **Session entities** are first-class: `RequiresSession` surfaces as a badge on queues/subscriptions, `GET .../entities/{path}/sessions` summarizes the active window per session (most-recently-active first), a chip bar pins a session filter, and receive-and-settle actions are gated with an explanatory tooltip rather than failing at the broker. Sending to a session entity is allowed when `SessionId` is set.
 - Batch replay messages from pasted JSON with preview and confirmation.
 - Open the entity command palette and the contextual agent for the selected Service Bus scope.
 - Run entirely against realistic demo clients when demo mode is active.

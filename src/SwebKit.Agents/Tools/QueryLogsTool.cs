@@ -1,6 +1,7 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Models;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools;
@@ -8,7 +9,7 @@ namespace SwebKit.Agents.Tools;
 /// <summary>
 /// Executes KQL queries against Application Insights and returns the results.
 /// </summary>
-public sealed class QueryLogsTool : IAgentTool
+public sealed class QueryLogsTool : IAccessAwareTool
 {
     private readonly IObservabilityProviderFactory _providerFactory;
     private readonly AppStateService _appState;
@@ -28,6 +29,15 @@ public sealed class QueryLogsTool : IAgentTool
         "Use this to search logs, trace exceptions, or analyze telemetry data.";
 
     public FeatureArea FeatureArea => FeatureArea.Observability;
+
+    // KQL queries — the report's single observability.logs row.
+    public string Capability => AccessCapabilities.ObservabilityLogs;
+
+    public string? GetConnectionKey(JsonElement arguments) =>
+        _appState.Config.ObservabilityConfig?.SelectedResourceId is { Length: > 0 } resourceId
+            ? resourceId
+            // The demo-mode probe row is keyed "demo-observability" when no resource is selected.
+            : _appState.UseDemoData ? "demo-observability" : null;
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -100,6 +110,12 @@ public sealed class QueryLogsTool : IAgentTool
                 columns = result.ColumnNames,
                 rows = result.Rows
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

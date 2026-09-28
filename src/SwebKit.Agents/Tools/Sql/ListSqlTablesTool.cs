@@ -1,12 +1,13 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Sql;
 
 /// <summary>Lists tables/views (with optional schema filter) in a database.</summary>
-public sealed class ListSqlTablesTool : IAgentTool
+public sealed class ListSqlTablesTool : IAccessAwareTool
 {
     private const int MaxObjects = 100;
 
@@ -24,6 +25,15 @@ public sealed class ListSqlTablesTool : IAgentTool
     public string Name => "list_sql_tables";
     public string Description => $"Lists up to {MaxObjects} tables and views in a database, optionally filtered by schema.";
     public FeatureArea FeatureArea => FeatureArea.Sql;
+
+    // Reads the schema catalog — requires VIEW DEFINITION, matching the report's sql.metadata row.
+    public string Capability => AccessCapabilities.SqlMetadata;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        var connectionId = arguments.TryGetProperty("connection_id", out var c) ? c.GetString() : null;
+        return SqlToolContext.ResolveConnection(_appState, _profiles, connectionId)?.Id;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -65,6 +75,12 @@ public sealed class ListSqlTablesTool : IAgentTool
                 more_available = schemas.Sum(s => s.Objects.Count) > objects.Count,
                 objects,
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

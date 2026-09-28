@@ -56,7 +56,7 @@ export function MessageTableHeader({
         "flex items-center whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted-foreground";
     return (
         <div
-            className="sticky top-0 z-10 grid border-b bg-card"
+            className="sticky top-0 z-10 grid border-b bg-popover"
             style={{ gridTemplateColumns: grid.gridTemplateColumns }}
             role="row"
         >

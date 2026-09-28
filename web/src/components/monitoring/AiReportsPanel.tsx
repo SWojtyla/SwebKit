@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { ShieldAlert, Sparkles } from "lucide-react";
 import type { ProactiveInsightReport } from "../../lib/api";
 import { SkeletonRows } from "@/components/shared/Skeleton";
 import { AiReportDetail } from "./AiReportDetail";
@@ -107,8 +107,21 @@ export function AiReportsPanel({
                             <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
                                 {report.hypothesis}
                             </p>
-                            <p className="mt-1 text-[11px] text-muted-foreground/70">
+                            <p className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground/70">
                                 {formatInsightTime(report.firedAt)}
+                                {(report.accessGaps?.length ?? 0) > 0 && (
+                                    <span
+                                        className="flex items-center gap-1 text-warning"
+                                        title="Investigation hit permission denials — evidence may be partial"
+                                        data-testid={`ai-report-access-gaps-${report.id}`}
+                                    >
+                                        <ShieldAlert className="h-3 w-3" />
+                                        {report.accessGaps!.length} access gap
+                                        {report.accessGaps!.length === 1
+                                            ? ""
+                                            : "s"}
+                                    </span>
+                                )}
                             </p>
                         </button>
                     );

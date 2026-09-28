@@ -1,4 +1,5 @@
 import type {
+    WorkspaceMap,
     WorkspaceRelationshipSuggestion,
     WorkspaceResourceArea,
     WorkspaceResourceCandidate,
@@ -132,6 +133,36 @@ export const suggestionsForNode = (
     nodeId: string,
 ) =>
     suggestions.filter((s) => s.fromNodeId === nodeId || s.toNodeId === nodeId);
+
+/**
+ * Distinct logical names in use across every workspace map — the datalist
+ * suggestions for a node's LogicalName field (cross-environment compare keys on
+ * nodes sharing a name across maps, so reusing an existing spelling is the
+ * point). Sorted; `exclude` drops a single spelling (the node's own current
+ * value, which would just be noise in the suggestion list). Purely advisory —
+ * a suggestion never adds or mutates a node on its own.
+ */
+export function collectLogicalNames(
+    maps: WorkspaceMap[],
+    exclude?: string | null,
+): string[] {
+    // Case-insensitive dedupe — the compare tool matches logical names without
+    // case, so two spellings of the same service are the same suggestion.
+    const names = new Map<string, string>(); // lowercased → first-seen spelling
+    const excluded = exclude?.trim().toLowerCase();
+    for (const map of maps) {
+        for (const node of map.nodes) {
+            const name = node.logicalName?.trim();
+            if (!name) continue;
+            const key = name.toLowerCase();
+            if (key === excluded || names.has(key)) continue;
+            names.set(key, name);
+        }
+    }
+    return [...names.values()].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+}
 
 /** Remaining (not-yet-added) candidates grouped by area, sorted by label.
  * The dedupe key includes the kubeconfig context — "prod/api" on cluster A and

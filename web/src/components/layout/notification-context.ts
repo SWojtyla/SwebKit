@@ -13,6 +13,9 @@ export interface NotificationItem {
     title: string;
     body?: string;
     timestamp: number;
+    /** Occurrence count once dedupe merged same-key firings into this toast/row —
+     *  undefined means a single firing. Rendered as a `×N` badge when > 1. */
+    count?: number;
     /** Optional recovery action rendered as a button on the toast (e.g. "Undo"). Never persisted to history. */
     action?: NotificationAction;
     /** Route to navigate to when the history entry is clicked (e.g. "/monitoring" for a fired alert). */

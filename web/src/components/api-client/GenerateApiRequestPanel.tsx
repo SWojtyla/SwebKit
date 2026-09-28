@@ -42,7 +42,7 @@ export function GenerateApiRequestPanel({ requestId, onClose }: GenerateApiReque
   };
 
   return (
-    <div className="absolute right-3 top-14 z-40 w-96 rounded-lg border bg-card p-3 shadow-lg" data-testid="generate-api-request-panel">
+    <div className="absolute right-3 top-14 z-40 w-96 rounded-lg border bg-popover p-3 shadow-lg" data-testid="generate-api-request-panel">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold">Generate request with AI</h3>
         <button onClick={onClose} className="rounded p-1 text-sm hover:bg-accent" data-testid="generate-api-request-close">

@@ -25,6 +25,7 @@ import {
 import type { StorageBlobSortKey } from "@/lib/storage-blob-sort";
 import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { useGridKeyboardNav } from "@/lib/hooks/useGridKeyboardNav";
 
 export function BlobBrowserPanel() {
     const account = useStorageAccount();
@@ -70,6 +71,33 @@ export function BlobBrowserPanel() {
 
     const hasMoreBlobs = !!ctx.blobs.data?.continuationToken;
     const isFilterActive = ctx.blobFilter.trim().length > 0;
+
+    // Grid keyboard nav (ux-power-pack §4): j/k/arrows move a focused row, e/Enter
+    // opens it (prefix navigates in, blob selects), Space toggles its checkbox in
+    // multi-select mode, `/` focuses the blob filter. Rows live inside the
+    // virtualized list — scrollToIndex mounts a focused row before the rAF focus.
+    const gridNav = useGridKeyboardNav({
+        containerRef: ctx.blobListRef,
+        itemCount: ctx.filteredItems.length,
+        resetKey: `${ctx.selectedContainer}|${ctx.currentPrefix}`,
+        enabled: Boolean(ctx.selectedContainer),
+        scrollToIndex: (index) => blobVirtualizer.scrollToIndex(index),
+        onInspect: (index) => {
+            const item = ctx.filteredItems[index];
+            if (!item) return;
+            if (item.isPrefix) ctx.handleNavigatePrefix(item.name);
+            else ctx.handleSelectBlob(item.name);
+        },
+        onToggleSelect: (index) => {
+            const item = ctx.filteredItems[index];
+            if (item && !item.isPrefix && ctx.multiSelectMode)
+                ctx.toggleBlobSelection(item.name);
+        },
+        getFilterInput: () =>
+            document.querySelector<HTMLElement>(
+                '[data-testid="storage-blob-filter"]',
+            ),
+    });
 
     return (
         <div
@@ -431,6 +459,20 @@ export function BlobBrowserPanel() {
                                             >
                                                 <div
                                                     data-testid={`storage-item-${item.name}`}
+                                                    data-grid-nav-row={
+                                                        virtualItem.index
+                                                    }
+                                                    tabIndex={
+                                                        gridNav.focusedIndex ===
+                                                        virtualItem.index
+                                                            ? 0
+                                                            : -1
+                                                    }
+                                                    onFocus={() =>
+                                                        gridNav.setFocusedIndex(
+                                                            virtualItem.index,
+                                                        )
+                                                    }
                                                     onClick={() =>
                                                         ctx.multiSelectMode &&
                                                         !item.isPrefix
@@ -445,7 +487,7 @@ export function BlobBrowserPanel() {
                                                                     item.name,
                                                                 )
                                                     }
-                                                    className={`flex w-full items-start gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent cursor-pointer ${
+                                                    className={`flex w-full items-start gap-2 px-3 py-1.5 text-left text-sm transition-colors outline-none hover:bg-accent cursor-pointer ${
                                                         ctx.multiSelectMode &&
                                                         !item.isPrefix
                                                             ? ctx.selectedBlobs.has(
@@ -458,7 +500,7 @@ export function BlobBrowserPanel() {
                                                                     item.name
                                                               ? "bg-accent"
                                                               : ""
-                                                    }`}
+                                                    } ${gridNav.focusedIndex === virtualItem.index ? "bg-accent/70" : ""}`}
                                                 >
                                                     {ctx.multiSelectMode &&
                                                         !item.isPrefix && (

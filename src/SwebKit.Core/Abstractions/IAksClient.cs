@@ -56,6 +56,36 @@ public interface IAksClient
     Task DeleteHttpRouteAsync(string ns, string name, CancellationToken ct = default);
     Task ScaleDeploymentAsync(string ns, string deploymentName, int replicas, CancellationToken ct = default);
     Task<IReadOnlyList<HelmRevisionInfo>> GetHelmReleaseHistoryAsync(string ns, string releaseName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lists every Helm revision in a namespace — one row per (release, revision), each carrying
+    /// its <c>Updated</c> timestamp. Backs "what changed since T?" timelines, where superseded
+    /// revisions inside the window matter as much as the latest one.
+    /// </summary>
+    /// <remarks>
+    /// Default implementation fans out: <see cref="GetHelmReleasesAsync"/> then
+    /// <see cref="GetHelmReleaseHistoryAsync"/> per release — correct but N+1 secret lists.
+    /// Implementations that can list <c>owner=helm</c> secrets directly (the real Kubernetes
+    /// client) should override with a single list call.
+    /// </remarks>
+    async Task<IReadOnlyList<HelmRevisionInfo>> GetHelmRevisionsAsync(string ns, CancellationToken ct = default)
+    {
+        var releases = await GetHelmReleasesAsync(ns, ct).ConfigureAwait(false);
+        var histories = await Task.WhenAll(
+            releases.Select(r => GetHelmReleaseHistoryAsync(ns, r.Name, ct))).ConfigureAwait(false);
+        var revisions = new List<HelmRevisionInfo>();
+        foreach (var (release, history) in releases.Zip(histories))
+        {
+            foreach (var rev in history)
+            {
+                // Older implementations don't stamp ReleaseName — patch it from the
+                // release row that produced this history.
+                rev.ReleaseName ??= release.Name;
+                revisions.Add(rev);
+            }
+        }
+        return revisions;
+    }
     Task<HelmReleaseValues> GetHelmReleaseValuesAsync(string ns, string releaseName, CancellationToken ct = default);
     Task<string> GetHelmReleaseNotesAsync(string ns, string releaseName, CancellationToken ct = default)
         => Task.FromResult<string>("Notes are not supported by this AKS client.");

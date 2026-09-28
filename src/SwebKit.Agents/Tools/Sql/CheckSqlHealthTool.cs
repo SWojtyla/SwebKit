@@ -1,13 +1,14 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Sql;
 
 /// <summary>Shallow health check — connectivity, database state, blocking-session count.
 /// Deliberately shallow per the plan: this powers investigate_workspace_issue, not a DBA dashboard.</summary>
-public sealed class CheckSqlHealthTool : IAgentTool
+public sealed class CheckSqlHealthTool : IAccessAwareTool
 {
     private readonly AppStateService _appState;
     private readonly ProfileRepository _profiles;
@@ -23,6 +24,15 @@ public sealed class CheckSqlHealthTool : IAgentTool
     public string Name => "check_sql_health";
     public string Description => "Runs a shallow health check on a configured SQL connection: connectivity, server version, database state, blocking-session count.";
     public FeatureArea FeatureArea => FeatureArea.Sql;
+
+    // The health check runs data-plane queries — matching the report's sql.query row.
+    public string Capability => AccessCapabilities.SqlQuery;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        var connectionId = arguments.TryGetProperty("connection_id", out var c) ? c.GetString() : null;
+        return SqlToolContext.ResolveConnection(_appState, _profiles, connectionId)?.Id;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -57,6 +67,12 @@ public sealed class CheckSqlHealthTool : IAgentTool
                 blocking_sessions = report.BlockingSessionCount,
                 notes = report.Notes,
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

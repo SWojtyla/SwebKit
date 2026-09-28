@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
-import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft, ChevronDown, Sparkles, FileText } from "lucide-react";
+import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft, ChevronDown, Sparkles, FileText, Crosshair, Layers, ArrowRightToLine } from "lucide-react";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import {
   useProfile,
@@ -8,12 +8,16 @@ import {
   useSbPeekDlq,
   useSbEntityStats,
   useSbPurgeMessages,
+  useSbQueues,
+  useSbSubscriptions,
   invalidateServiceBusQueries,
 } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useNotification } from "@/components/layout/notification-context";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { PinResourceButton } from "@/components/shared/PinResourceButton";
+import { pinServiceBusEntity } from "@/lib/pinned-resources";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { ResizablePanels } from "@/components/ui/ResizablePanels";
 import { EntityTree } from "./EntityTree";
@@ -25,10 +29,16 @@ import { BatchSendPanel } from "./BatchSendPanel";
 import { ScheduledMessages } from "./ScheduledMessages";
 import { EntityCommandPalette, type EntityAction } from "./EntityCommandPalette";
 import { BatchReplayPanel } from "./BatchReplayPanel";
+import { ReachMessagePanel } from "./ReachMessagePanel";
+import { DlqTriagePanel } from "./DlqTriagePanel";
+import { ReplayToPanel } from "./ReplayToPanel";
+import { EntityPropertiesPanel } from "./EntityPropertiesPanel";
+import { SbOperationsBanner } from "./SbOperationsBanner";
 import { TemplateManager } from "./TemplateManager";
 import { NamespaceOverview } from "./NamespaceOverview";
 import { loadSbPreferences } from "@/lib/stores/sb-preferences";
 import { loadLastNamespace, saveLastNamespace, loadLastEntity, saveLastEntity } from "@/lib/stores/sb-selection";
+import { requiresSessions, SESSIONS_NOT_SUPPORTED_TOOLTIP } from "./sessionHelpers";
 import { useScreenStateProvider } from "@/lib/stores/screen-state";
 import type { SbEntityInfo, SbMessage, SbMessageTemplate } from "@/lib/types";
 
@@ -44,8 +54,17 @@ function messageKey(m: SbMessage): string {
 
 function composerTitle(mode: ComposerMode): string {
   if (mode === "schedule") return "Schedule Message";
+  if (mode === "editResubmit") return "Edit & Resubmit (settles DLQ original)";
   if (mode === "replay" || mode === "edit") return "Replay Message";
   return "Compose Message";
+}
+
+/** `entity/subscriptions/name` → `entity`; everything else → null. */
+function topicFromEntityPath(entityPath: string | null | undefined): string | null {
+  if (!entityPath) return null;
+  const marker = "/subscriptions/";
+  const idx = entityPath.indexOf(marker);
+  return idx > 0 ? entityPath.slice(0, idx) : null;
 }
 
 export function ServiceBusPage() {
@@ -60,6 +79,9 @@ export function ServiceBusPage() {
   const [showScheduled, setShowScheduled] = useState(false);
   const [showEntityPalette, setShowEntityPalette] = useState(false);
   const [showBatchReplay, setShowBatchReplay] = useState(false);
+  const [showReachPanel, setShowReachPanel] = useState(false);
+  const [showDlqTriage, setShowDlqTriage] = useState(false);
+  const [showReplayTo, setShowReplayTo] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showEntityTree, setShowEntityTree] = useState(true);
@@ -108,10 +130,33 @@ export function ServiceBusPage() {
 
   const entityStats = useSbEntityStats(selectedNsId, urlEntity?.entityPath ?? null);
 
+  // The selected entity is reconstructed from the URL (path + name only), so topology facts like
+  // `requiresSession` would be lost on a restored/deep-linked selection. Look the entity up in the
+  // already-loaded queue/subscription lists instead — these queries share cache keys with the
+  // entity tree, so the lookup costs no extra request and revives as soon as topology lands.
+  const { data: topologyQueues } = useSbQueues(selectedNsId);
+  const { data: topologySubs } = useSbSubscriptions(
+    selectedNsId,
+    topicFromEntityPath(urlEntity?.entityPath),
+  );
+  const topologyEntity = useMemo(
+    () =>
+      urlEntity
+        ? (topologyQueues?.find((e) => e.entityPath === urlEntity.entityPath) ??
+          topologySubs?.find((e) => e.entityPath === urlEntity.entityPath) ??
+          null)
+        : null,
+    [urlEntity, topologyQueues, topologySubs],
+  );
+
   const selectedEntity = useMemo<SbEntityInfo | null>(() => {
     if (!urlEntity) return null;
-    return { ...urlEntity, stats: entityStats.data ?? null };
-  }, [urlEntity, entityStats.data]);
+    return {
+      ...urlEntity,
+      stats: entityStats.data ?? null,
+      requiresSession: topologyEntity?.requiresSession ?? false,
+    };
+  }, [urlEntity, entityStats.data, topologyEntity]);
   const setSelectedEntity = useCallback(
     (entity: SbEntityInfo | null) => {
       updateParams({
@@ -274,6 +319,62 @@ export function ServiceBusPage() {
     }
   }, [location, navigate, namespaces]);
 
+  // "New Service Bus message" palette action: `state.compose` opens the
+  // composer. An object form can target a specific namespace/entity
+  // (`{ nsId, entityPath, entityName }`), written as canonical `?ns=&entity=`
+  // params so the landing URL is shareable.
+  useEffect(() => {
+    const state = location.state as {
+      compose?:
+        | boolean
+        | { nsId?: string; entityPath?: string; entityName?: string };
+    } | null;
+    if (!state?.compose) return;
+    const target = typeof state.compose === "object" ? state.compose : null;
+    const next = new URLSearchParams(location.search);
+    if (target?.nsId && namespaces.some((ns) => ns.id === target.nsId)) {
+      next.set("ns", target.nsId);
+      if (target.entityPath) {
+        next.set("entity", target.entityPath);
+        next.set("entityName", target.entityName ?? target.entityPath);
+      }
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
+    openComposer("compose");
+    navigate(
+      { pathname: location.pathname, search: next.toString() },
+      { replace: true, state: null },
+    );
+  }, [location, navigate, namespaces, openComposer]);
+
+  // "Replay to…" palette/deep-link action: `state.replayTo` opens the
+  // cross-environment replay wizard for the currently selected entity. Object
+  // form can target a specific namespace/entity, written as canonical
+  // `?ns=&entity=` params — same convention as `state.compose`.
+  useEffect(() => {
+    const state = location.state as {
+      replayTo?:
+        | boolean
+        | { nsId?: string; entityPath?: string; entityName?: string };
+    } | null;
+    if (!state?.replayTo) return;
+    const target = typeof state.replayTo === "object" ? state.replayTo : null;
+    const next = new URLSearchParams(location.search);
+    if (target?.nsId && namespaces.some((ns) => ns.id === target.nsId)) {
+      next.set("ns", target.nsId);
+      if (target.entityPath) {
+        next.set("entity", target.entityPath);
+        next.set("entityName", target.entityName ?? target.entityPath);
+      }
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
+    setShowReplayTo(true);
+    navigate(
+      { pathname: location.pathname, search: next.toString() },
+      { replace: true, state: null },
+    );
+  }, [location, navigate, namespaces]);
+
   const handleEntityAction = useCallback((entity: SbEntityInfo, action: EntityAction) => {
     setSelectedEntity(entity);
     if (action === "peek-active") setViewMode("active");
@@ -289,11 +390,25 @@ export function ServiceBusPage() {
     }
     // Previously fell through every branch — presented as a working destructive action while
     // doing nothing. Routes through the same entity-level confirm as the toolbar's Purge All.
-    if (action === "purge") setShowPurgeConfirm(true);
-  }, [queryClient, selectedNsId, setSelectedEntity, setViewMode, openComposer]);
+    // Session entities can't purge (receive-complete needs session receivers) — say so inline.
+    if (action === "purge") {
+      if (requiresSessions(entity)) {
+        notify("error", "Couldn't purge messages", SESSIONS_NOT_SUPPORTED_TOOLTIP);
+        return;
+      }
+      setShowPurgeConfirm(true);
+    }
+  }, [queryClient, selectedNsId, setSelectedEntity, setViewMode, openComposer, notify]);
 
   const onPurgeAll = useCallback(() => {
     if (!selectedNsId || !selectedEntity) return;
+    // Purge rides a plain receive-complete loop — session entities reject it; say so instead of
+    // letting the broker error surface after the confirm bar already implied it would run.
+    if (requiresSessions(selectedEntity)) {
+      notify("error", "Couldn't purge messages", SESSIONS_NOT_SUPPORTED_TOOLTIP);
+      setShowPurgeConfirm(false);
+      return;
+    }
     const scope = viewMode === "dlq" ? "dead-lettered" : "active";
     purgeMutation.mutate(
       { nsId: selectedNsId, entityPath: selectedEntity.entityPath, deadLetter: viewMode === "dlq" },
@@ -338,6 +453,16 @@ export function ServiceBusPage() {
           <span className="truncate font-medium" title={selectedEntity.name}>
             {selectedEntity.name}
           </span>
+          {selectedNsId && (
+            <PinResourceButton
+              resource={pinServiceBusEntity(
+                selectedNsId,
+                selectedNs?.alias ?? selectedNsId,
+                selectedEntity,
+              )}
+              testId="sb-pin-entity"
+            />
+          )}
           <button
             type="button"
             onClick={() => setAskAiOpen(true)}
@@ -391,9 +516,15 @@ export function ServiceBusPage() {
           <button
             data-testid="sb-purge-all-button"
             onClick={() => setShowPurgeConfirm(true)}
-            disabled={purgeMutation.isPending}
+            disabled={
+              purgeMutation.isPending || requiresSessions(selectedEntity)
+            }
             className="shrink-0 border-l px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
-            title={`Purge all ${viewMode === "dlq" ? "dead-lettered" : "active"} messages in this entity — cannot be undone`}
+            title={
+              requiresSessions(selectedEntity)
+                ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                : `Purge all ${viewMode === "dlq" ? "dead-lettered" : "active"} messages in this entity — cannot be undone`
+            }
           >
             Purge All
           </button>
@@ -415,6 +546,17 @@ export function ServiceBusPage() {
           confirmTestId="purge-confirm-yes"
           cancelTestId="purge-confirm-cancel"
         />
+      )}
+      {/* Interrupted/running ops for this entity — the crash-recovery surface.
+          Reach ops get a live DLQ stamp scan; replay ops carry the journaled
+          processed-set. */}
+      {selectedEntity && selectedNsId && (
+        <SbOperationsBanner nsId={selectedNsId} entity={selectedEntity} />
+      )}
+      {/* Read-only broker configuration — max size, TTL, lock duration, delivery
+          caps, partitioning/session flags. Collapsed by default; one fetch per open. */}
+      {selectedEntity && selectedNsId && (
+        <EntityPropertiesPanel nsId={selectedNsId} entityPath={selectedEntity.entityPath} />
       )}
       {selectedEntity ? (
         <MessageList
@@ -534,7 +676,7 @@ export function ServiceBusPage() {
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowActionsMenu(false)} />
               <div
-                className="absolute right-0 top-full z-20 mt-1 w-56 rounded-md border bg-card p-1 shadow-lg"
+                className="absolute right-0 top-full z-20 mt-1 w-56 rounded-md border bg-popover p-1 shadow-lg"
                 role="menu"
                 data-testid="sb-actions-dropdown"
               >
@@ -573,13 +715,88 @@ export function ServiceBusPage() {
                     setShowActionsMenu(false);
                     setShowBatchReplay(true);
                   }}
-                  disabled={!selectedEntity}
-                  title={!selectedEntity ? "Select a queue or topic first" : "Resubmit dead-lettered messages on this entity"}
+                  disabled={!selectedEntity || requiresSessions(selectedEntity)}
+                  title={
+                    !selectedEntity
+                      ? "Select a queue or topic first"
+                      : requiresSessions(selectedEntity)
+                        ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                        : "Resubmit dead-lettered messages on this entity"
+                  }
                   className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-50"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   Batch Replay
                   <span className="ml-auto text-muted-foreground">DLQ</span>
+                </button>
+                {/* Reach-message rides peek-lock receive/settle — the same
+                    session-entity limitation as every other settle action, so
+                    it disables identically rather than failing at preview. */}
+                <button
+                  data-testid="sb-reach-message-button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowReachPanel(true);
+                  }}
+                  disabled={!selectedEntity || requiresSessions(selectedEntity)}
+                  title={
+                    !selectedEntity
+                      ? "Select a queue or topic first"
+                      : requiresSessions(selectedEntity)
+                        ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                        : "Park, act on a target message, and restore copies at the tail"
+                  }
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-50"
+                >
+                  <Crosshair className="h-3.5 w-3.5" />
+                  Reach Message
+                  <span className="ml-auto text-muted-foreground">this entity</span>
+                </button>
+                <button
+                  data-testid="sb-dlq-triage-button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowDlqTriage(true);
+                  }}
+                  disabled={!selectedEntity || requiresSessions(selectedEntity)}
+                  title={
+                    !selectedEntity
+                      ? "Select a queue or topic first"
+                      : requiresSessions(selectedEntity)
+                        ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                        : "Group the DLQ by reason/description and act per group"
+                  }
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-50"
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  DLQ Triage
+                  <span className="ml-auto text-muted-foreground">this entity</span>
+                </button>
+                {/* Cross-environment replay rides the same plain receivers as
+                    every other mutation path — session sources disable it
+                    identically rather than failing at preview. */}
+                <button
+                  data-testid="sb-replay-to-button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowReplayTo(true);
+                  }}
+                  disabled={!selectedEntity || requiresSessions(selectedEntity)}
+                  title={
+                    !selectedEntity
+                      ? "Select a queue or topic first"
+                      : requiresSessions(selectedEntity)
+                        ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                        : "Send selected messages to another namespace or entity as new copies"
+                  }
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-50"
+                >
+                  <ArrowRightToLine className="h-3.5 w-3.5" />
+                  Replay To…
+                  <span className="ml-auto text-muted-foreground">cross-env</span>
                 </button>
               </div>
             </>
@@ -648,7 +865,7 @@ export function ServiceBusPage() {
               nsId={selectedNsId}
               entity={selectedEntity}
               viewMode={viewMode}
-              onEditResubmit={(msg) => { selectMessage(msg); openComposer("edit"); }}
+              onEditResubmit={(msg) => { selectMessage(msg); openComposer(viewMode === "dlq" ? "editResubmit" : "edit"); }}
               onReplay={(msg) => { selectMessage(msg); openComposer("replay"); }}
               onSchedule={(msg) => { selectMessage(msg); openComposer("schedule"); }}
             />
@@ -674,7 +891,7 @@ export function ServiceBusPage() {
               nsId={selectedNsId}
               namespaces={namespaces}
               entity={selectedEntity}
-              sourceMessage={composerMode === "replay" || composerMode === "edit" ? selectedMessage : null}
+              sourceMessage={composerMode === "replay" || composerMode === "edit" || composerMode === "editResubmit" ? selectedMessage : null}
               initialTemplate={composerTemplate}
               onClose={() => setComposerMode(null)}
             />
@@ -707,6 +924,47 @@ export function ServiceBusPage() {
           nsId={selectedNsId}
           entity={selectedEntity}
           onClose={() => setShowBatchReplay(false)}
+        />
+      )}
+
+      {/* Reach-message wizard — prefills the target from the selected message
+          when the active view has one. */}
+      {showReachPanel && selectedNsId && selectedEntity && (
+        <ReachMessagePanel
+          nsId={selectedNsId}
+          entity={selectedEntity}
+          defaultTarget={
+            viewMode === "active" ? selectedMessage?.sequenceNumber : null
+          }
+          onClose={() => setShowReachPanel(false)}
+        />
+      )}
+
+      {/* DLQ triage modal — reason/description groups over the peek window plus
+          server-side requeue for groups bigger than the window. */}
+      {showDlqTriage && selectedNsId && selectedEntity && (
+        <DlqTriagePanel
+          nsId={selectedNsId}
+          entity={selectedEntity}
+          onClose={() => setShowDlqTriage(false)}
+        />
+      )}
+
+      {/* Cross-environment replay wizard — sends the selected sequences to
+          another namespace/entity as new stamped copies. Prefills the selected
+          message's sequence and the current active/DLQ view. */}
+      {showReplayTo && selectedNsId && selectedEntity && (
+        <ReplayToPanel
+          nsId={selectedNsId}
+          entity={selectedEntity}
+          namespaces={namespaces}
+          defaultDeadLetter={viewMode === "dlq"}
+          defaultSequences={
+            selectedMessage?.sequenceNumber != null
+              ? [selectedMessage.sequenceNumber]
+              : []
+          }
+          onClose={() => setShowReplayTo(false)}
         />
       )}
 

@@ -16,7 +16,9 @@ public sealed class AksPodRestartRateSignalSource : PodSignalSourceBase
     protected override AlertSignalResult Evaluate(MonitoringAlertRule rule, string ns, IReadOnlyList<PodInfo> pods)
     {
         var threshold = rule.AksPodParams?.RestartThreshold ?? 5;
-        var exceeding = pods.Where(p => p.RestartCount >= threshold).ToList();
+        // A pod that reached Succeeded is done — retries on the way there are history,
+        // not a live restart loop. Completed Job pods otherwise trip this rule forever.
+        var exceeding = pods.Where(p => p.RestartCount >= threshold && p.Phase != "Succeeded").ToList();
         if (exceeding.Count == 0)
             return new AlertSignalResult(AlertSignalStatus.Ok);
         var first = exceeding[0];

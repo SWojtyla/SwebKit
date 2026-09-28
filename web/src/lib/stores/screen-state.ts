@@ -21,12 +21,33 @@ export interface ScreenStateSnapshotPayload {
   featureArea?: string;
   capturedAt: string;
   snapshot: unknown;
+  /** Entity-indexed bounded details (agent-colleague item 4), keyed `<area>.<kind>.<id>`
+   * (e.g. `sql.table.dbo.orders`) — each ~1–2 KB, ≤20 entries, ≤8 KB total; the sidecar
+   * enforces those caps and drops any entity carrying a sensitive-looking key. */
+  entities?: Record<string, unknown>;
 }
 
-export type ScreenStateProvider = () => { featureArea?: string; snapshot: unknown } | null;
+export type ScreenStateProvider = () => {
+  featureArea?: string;
+  snapshot: unknown;
+  entities?: Record<string, unknown>;
+} | null;
 
 const HEARTBEAT_MS = 60_000;
 const PUBLISH_DEBOUNCE_MS = 1_500;
+
+/**
+ * Builds a screen-state entity id following the frozen `<area>.<kind>.<id>` convention
+ * (agent-colleague item 4) — e.g. `screenEntityId("sql", "table", "dbo.orders")` →
+ * `sql.table.dbo.orders`. Segments are sanitized to identifier-safe characters (the sidecar
+ * rejects publishes whose entity ids don't match), so passing a display name or schema-qualified
+ * id is safe.
+ */
+export function screenEntityId(area: string, kind: string, id: string): string {
+  const clean = (s: string) => s.replace(/[^A-Za-z0-9_:-]/g, "_");
+  const cleanId = (s: string) => s.replace(/[^A-Za-z0-9_.:-]/g, "_");
+  return `${clean(area)}.${clean(kind)}.${cleanId(id)}`;
+}
 
 /** Registered providers, keyed by id. The newest registration wins while several are mounted at
  * once (a detail panel on top of its page); unmounting the top one falls back to the provider
@@ -57,9 +78,11 @@ async function publish() {
     featureArea: built.featureArea,
     capturedAt: new Date().toISOString(),
     snapshot: built.snapshot,
+    entities: built.entities,
   };
   // Skip identical republishes — the heartbeat shouldn't POST unchanged snapshots every minute.
-  const json = JSON.stringify(payload.snapshot);
+  // Entities are part of the published state, so they participate in the dedupe too.
+  const json = JSON.stringify({ s: payload.snapshot, e: payload.entities });
   if (json === lastPublishedJson) return;
   lastPublishedJson = json;
   try {
@@ -95,20 +118,29 @@ export function notifyScreenRouteChanged() {
  * Registers a screen-state provider for the calling component's lifetime. `build` runs at
  * publish time (not at render) so it always sees the latest closure values — pass the reactive
  * inputs it reads in `deps` to trigger a debounced republish when they change.
+ *
+ * `buildEntities` (optional, agent-colleague item 4) supplies the `entities` map —
+ * `<area>.<kind>.<id>` → bounded detail — published alongside the overview snapshot and fetched
+ * individually by the sidecar's `get_screen_detail` tool. Same whitelist rules as `build`:
+ * curated fields only, no bodies/tokens/secrets.
  */
 export function useScreenStateProvider(
   id: string,
   featureArea: string | undefined,
   build: () => unknown,
   deps: readonly unknown[],
+  buildEntities?: () => Record<string, unknown> | null,
 ) {
   const buildEvent = useEffectEvent(build);
+  const buildEntitiesEvent = useEffectEvent(buildEntities ?? (() => null));
 
   useEffect(() => {
     providers.set(id, {
       fn: () => {
         const snapshot = buildEvent();
-        return snapshot == null ? null : { featureArea, snapshot };
+        if (snapshot == null) return null;
+        const entities = buildEntitiesEvent() ?? undefined;
+        return { featureArea, snapshot, entities };
       },
       order: ++orderCounter,
     });

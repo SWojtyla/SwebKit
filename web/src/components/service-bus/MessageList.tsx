@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertCircle, RefreshCw } from "lucide-react";
-import { invalidateServiceBusQueries } from "@/lib/hooks";
+import { invalidateServiceBusQueries, useSbSessions } from "@/lib/hooks";
 import { apiSend } from "@/lib/api";
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
@@ -34,8 +34,10 @@ import {
     MessageListToolbar,
     ColumnTogglePanel,
     SessionPinFilter,
+    SessionChipBar,
     AdvancedFilterSection,
 } from "./MessageListToolbar";
+import { requiresSessions, sessionChips } from "./sessionHelpers";
 import {
     BulkActionBar,
     BulkConfirmBar,
@@ -49,6 +51,7 @@ import {
     MessageListFooter,
     type MessageGridContext,
 } from "./MessageListTable";
+import { useGridKeyboardNav } from "@/lib/hooks/useGridKeyboardNav";
 
 interface Props {
     nsId: string | null;
@@ -102,6 +105,9 @@ export function MessageList({
     const { notify } = useNotification();
     const listRef = useRef<HTMLDivElement>(null);
     const sentinelRef = useRef<HTMLDivElement>(null);
+    // Root container of toolbar + list — lets the `/` grid shortcut reach the
+    // toolbar's filter input without threading a ref prop through it.
+    const panelRef = useRef<HTMLDivElement | null>(null);
     const [textFilter, setTextFilter] = useState("");
     const [advancedRules, setAdvancedRules] = useState<AdvancedFilterRule[]>(
         [],
@@ -133,6 +139,19 @@ export function MessageList({
     });
 
     const entityPath = entity?.entityPath;
+
+    // Session-awareness: only a requiresSession entity gets the sessions query — on ordinary
+    // queues it would be a wasted peek. The chip bar falls back to grouping the already-loaded
+    // window while the endpoint hasn't answered (or if it failed), so the chips and the pin
+    // filter they feed can never disagree about which sessions exist.
+    const sessionEntity = requiresSessions(entity);
+    const sessionsQuery = useSbSessions(nsId ?? null, entityPath ?? null, {
+        enabled: sessionEntity,
+    });
+    const sessions = useMemo(
+        () => (sessionEntity ? sessionChips(sessionsQuery.data, messages) : []),
+        [sessionEntity, sessionsQuery.data, messages],
+    );
 
     // Reload prefs when entity changes
     useEffect(() => {
@@ -205,38 +224,38 @@ export function MessageList({
     const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null);
 
     const handleBulkComplete = useCallback(() => {
-        if (!nsId || !entity || selectedMsgs.size === 0) return;
+        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0) return;
         const seqNumbers = messages
             .filter((m) => selectedMsgs.has(sbMessageKey(m)))
             .map((m) => m.sequenceNumber)
             .filter((n): n is number => n !== null);
         if (seqNumbers.length === 0) return;
         setPendingBulkConfirm({ kind: "complete", seqNumbers });
-    }, [nsId, entity, selectedMsgs, messages]);
+    }, [nsId, entity, sessionEntity, selectedMsgs, messages]);
 
     const handleBulkResubmit = useCallback(() => {
-        if (!nsId || !entity || selectedMsgs.size === 0) return;
+        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0) return;
         const seqNumbers = messages
             .filter((m) => selectedMsgs.has(sbMessageKey(m)))
             .map((m) => m.sequenceNumber)
             .filter((n): n is number => n !== null);
         if (seqNumbers.length === 0) return;
         setPendingBulkConfirm({ kind: "resubmit", seqNumbers });
-    }, [nsId, entity, selectedMsgs, messages]);
+    }, [nsId, entity, sessionEntity, selectedMsgs, messages]);
 
     // Dead-letter is the broker's own move-to-DLQ settlement
     // (DeadLetterMessageAsync): the message leaves the active list and lands in
     // the entity's DLQ with a recorded reason — not a copy-and-delete. Only
     // meaningful on the active view.
     const handleBulkDeadLetter = useCallback(() => {
-        if (!nsId || !entity || selectedMsgs.size === 0) return;
+        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0) return;
         const seqNumbers = messages
             .filter((m) => selectedMsgs.has(sbMessageKey(m)))
             .map((m) => m.sequenceNumber)
             .filter((n): n is number => n !== null);
         if (seqNumbers.length === 0) return;
         setPendingBulkConfirm({ kind: "deadletter", seqNumbers });
-    }, [nsId, entity, selectedMsgs, messages]);
+    }, [nsId, entity, sessionEntity, selectedMsgs, messages]);
 
     // Resend is move-to-origin semantics: the sidecar forwards each selected
     // message to the queue it failed in (NServiceBus.FailedQ, falling back to this
@@ -245,13 +264,13 @@ export function MessageList({
     // confirm text and sequence numbers stay stable even if the list refreshes
     // before confirm.
     const handleBulkResend = useCallback(() => {
-        if (!nsId || !entity || selectedMsgs.size === 0) return;
+        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0) return;
         const selected = messages.filter((m) =>
             selectedMsgs.has(sbMessageKey(m)),
         );
         if (selected.length === 0) return;
         setPendingBulkConfirm({ kind: "resend", messages: selected });
-    }, [nsId, entity, selectedMsgs, messages]);
+    }, [nsId, entity, sessionEntity, selectedMsgs, messages]);
 
     // Bulk runs are chunked so the progress bar reflects real completed work —
     // a single request gives no signal until it finishes. The selection stays
@@ -509,6 +528,29 @@ export function MessageList({
             ROW_HEIGHT_ESTIMATE[prefs.rowDensity],
     });
 
+    // Keyboard nav (ux-power-pack §4): j/k + arrows move a focused row through
+    // the virtualized list (scrollToIndex mounts it before focus lands), e/Enter
+    // opens the detail panel, Space toggles the row's bulk-selection checkbox,
+    // / jumps to the text filter, g/G jump first/last.
+    const gridNav = useGridKeyboardNav({
+        containerRef: listRef,
+        itemCount: filteredMessages.length,
+        resetKey: `${nsId}|${entityPath ?? ""}|${viewMode}`,
+        getFilterInput: () =>
+            panelRef.current?.querySelector<HTMLElement>(
+                '[data-testid="message-text-filter"]',
+            ) ?? null,
+        scrollToIndex: (index) => rowVirtualizer.scrollToIndex(index),
+        onInspect: (index) => {
+            const msg = filteredMessages[index];
+            if (msg) onSelectMessage(msg);
+        },
+        onToggleSelect: (index) => {
+            const msg = filteredMessages[index];
+            if (msg) toggleSelect(msg);
+        },
+    });
+
     if (!entity) {
         return (
             <div
@@ -560,6 +602,7 @@ export function MessageList({
 
     return (
         <div
+            ref={panelRef}
             className="flex h-full flex-col"
             data-testid="message-list-container"
         >
@@ -639,6 +682,14 @@ export function MessageList({
                 onChange={setPinnedSessionId}
             />
 
+            {sessionEntity && (
+                <SessionChipBar
+                    sessions={sessions}
+                    pinnedSessionId={pinnedSessionId}
+                    onPin={setPinnedSessionId}
+                />
+            )}
+
             {advancedEnabled && (
                 <AdvancedFilterSection
                     rules={advancedRules}
@@ -708,12 +759,21 @@ export function MessageList({
                         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                             const msg = filteredMessages[virtualRow.index];
                             const msgKey = sbMessageKey(msg);
+                            const isFocused =
+                                gridNav.focusedIndex === virtualRow.index;
                             return (
                                 <div
                                     key={virtualRow.key}
                                     data-index={virtualRow.index}
+                                    data-grid-nav-row={virtualRow.index}
                                     ref={rowVirtualizer.measureElement}
-                                    role="presentation"
+                                    tabIndex={isFocused ? 0 : -1}
+                                    onFocus={() =>
+                                        gridNav.setFocusedIndex(
+                                            virtualRow.index,
+                                        )
+                                    }
+                                    className={`outline-none ${isFocused ? "bg-accent/40" : ""}`}
                                     style={{
                                         position: "absolute",
                                         top: 0,

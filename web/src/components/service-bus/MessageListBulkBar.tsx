@@ -8,6 +8,10 @@ import {
 import type { SbEntityInfo, SbMessage } from "@/lib/types";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { resendTargetText, sendableEntityPath } from "./resendHelpers";
+import {
+    requiresSessions,
+    SESSIONS_NOT_SUPPORTED_TOOLTIP,
+} from "./sessionHelpers";
 
 /** The pending bulk operation awaiting user confirmation — lifted verbatim from MessageList. */
 export type PendingBulkConfirm =
@@ -38,6 +42,10 @@ export interface BulkActionBarProps {
 
 export function BulkActionBar(p: BulkActionBarProps) {
     const busy = p.bulkProgress !== null;
+    // Every button in this bar is a receive-and-settle mutation — all of them fail on
+    // session-required entities (plain receivers are rejected), so gate them with the same
+    // explanation instead of letting the user discover the broker's error.
+    const sessionBlocked = requiresSessions(p.entity);
     return (
         <div
             className="flex items-center gap-2 border-b bg-primary/10 px-3 py-1.5"
@@ -85,11 +93,13 @@ export function BulkActionBar(p: BulkActionBarProps) {
             NServiceBus error queue) and on the DLQ. */}
                 <button
                     onClick={p.onResend}
-                    disabled={busy}
+                    disabled={busy || sessionBlocked}
                     title={
-                        busy
-                            ? "Resending…"
-                            : "Send each selected message back to the queue it originally failed in (NServiceBus.FailedQ — or this entity if unset), then remove it here"
+                        sessionBlocked
+                            ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                            : busy
+                              ? "Resending…"
+                              : "Send each selected message back to the queue it originally failed in (NServiceBus.FailedQ — or this entity if unset), then remove it here"
                     }
                     className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                     data-testid="bulk-resend"
@@ -99,11 +109,13 @@ export function BulkActionBar(p: BulkActionBarProps) {
                 {p.viewMode === "dlq" && p.entity && (
                     <button
                         onClick={p.onResubmit}
-                        disabled={busy}
+                        disabled={busy || sessionBlocked}
                         title={
-                            busy
-                                ? "Resubmitting…"
-                                : `Send each selected message back to ${sendableEntityPath(p.entity)} — the entity this dead-letter queue belongs to — then remove it from the DLQ`
+                            sessionBlocked
+                                ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                                : busy
+                                  ? "Resubmitting…"
+                                  : `Send each selected message back to ${sendableEntityPath(p.entity)} — the entity this dead-letter queue belongs to — then remove it from the DLQ`
                         }
                         className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                         data-testid="bulk-resubmit"
@@ -115,11 +127,13 @@ export function BulkActionBar(p: BulkActionBarProps) {
                 {p.viewMode === "active" && (
                     <button
                         onClick={p.onDeadLetter}
-                        disabled={busy}
+                        disabled={busy || sessionBlocked}
                         title={
-                            busy
-                                ? "Dead-lettering…"
-                                : "Move each selected message into this entity's dead-letter queue — a broker move, not a copy (a dead-letter reason is recorded)"
+                            sessionBlocked
+                                ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                                : busy
+                                  ? "Dead-lettering…"
+                                  : "Move each selected message into this entity's dead-letter queue — a broker move, not a copy (a dead-letter reason is recorded)"
                         }
                         className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                         data-testid="bulk-deadletter"
@@ -129,11 +143,13 @@ export function BulkActionBar(p: BulkActionBarProps) {
                 )}
                 <button
                     onClick={p.onComplete}
-                    disabled={busy}
+                    disabled={busy || sessionBlocked}
                     title={
-                        busy
-                            ? "Completing…"
-                            : `Settle each selected message — permanently removed from ${p.viewMode === "dlq" ? "the dead-letter queue" : "the queue"}, no redelivery`
+                        sessionBlocked
+                            ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                            : busy
+                              ? "Completing…"
+                              : `Settle each selected message — permanently removed from ${p.viewMode === "dlq" ? "the dead-letter queue" : "the queue"}, no redelivery`
                     }
                     className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                     data-testid="bulk-complete"

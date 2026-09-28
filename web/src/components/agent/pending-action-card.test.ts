@@ -25,6 +25,41 @@ describe("describePendingActionOrigin", () => {
       "Agent · widget-1",
     );
   });
+
+  it("maps the monitoring-closed-loop remediation types to their feature areas", () => {
+    expect(
+      describePendingActionOrigin({ type: "RestartAksDeployment", target: "prod/Deployment/api" }),
+    ).toBe("AKS · prod/Deployment/api");
+    expect(
+      describePendingActionOrigin({ type: "DeleteAksPod", target: "prod/Pod/api-7c9f" }),
+    ).toBe("AKS · prod/Pod/api-7c9f");
+    expect(
+      describePendingActionOrigin({ type: "PurgeServiceBusDeadLetters", target: "orders · dead-letter" }),
+    ).toBe("Service Bus · orders · dead-letter");
+    expect(
+      describePendingActionOrigin({ type: "ResubmitServiceBusDeadLetters", target: "orders · dead-letter" }),
+    ).toBe("Service Bus · orders · dead-letter");
+    expect(
+      describePendingActionOrigin({ type: "FlushRedisDatabase", target: "cache-prod" }),
+    ).toBe("Redis · cache-prod");
+  });
+
+  it("prefixes 'Alert investigation' when an opted-in background run parked the action", () => {
+    // The provenance stamp is what distinguishes "the AI proposed this" from a chat proposal.
+    expect(
+      describePendingActionOrigin({
+        type: "PurgeServiceBusDeadLetters",
+        target: "orders · dead-letter",
+        origin: "investigation",
+      }),
+    ).toBe("Alert investigation · Service Bus · orders · dead-letter");
+  });
+
+  it("treats any other (or absent) origin as an interactive proposal", () => {
+    expect(
+      describePendingActionOrigin({ type: "DeleteAksPod", target: "prod/Pod/x", origin: undefined }),
+    ).toBe("AKS · prod/Pod/x");
+  });
 });
 
 describe("formatExpiryCountdown", () => {

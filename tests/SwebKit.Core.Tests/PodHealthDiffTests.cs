@@ -16,7 +16,8 @@ public class PodHealthDiffTests
         int ready = 1,
         int total = 1,
         int restarts = 0,
-        string? status = null) => new()
+        string? status = null,
+        string? ownerKind = null) => new()
         {
             Name = name,
             Namespace = TestNs,
@@ -25,13 +26,15 @@ public class PodHealthDiffTests
             ReadyContainers = ready,
             TotalContainers = total,
             RestartCount = restarts,
+            OwnerKind = ownerKind,
         };
 
     private static PodSnapshot Snap(
         string phase,
         int ready = 1,
         int total = 1,
-        int restarts = 0) => new(phase, ready, total, restarts);
+        int restarts = 0,
+        string? ownerKind = null) => new(phase, ready, total, restarts, ownerKind);
 
     // ── Test 1 ───────────────────────────────────────────────────────────────
 
@@ -222,6 +225,122 @@ public class PodHealthDiffTests
         };
 
         var result = PodHealthDiffer.Diff(TestNs, existing, current, cooldowns, Now);
+
+        Assert.Single(result);
+        Assert.Equal(PodHealthEventType.PodFailed, result[0].EventType);
+    }
+
+    // ── Test 9 ───────────────────────────────────────────────────────────────
+    // False-positive class: normal Job/CronJob lifecycle cleanup must not emit
+    // PodTerminated (the "Pods down" false positive on sign-schedule's CronJob).
+
+    [Fact]
+    public void Diff_JobOwnedPodDisappeared_NoEvent()
+    {
+        // The pod was Running at the last tick — the Job completed and the CronJob
+        // controller deleted the pod before the next tick observed Succeeded.
+        var existing = new Dictionary<string, PodSnapshot>
+        {
+            ["batch-123-abcd"] = Snap("Running", ownerKind: "Job")
+        };
+        var current = new List<PodInfo>();
+
+        var result = PodHealthDiffer.Diff(TestNs, existing, current, NoCooldowns, Now);
+
+        Assert.Empty(result);
+    }
+
+    // ── Test 10 ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Diff_SucceededPodDisappeared_NoEvent()
+    {
+        // A finished pod being garbage-collected (TTL/history limit) is expected.
+        var existing = new Dictionary<string, PodSnapshot>
+        {
+            ["job-pod"] = Snap("Succeeded", ready: 0, ownerKind: "Job")
+        };
+        var current = new List<PodInfo>();
+
+        var result = PodHealthDiffer.Diff(TestNs, existing, current, NoCooldowns, Now);
+
+        Assert.Empty(result);
+    }
+
+    // ── Test 11 ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Diff_FailedPodDisappeared_NoEvent()
+    {
+        // Entry into Failed already emitted PodFailed — its later removal is cleanup.
+        var existing = new Dictionary<string, PodSnapshot>
+        {
+            ["pod-dead"] = Snap("Failed", ready: 0)
+        };
+        var current = new List<PodInfo>();
+
+        var result = PodHealthDiffer.Diff(TestNs, existing, current, NoCooldowns, Now);
+
+        Assert.Empty(result);
+    }
+
+    // ── Test 12 ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Diff_ReplicaSetOwnedRunningPodDisappeared_EmitsPodTerminated()
+    {
+        // Scope pin: only Job-owned / terminal pods are excused — a healthy
+        // ReplicaSet pod vanishing mid-life still alerts.
+        var existing = new Dictionary<string, PodSnapshot>
+        {
+            ["api-7f8-xyz"] = Snap("Running", ownerKind: "ReplicaSet")
+        };
+        var current = new List<PodInfo>();
+
+        var result = PodHealthDiffer.Diff(TestNs, existing, current, NoCooldowns, Now);
+
+        Assert.Single(result);
+        Assert.Equal(PodHealthEventType.PodTerminated, result[0].EventType);
+    }
+
+    // ── Test 13 ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Diff_RunningToSucceeded_NoEvent()
+    {
+        // Completing containers flip Ready to 0/N — without the Succeeded guard this
+        // read as ContainerNotReady, firing "Pods down" on every successful Job run.
+        var existing = new Dictionary<string, PodSnapshot>
+        {
+            ["batch-124-abcd"] = Snap("Running", ownerKind: "Job")
+        };
+        var current = new List<PodInfo>
+        {
+            MakePod("batch-124-abcd", "Succeeded", ready: 0, status: "Completed", ownerKind: "Job")
+        };
+
+        var result = PodHealthDiffer.Diff(TestNs, existing, current, NoCooldowns, Now);
+
+        Assert.Empty(result);
+    }
+
+    // ── Test 14 ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Diff_JobOwnedRunningToFailed_StillEmitsPodFailed()
+    {
+        // The suppression is only for termination noise — a Job pod that actually
+        // fails while alive must still alert.
+        var existing = new Dictionary<string, PodSnapshot>
+        {
+            ["batch-125-abcd"] = Snap("Running", ownerKind: "Job")
+        };
+        var current = new List<PodInfo>
+        {
+            MakePod("batch-125-abcd", "Failed", ready: 0, status: "Error", ownerKind: "Job")
+        };
+
+        var result = PodHealthDiffer.Diff(TestNs, existing, current, NoCooldowns, Now);
 
         Assert.Single(result);
         Assert.Equal(PodHealthEventType.PodFailed, result[0].EventType);

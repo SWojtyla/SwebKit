@@ -1,6 +1,7 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Storage;
@@ -12,7 +13,7 @@ namespace SwebKit.Agents.Tools.Storage;
 /// agent-correlation Module 5 so <c>InvestigateWorkspaceIssueTool</c> can produce a real report for
 /// Storage-area topology nodes instead of an honest "skipped".
 /// </summary>
-public sealed class AnalyzeStorageHealthTool : IAgentTool
+public sealed class AnalyzeStorageHealthTool : IAccessAwareTool
 {
     private readonly AppStateService _appState;
     private readonly ProfileRepository _profiles;
@@ -33,6 +34,16 @@ public sealed class AnalyzeStorageHealthTool : IAgentTool
         "soft-delete/mutation capabilities, and a plain-English health_summary field (Healthy or Critical).";
 
     public FeatureArea FeatureArea => FeatureArea.Storage;
+
+    // Container listing + capability snapshot are data-plane reads — matching the report's
+    // storage.blobs row.
+    public string Capability => AccessCapabilities.StorageBlobs;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        var accountKey = arguments.TryGetProperty("account", out var a) ? a.GetString() : null;
+        return StorageToolContext.ResolveAccount(_appState, _profiles, accountKey)?.Id;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -84,6 +95,12 @@ public sealed class AnalyzeStorageHealthTool : IAgentTool
                 },
                 health_summary = "Healthy",
             });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of folding it into a Critical summary.
+            throw;
         }
         catch (Exception ex)
         {

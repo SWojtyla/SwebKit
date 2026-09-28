@@ -13,6 +13,10 @@ export interface WorkspaceResourceNode {
     /** Optional kubeconfig context for AKS nodes — pins the node to one cluster;
      * null/absent means "whatever context is globally configured". */
     kubeconfigContext?: string | null;
+    /** Optional logical-service name shared across maps — two nodes with the same
+     * logicalName on different maps are "the same service in another environment"
+     * for `compare_environments`, with the map name as the env tag. */
+    logicalName?: string | null;
 }
 
 export interface WorkspaceResourceRelationship {

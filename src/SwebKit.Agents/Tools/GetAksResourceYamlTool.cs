@@ -1,5 +1,6 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools;
@@ -7,7 +8,7 @@ namespace SwebKit.Agents.Tools;
 public sealed class GetAksResourceYamlTool(
     IAksClientFactory aksFactory,
     DemoAksClient demoAksClient,
-    AppStateService appState) : IAgentTool
+    AppStateService appState) : IAccessAwareTool
 {
     private const int MaxResultCharacters = 8000;
 
@@ -17,6 +18,12 @@ public sealed class GetAksResourceYamlTool(
         "the UI. For 'where does env var X come from' questions prefer resolve_pod_env — it resolves " +
         "ConfigMap/Secret references in one call instead of you fetching each manifest.";
     public FeatureArea FeatureArea => FeatureArea.Aks;
+
+    // Manifest reads — matching the report's kubernetes.read row.
+    public string Capability => AccessCapabilities.KubernetesRead;
+
+    public string? GetConnectionKey(JsonElement arguments) =>
+        AksToolContext.ResolveConnectionKey(appState, AksToolContext.GetContext(arguments));
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -45,6 +52,12 @@ public sealed class GetAksResourceYamlTool(
             var truncated = yaml.Length > MaxResultCharacters;
             if (truncated) yaml = yaml[..MaxResultCharacters] + "\n# Truncated by SwebKit; request a narrower resource if possible.";
             return JsonSerializer.Serialize(new { kind, name, namespace_name = ns, yaml, truncated });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

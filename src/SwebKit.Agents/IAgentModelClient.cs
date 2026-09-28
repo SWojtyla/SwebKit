@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SwebKit.Core.Security;
 
 namespace SwebKit.Agents;
 
@@ -132,6 +133,15 @@ public sealed class AgentChatResult
     /// affordance. Null for request/response providers: their tool loop only ever sees the resolved
     /// allowlist, so there is no fence to hit.</summary>
     public string? SuggestedScope { get; init; }
+
+    /// <summary>Structured access denials the turn's tool calls produced (agent-colleague item 2)
+    /// — every <c>{"status":"access_denied"}</c> tool result the executor saw, parsed into
+    /// <see cref="AccessGap"/>s (role + best-effort resource, sanitized detail). Populated by the
+    /// caller from the collector the step-tracking executor reported into — a <c>set</c> (not
+    /// <c>init</c>) because the result object is built inside the model client's loop, before the
+    /// orchestrator's per-turn collection can be attached. Empty for providers that run their own
+    /// tool loop (ACP) — their tool results never cross the local executor.</summary>
+    public IReadOnlyList<AccessGap> AccessDenials { get; set; } = [];
 }
 
 /// <summary>
@@ -221,4 +231,12 @@ public sealed class AgentStreamEvent
     public IReadOnlyList<AgentChatStep>? Steps { get; init; }
     public bool Summarized { get; init; }
     public double? ContextUsagePercent { get; init; }
+
+    /// <summary>Per-turn correlation id minted by <c>SidecarAgentChatService</c> and stamped on
+    /// the terminal <see cref="AgentStreamEventKind.Done"/> event (agent-colleague item 5) — the
+    /// handle a thumbs-down click sends to <c>POST /api/agent/feedback</c>, which the sidecar's
+    /// exchange ring buffer (<c>AgentExchangeBuffer</c>) resolves back to the retained exchange.
+    /// Null on every provider-emitted event and on Error events (a failed turn has no assistant
+    /// message to rate).</summary>
+    public string? ExchangeId { get; init; }
 }

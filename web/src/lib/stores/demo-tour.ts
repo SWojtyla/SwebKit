@@ -5,6 +5,14 @@ export interface DemoTourStep {
   title: string;
   description: string;
   target?: string;
+  /**
+   * Optional scenario identifier grouping steps into a story (e.g. "prd-day" for the
+   * locked-down-production walkthrough) — lets tests/docs pick the PRD-day stops out of the
+   * full tour without hard-coding their indices.
+   */
+  scenarioId?: string;
+  /** Demo connection id the step's story depends on (e.g. the restricted `demo-sql-prd`). */
+  connection?: string;
 }
 
 export const DEMO_TOUR_STEPS: DemoTourStep[] = [
@@ -61,6 +69,23 @@ export const DEMO_TOUR_STEPS: DemoTourStep[] = [
     title: "Monitoring",
     description: "Define alert rules and watch the AI proactively investigate fired signals. Insights feed straight back into the cockpit.",
     target: "[data-testid='monitoring-title']",
+  },
+  {
+    route: "/sql?connection=demo-sql-prd",
+    title: "PRD day: read-only production",
+    description:
+      "Now imagine it's PRD day. This is orders-prd-sql — queries still run (SELECT/EXECUTE are granted), but catalog browsing is denied: no VIEW DEFINITION grant, so the tree shows only the objects your team declared by name. The prod Key Vault behaves the same way: its secrets simply won't resolve. Nothing here is faked — the restrictions are real demo restrictions.",
+    target: "[data-testid='sql-schema-partial']",
+    scenarioId: "prd-day",
+    connection: "demo-sql-prd",
+  },
+  {
+    route: "/settings?tab=access",
+    title: "Access gaps report",
+    description:
+      "The Access tab probes every connection and tells you exactly what's denied — for this environment that's sql.metadata on orders-prd-sql — with the grant or role to ask your admin for, and a copyable access request on each denied row.",
+    target: "[data-testid='access-report']",
+    scenarioId: "prd-day",
   },
 ];
 

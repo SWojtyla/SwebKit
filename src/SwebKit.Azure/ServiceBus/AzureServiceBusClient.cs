@@ -1,3 +1,4 @@
+using Azure;
 using Azure.Core;
 using Azure.Messaging.ServiceBus;
 using Azure.Messaging.ServiceBus.Administration;
@@ -97,7 +98,8 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             {
                 Name = q.Name,
                 EntityPath = q.Name,
-                IsDisabled = IsEntityDisabled(q.Status)
+                IsDisabled = IsEntityDisabled(q.Status),
+                RequiresSession = q.RequiresSession
             });
         }
 
@@ -212,7 +214,8 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             {
                 Name = q.Value.Name,
                 EntityPath = q.Value.Name,
-                IsDisabled = IsEntityDisabled(q.Value.Status)
+                IsDisabled = IsEntityDisabled(q.Value.Status),
+                RequiresSession = q.Value.RequiresSession
             };
             entity.Stats = await GetEntityStatsAsync(entity.EntityPath, ct).ConfigureAwait(false);
             result.Add(entity);
@@ -274,7 +277,8 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
                 EntityPath = $"{topicName}/subscriptions/{s.SubscriptionName}",
                 IsSubscription = true,
                 TopicName = topicName,
-                IsDisabled = IsEntityDisabled(s.Status)
+                IsDisabled = IsEntityDisabled(s.Status),
+                RequiresSession = s.RequiresSession
             });
         }
 
@@ -397,6 +401,18 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             ? await receiver.PeekMessagesAsync(count, seq, ct).ConfigureAwait(false)
             : await receiver.PeekMessagesAsync(count, cancellationToken: ct).ConfigureAwait(false);
         return messages.Select(MapMessage).ToList();
+    }
+
+    /// <summary>
+    /// Peeks the active window and groups it by session id. Deliberately a plain receiver —
+    /// <c>AcceptNextSessionAsync</c> would take a session lock just to enumerate, and the SDK
+    /// offers no management-plane session listing, so the peek window is the honest answer.
+    /// </summary>
+    public async Task<IReadOnlyList<SbSessionSummary>> PeekSessionsAsync(string entityPath, int count, CancellationToken ct = default)
+    {
+        await using var receiver = _client.CreateReceiver(entityPath);
+        var messages = await receiver.PeekMessagesAsync(count, cancellationToken: ct).ConfigureAwait(false);
+        return SbSessionSummary.Summarize(messages.Select(MapMessage));
     }
 
     public async Task<int> CompleteMessagesAsync(string entityPath, IReadOnlyList<long> sequenceNumbers, CancellationToken ct = default)
@@ -582,6 +598,381 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// The receive→send→settle half of "Edit &amp; Resubmit": unlike resend-as-copy this completes
+    /// the DLQ original once the edited clone is sent, so the pre-edit message cannot linger as a
+    /// duplicate next to the edited copy.
+    /// </summary>
+    public async Task ResubmitEditedDeadLetterAsync(string entityPath, long sequenceNumber, SbMessage message, string? targetEntityPath, CancellationToken ct = default)
+    {
+        var dlqPath = $"{entityPath}/$DeadLetterQueue";
+        // Same fallback rule as plain resubmit: a subscription is receive-only, so the
+        // sendable fallback is the parent topic.
+        var target = targetEntityPath
+            ?? (TryParseSubscriptionPath(entityPath, out var fallbackTopic, out _) ? fallbackTopic : entityPath);
+
+        await using var receiver = _client.CreateReceiver(dlqPath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = 0
+        });
+        await using var sender = _client.CreateSender(target);
+
+        await MessageSequenceProcessor.ProcessAsync(
+            new HashSet<long> { sequenceNumber },
+            MaxReceiveBatchSize,
+            ReceiveWaitTime,
+            (count, waitTime, token) => receiver.ReceiveMessagesAsync(count, waitTime, token),
+            static message => message.SequenceNumber,
+            async (original, token) =>
+            {
+                var forwarded = BuildEditedResubmitMessage(original, message);
+                await sender.SendMessageAsync(forwarded, token).ConfigureAwait(false);
+                await receiver.CompleteMessageAsync(original, token).ConfigureAwait(false);
+            },
+            (message, token) => receiver.AbandonMessageAsync(message, cancellationToken: token),
+            ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Builds the outbound half of a resubmit-edited: starts from the broker copy so fields
+    /// <see cref="SbMessage"/> doesn't model (To, ReplyTo, TTL, partition key) survive the
+    /// round-trip, then overlays the user's edits. Dead-letter metadata and the broker-stamped
+    /// application properties are stripped — they're status, not payload, and forwarding them
+    /// would make the resent copy look pre-dead-lettered.
+    /// </summary>
+    /// <remarks>
+    /// The Message ID comes from the edit: the composer already generates a fresh GUID per open
+    /// (reusing the original is an explicit "Restore original" choice there), and a blank id —
+    /// the only case where nothing was chosen — falls back to a fresh GUID here.
+    /// </remarks>
+    internal static ServiceBusMessage BuildEditedResubmitMessage(ServiceBusReceivedMessage original, SbMessage edited)
+    {
+        var forwarded = new ServiceBusMessage(original)
+        {
+            MessageId = string.IsNullOrWhiteSpace(edited.MessageId)
+                ? Guid.NewGuid().ToString()
+                : edited.MessageId,
+            Body = BinaryData.FromString(edited.Body),
+            Subject = edited.Subject,
+            CorrelationId = edited.CorrelationId,
+            ContentType = edited.ContentType,
+            SessionId = edited.SessionId
+        };
+
+        // The edited property set replaces the original wholesale — a property the user removed
+        // in the composer must not reappear — then the broker's dead-letter stamp comes off.
+        forwarded.ApplicationProperties.Clear();
+        if (edited.ApplicationProperties is not null)
+        {
+            foreach (var (key, value) in edited.ApplicationProperties)
+            {
+                forwarded.ApplicationProperties[key] = NormalizePropertyValue(value);
+            }
+        }
+        forwarded.ApplicationProperties.Remove("DeadLetterReason");
+        forwarded.ApplicationProperties.Remove("DeadLetterErrorDescription");
+
+        return forwarded;
+    }
+
+    /// <summary>
+    /// Park phase of reach-message: every active message before the target is dead-lettered with
+    /// the operation stamp written via <c>propertiesToModify</c> in the SAME settlement call —
+    /// never a second step — so a stamped DLQ message is itself the crash marker. The target gets
+    /// <paramref name="targetAction"/>; the first message past it is abandoned and the loop stops.
+    /// </summary>
+    public async Task<SbParkResult> ParkForReachAsync(string entityPath, long targetSequenceNumber, string operationId, SbReachTargetAction targetAction, int maxParked, IProgress<int>? progress = null, CancellationToken ct = default)
+    {
+        await using var receiver = _client.CreateReceiver(entityPath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = 0
+        });
+
+        return await ReachParkProcessor.ProcessAsync(
+            targetSequenceNumber,
+            maxParked,
+            MaxReceiveBatchSize,
+            ReceiveWaitTime,
+            (count, waitTime, token) => receiver.ReceiveMessagesAsync(count, waitTime, token),
+            static message => message.SequenceNumber,
+            (message, token) => receiver.DeadLetterMessageAsync(
+                message,
+                BuildParkStamp(message, operationId, ParkedRolePrefix),
+                deadLetterReason: SbRequeueStamp.ParkDeadLetterReason,
+                deadLetterErrorDescription: $"Parked by reach-message operation {operationId} — restore or leave in the DLQ from the Operations banner",
+                cancellationToken: token),
+            (message, token) => ActOnReachTargetAsync(receiver, message, targetAction, operationId, token),
+            (message, token) => receiver.AbandonMessageAsync(message, cancellationToken: token),
+            progress,
+            ct).ConfigureAwait(false);
+    }
+
+    private const string ParkedRolePrefix = "prefix";
+    private const string ParkedRoleTarget = "target";
+
+    /// <summary>
+    /// The reach-message action on the target sequence number. Dead-letter deliberately carries no
+    /// op stamp — the user asked for that message to stay dead-lettered, so restore must leave it.
+    /// Resubmit parks the target stamped with role "target" so restore resends it like a prefix
+    /// message but can order it relative to them.
+    /// </summary>
+    private static Task ActOnReachTargetAsync(ServiceBusReceiver receiver, ServiceBusReceivedMessage message, SbReachTargetAction action, string operationId, CancellationToken ct) =>
+        action switch
+        {
+            SbReachTargetAction.Complete => receiver.CompleteMessageAsync(message, ct),
+            SbReachTargetAction.DeadLetter => receiver.DeadLetterMessageAsync(
+                message,
+                deadLetterReason: SbRequeueStamp.TargetDeadLetterReason,
+                deadLetterErrorDescription: "Dead-lettered as the target of a reach-message operation",
+                cancellationToken: ct),
+            SbReachTargetAction.Resubmit => receiver.DeadLetterMessageAsync(
+                message,
+                BuildParkStamp(message, operationId, ParkedRoleTarget),
+                deadLetterReason: SbRequeueStamp.ParkDeadLetterReason,
+                deadLetterErrorDescription: $"Resubmit target of reach-message operation {operationId}",
+                cancellationToken: ct),
+            _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unknown reach-message target action."),
+        };
+
+    /// <summary>
+    /// The stamp written onto a parked message in the same dead-letter settlement call. Keeping it
+    /// atomic with the settle is what makes the stamp trustworthy as a crash marker: a message in
+    /// the DLQ with this stamp was parked, a message without it was never touched by the op.
+    /// </summary>
+    internal static Dictionary<string, object> BuildParkStamp(ServiceBusReceivedMessage message, string operationId, string role) => new()
+    {
+        [SbRequeueStamp.OperationId] = operationId,
+        [SbRequeueStamp.ParkedRole] = role,
+        [SbRequeueStamp.OriginalSequence] = message.SequenceNumber,
+        [SbRequeueStamp.OriginalDeliveryCount] = message.DeliveryCount,
+        [SbRequeueStamp.OriginalEnqueuedAt] = message.EnqueuedTime.ToString("O", CultureInfo.InvariantCulture),
+    };
+
+    internal static bool IsParkedBy(ServiceBusReceivedMessage message, string operationId) =>
+        message.ApplicationProperties.TryGetValue(SbRequeueStamp.OperationId, out var value) &&
+        value is string id && string.Equals(id, operationId, StringComparison.Ordinal);
+
+    internal static string? ParkedRoleOf(ServiceBusReceivedMessage message) =>
+        message.ApplicationProperties.TryGetValue(SbRequeueStamp.ParkedRole, out var value) ? value as string : null;
+
+    internal static long OriginalSequenceOf(ServiceBusReceivedMessage message) =>
+        message.ApplicationProperties.TryGetValue(SbRequeueStamp.OriginalSequence, out var value) && value is long seq
+            ? seq
+            : long.MaxValue;
+
+    /// <summary>
+    /// Restore ordering: prefix copies go out in their original sequence order — relative order is
+    /// the one positional thing restore CAN preserve — and the resubmit target lands after them
+    /// when <paramref name="targetAfterPrefix"/> is set, before them otherwise. Sequence numbers and
+    /// positions are not restored either way; every copy is a tail append.
+    /// </summary>
+    internal static IReadOnlyList<ServiceBusReceivedMessage> OrderParkedForRestore(IReadOnlyList<ServiceBusReceivedMessage> parked, bool targetAfterPrefix) =>
+        parked
+            .OrderBy(m => (ParkedRoleOf(m) == ParkedRoleTarget) == targetAfterPrefix ? 1 : 0)
+            .ThenBy(OriginalSequenceOf)
+            .ToList();
+
+    /// <summary>
+    /// The outbound copy for a parked message: fresh MessageId, dead-letter metadata stripped, and
+    /// the SwebKit.* stamp kept — it is the only surviving record of the original sequence number
+    /// and enqueue time, which the broker overwrites on every send.
+    /// </summary>
+    internal static ServiceBusMessage BuildRestoredClone(ServiceBusReceivedMessage parked)
+    {
+        var clone = new ServiceBusMessage(parked) { MessageId = Guid.NewGuid().ToString() };
+        clone.ApplicationProperties.Remove("DeadLetterReason");
+        clone.ApplicationProperties.Remove("DeadLetterErrorDescription");
+        clone.ApplicationProperties[SbRequeueStamp.Restored] = true;
+        return clone;
+    }
+
+    /// <summary>
+    /// Restore phase: drains the DLQ for messages stamped with <paramref name="operationId"/>,
+    /// resends each as a clone, then completes the stamped copy. The whole stamped set is collected
+    /// before any send so copies go out in original sequence order rather than receive-batch order.
+    /// At-least-once by design: a crash between send and complete leaves the parked copy, so a
+    /// resumed restore resends it — the parked copies are the recovery record, never hidden state.
+    /// </summary>
+    public async Task<SbRestoreResult> RestoreParkedCopiesAsync(string entityPath, string operationId, bool targetAfterPrefix, IProgress<int>? progress = null, CancellationToken ct = default)
+    {
+        var result = new SbRestoreResult();
+        var dlqPath = $"{entityPath}/$DeadLetterQueue";
+        // A subscription is receive-only — its DLQ resends to the parent topic, the same
+        // sendable-fallback rule resubmit already uses.
+        var sendTarget = TryParseSubscriptionPath(entityPath, out var topic, out _) ? topic : entityPath;
+
+        await using var receiver = _client.CreateReceiver(dlqPath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = 0
+        });
+        await using var sender = _client.CreateSender(sendTarget);
+
+        var parked = new List<ServiceBusReceivedMessage>();
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            var received = await receiver.ReceiveMessagesAsync(MaxReceiveBatchSize, ReceiveWaitTime, ct).ConfigureAwait(false);
+            if (received.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var message in received)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (IsParkedBy(message, operationId))
+                {
+                    parked.Add(message);
+                }
+                else
+                {
+                    await receiver.AbandonMessageAsync(message, cancellationToken: ct).ConfigureAwait(false);
+                }
+            }
+        }
+
+        foreach (var message in OrderParkedForRestore(parked, targetAfterPrefix))
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                await sender.SendMessageAsync(BuildRestoredClone(message), ct).ConfigureAwait(false);
+                await receiver.CompleteMessageAsync(message, ct).ConfigureAwait(false);
+                result.RestoredCount++;
+                progress?.Report(result.RestoredCount);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Per-message tolerance: a competing consumer or a lock expiry mid-restore must
+                // not strand the rest of the stamped set — the failed copy stays parked for resume.
+                result.FailedCount++;
+                _logger.LogWarning(ex, "Reach-message restore could not resend parked message {SequenceNumber} on {EntityPath}", message.SequenceNumber, entityPath);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Counts DLQ messages still stamped with <paramref name="operationId"/> by peeking pages —
+    /// never receives — so it answers "was interrupted, N messages parked" without touching the
+    /// parked set. Bounded: beyond <see cref="ParkedScanLimit"/> the count is flagged truncated.
+    /// </summary>
+    public async Task<SbParkedScanResult> ScanParkedAsync(string entityPath, string operationId, CancellationToken ct = default)
+    {
+        const int scanPageSize = 100;
+        var result = new SbParkedScanResult();
+        await using var receiver = _client.CreateReceiver($"{entityPath}/$DeadLetterQueue");
+
+        long? fromSequence = null;
+        var scanned = 0;
+        while (scanned < ParkedScanLimit)
+        {
+            ct.ThrowIfCancellationRequested();
+            var page = fromSequence is long from
+                ? await receiver.PeekMessagesAsync(scanPageSize, from, ct).ConfigureAwait(false)
+                : await receiver.PeekMessagesAsync(scanPageSize, cancellationToken: ct).ConfigureAwait(false);
+            if (page.Count == 0)
+            {
+                break;
+            }
+
+            scanned += page.Count;
+            foreach (var message in page)
+            {
+                if (IsParkedBy(message, operationId))
+                {
+                    result.ParkedCount++;
+                }
+            }
+
+            fromSequence = page[^1].SequenceNumber + 1;
+        }
+
+        result.ScanTruncated = scanned >= ParkedScanLimit;
+        return result;
+    }
+
+    private const int ParkedScanLimit = 5000;
+
+    internal static bool MatchesDlqFilter(ServiceBusReceivedMessage message, string deadLetterReason, string? deadLetterErrorDescription) =>
+        string.Equals(message.DeadLetterReason, deadLetterReason, StringComparison.Ordinal) &&
+        (deadLetterErrorDescription is null ||
+         string.Equals(message.DeadLetterErrorDescription, deadLetterErrorDescription, StringComparison.Ordinal));
+
+    /// <summary>
+    /// DLQ triage beyond the peek window: receive→match→resend→complete for up to
+    /// <paramref name="limit"/> messages matching a dead-letter reason/description pair. Non-matching
+    /// messages are abandoned so the DLQ's other groups are untouched.
+    /// </summary>
+    public async Task<int> ResubmitDeadLetterByFilterAsync(string entityPath, string deadLetterReason, string? deadLetterErrorDescription, int limit, CancellationToken ct = default)
+    {
+        if (limit <= 0)
+        {
+            return 0;
+        }
+
+        var dlqPath = $"{entityPath}/$DeadLetterQueue";
+        var sendTarget = TryParseSubscriptionPath(entityPath, out var topic, out _) ? topic : entityPath;
+        var resubmitted = 0;
+
+        await using var receiver = _client.CreateReceiver(dlqPath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = 0
+        });
+        await using var sender = _client.CreateSender(sendTarget);
+
+        while (resubmitted < limit)
+        {
+            ct.ThrowIfCancellationRequested();
+            var received = await receiver.ReceiveMessagesAsync(MaxReceiveBatchSize, ReceiveWaitTime, ct).ConfigureAwait(false);
+            if (received.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var message in received)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (resubmitted < limit && MatchesDlqFilter(message, deadLetterReason, deadLetterErrorDescription))
+                {
+                    try
+                    {
+                        var forwarded = new ServiceBusMessage(message) { MessageId = Guid.NewGuid().ToString() };
+                        forwarded.ApplicationProperties.Remove("DeadLetterReason");
+                        forwarded.ApplicationProperties.Remove("DeadLetterErrorDescription");
+                        await sender.SendMessageAsync(forwarded, ct).ConfigureAwait(false);
+                        await receiver.CompleteMessageAsync(message, ct).ConfigureAwait(false);
+                        resubmitted++;
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        // Tolerate per-message failures — the copy stays in the DLQ for the next pass.
+                        _logger.LogWarning(ex, "Resubmit-by-filter could not move message {SequenceNumber} on {EntityPath}", message.SequenceNumber, entityPath);
+                    }
+                }
+                else
+                {
+                    await receiver.AbandonMessageAsync(message, cancellationToken: ct).ConfigureAwait(false);
+                }
+            }
+        }
+
+        return resubmitted;
+    }
+
     private static void ApplyRemapRules(ServiceBusMessage message, RemapRules? rules)
     {
         if (rules is null || rules.IsEmpty) return;
@@ -719,6 +1110,237 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Cross-environment replay: peek-lock receives the requested sequences from the entity (or its
+    /// DLQ), clones each through <see cref="SbReplay.BuildClone"/> — fresh message id, provenance
+    /// stamp, broker fields cleared — and sends it through <paramref name="targetClient"/>, which may
+    /// be backed by a different namespace entirely. Source copies are completed only when
+    /// <see cref="SbReplayOptions.RemoveSource"/> is set; otherwise they are abandoned back to the
+    /// source. At-least-once across two namespaces: a crash between send and settle can duplicate.
+    /// Per-message failures are counted, never fatal — the failed copy stays in the source for resume.
+    /// </summary>
+    public async Task<SbReplayResult> ReplayMessagesAsync(
+        string entityPath,
+        IReadOnlyCollection<long> sequenceNumbers,
+        bool deadLetter,
+        IServiceBusClient targetClient,
+        string targetEntityPath,
+        SbReplayOptions options,
+        IReadOnlySet<long>? alreadyProcessed = null,
+        IProgress<SbReplayProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(targetClient);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var result = new SbReplayResult();
+        var wanted = new HashSet<long>(sequenceNumbers);
+        if (alreadyProcessed is not null)
+        {
+            wanted.ExceptWith(alreadyProcessed);
+        }
+        if (wanted.Count == 0)
+        {
+            return result;
+        }
+
+        var sourcePath = deadLetter ? $"{entityPath}/$DeadLetterQueue" : entityPath;
+        await using var receiver = _client.CreateReceiver(sourcePath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = 0
+        });
+
+        while (wanted.Count > 0)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var received = await receiver.ReceiveMessagesAsync(MaxReceiveBatchSize, ReceiveWaitTime, ct).ConfigureAwait(false);
+            if (received.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var message in received)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!wanted.Remove(message.SequenceNumber))
+                {
+                    await receiver.AbandonMessageAsync(message, cancellationToken: ct).ConfigureAwait(false);
+                    continue;
+                }
+
+                try
+                {
+                    var clone = SbReplay.BuildClone(MapMessage(message), options);
+                    await targetClient.SendMessageAsync(targetEntityPath, clone, ct).ConfigureAwait(false);
+                    if (options.RemoveSource)
+                    {
+                        await receiver.CompleteMessageAsync(message, ct).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await receiver.AbandonMessageAsync(message, cancellationToken: ct).ConfigureAwait(false);
+                    }
+                    result.SentCount++;
+                    result.ProcessedSequenceNumbers.Add(message.SequenceNumber);
+                    progress?.Report(new SbReplayProgress { SequenceNumber = message.SequenceNumber, Succeeded = true });
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // Per-message tolerance — a send rejection or an expired lock must not strand
+                    // the rest of the run; the failed copy stays in the source for resume.
+                    result.FailedCount++;
+                    progress?.Report(new SbReplayProgress { SequenceNumber = message.SequenceNumber, Succeeded = false });
+                    _logger.LogWarning(ex, "Replay could not transfer message {SequenceNumber} from {EntityPath} to {TargetEntityPath}", message.SequenceNumber, entityPath, targetEntityPath);
+                }
+            }
+        }
+
+        // Whatever the receive loop never matched was consumed, expired or already moved — report it
+        // honestly rather than failing the whole op.
+        result.MissingSequenceNumbers.AddRange(wanted.Order());
+        return result;
+    }
+
+    /// <summary>
+    /// Management-plane entity properties as grouped display rows. A subscription path reads its
+    /// <see cref="SubscriptionProperties"/>; a bare path tries queue first, then topic — an entity
+    /// that is neither surfaces as "not found" via <see cref="InvalidOperationException"/> instead
+    /// of an SDK error carrying connection details.
+    /// </summary>
+    public async Task<SbEntityProperties> GetEntityPropertiesAsync(string entityPath, CancellationToken ct = default)
+    {
+        if (TryParseSubscriptionPath(entityPath, out var topicName, out var subscriptionName))
+        {
+            var subscription = await _adminClient.GetSubscriptionAsync(topicName, subscriptionName, ct).ConfigureAwait(false);
+            return MapSubscriptionProperties(entityPath, topicName, subscription.Value);
+        }
+
+        try
+        {
+            var queue = await _adminClient.GetQueueAsync(entityPath, ct).ConfigureAwait(false);
+            return MapQueueProperties(entityPath, queue.Value);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            // Not a queue — try topic before declaring the entity absent.
+        }
+
+        try
+        {
+            var topic = await _adminClient.GetTopicAsync(entityPath, ct).ConfigureAwait(false);
+            return MapTopicProperties(entityPath, topic.Value);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            throw new InvalidOperationException($"'{entityPath}' was not found as a queue, topic or subscription in this namespace.");
+        }
+    }
+
+    internal static SbEntityProperties MapQueueProperties(string entityPath, QueueProperties props)
+    {
+        var rows = new List<SbEntityProperty>();
+        Row(rows, "General", "Status", props.Status.ToString());
+        Row(rows, "General", "Requires session", props.RequiresSession);
+        Row(rows, "General", "Requires duplicate detection", props.RequiresDuplicateDetection);
+        Row(rows, "General", "Batched operations", props.EnableBatchedOperations);
+        Row(rows, "General", "Partitioned", props.EnablePartitioning);
+        Row(rows, "Sizing", "Max size", $"{props.MaxSizeInMegabytes} MB");
+        if (props.MaxMessageSizeInKilobytes is { } maxMessage)
+        {
+            Row(rows, "Sizing", "Max message size", $"{maxMessage} KB");
+        }
+        Row(rows, "Delivery", "Max delivery count", props.MaxDeliveryCount.ToString(CultureInfo.InvariantCulture));
+        Row(rows, "Delivery", "Lock duration", props.LockDuration);
+        Row(rows, "Delivery", "Duplicate detection window", props.DuplicateDetectionHistoryTimeWindow);
+        Row(rows, "Delivery", "Dead-letter on expiration", props.DeadLetteringOnMessageExpiration);
+        Row(rows, "Delivery", "Forward to", string.IsNullOrEmpty(props.ForwardTo) ? "—" : props.ForwardTo);
+        Row(rows, "Delivery", "Forward dead-letters to", string.IsNullOrEmpty(props.ForwardDeadLetteredMessagesTo) ? "—" : props.ForwardDeadLetteredMessagesTo);
+        Row(rows, "Lifecycle", "Default TTL", props.DefaultMessageTimeToLive);
+        Row(rows, "Lifecycle", "Auto-delete when idle", props.AutoDeleteOnIdle);
+        if (!string.IsNullOrEmpty(props.UserMetadata))
+        {
+            Row(rows, "General", "Notes", props.UserMetadata);
+        }
+        return new SbEntityProperties
+        {
+            EntityPath = entityPath,
+            EntityKind = "queue",
+            RequiresSession = props.RequiresSession,
+            Properties = rows,
+        };
+    }
+
+    internal static SbEntityProperties MapSubscriptionProperties(string entityPath, string topicName, SubscriptionProperties props)
+    {
+        var rows = new List<SbEntityProperty>();
+        Row(rows, "General", "Status", props.Status.ToString());
+        Row(rows, "General", "Requires session", props.RequiresSession);
+        Row(rows, "General", "Batched operations", props.EnableBatchedOperations);
+        Row(rows, "Delivery", "Max delivery count", props.MaxDeliveryCount.ToString(CultureInfo.InvariantCulture));
+        Row(rows, "Delivery", "Lock duration", props.LockDuration);
+        Row(rows, "Delivery", "Dead-letter on expiration", props.DeadLetteringOnMessageExpiration);
+        Row(rows, "Delivery", "Forward to", string.IsNullOrEmpty(props.ForwardTo) ? "—" : props.ForwardTo);
+        Row(rows, "Delivery", "Forward dead-letters to", string.IsNullOrEmpty(props.ForwardDeadLetteredMessagesTo) ? "—" : props.ForwardDeadLetteredMessagesTo);
+        Row(rows, "Lifecycle", "Default TTL", props.DefaultMessageTimeToLive);
+        Row(rows, "Lifecycle", "Auto-delete when idle", props.AutoDeleteOnIdle);
+        if (!string.IsNullOrEmpty(props.UserMetadata))
+        {
+            Row(rows, "General", "Notes", props.UserMetadata);
+        }
+        return new SbEntityProperties
+        {
+            EntityPath = entityPath,
+            EntityKind = "subscription",
+            TopicName = topicName,
+            RequiresSession = props.RequiresSession,
+            Properties = rows,
+        };
+    }
+
+    internal static SbEntityProperties MapTopicProperties(string entityPath, TopicProperties props)
+    {
+        var rows = new List<SbEntityProperty>();
+        Row(rows, "General", "Status", props.Status.ToString());
+        Row(rows, "General", "Requires duplicate detection", props.RequiresDuplicateDetection);
+        Row(rows, "General", "Batched operations", props.EnableBatchedOperations);
+        Row(rows, "General", "Partitioned", props.EnablePartitioning);
+        Row(rows, "General", "Support ordering", props.SupportOrdering);
+        Row(rows, "Sizing", "Max size", $"{props.MaxSizeInMegabytes} MB");
+        if (props.MaxMessageSizeInKilobytes is { } maxMessage)
+        {
+            Row(rows, "Sizing", "Max message size", $"{maxMessage} KB");
+        }
+        Row(rows, "Delivery", "Duplicate detection window", props.DuplicateDetectionHistoryTimeWindow);
+        Row(rows, "Lifecycle", "Default TTL", props.DefaultMessageTimeToLive);
+        Row(rows, "Lifecycle", "Auto-delete when idle", props.AutoDeleteOnIdle);
+        if (!string.IsNullOrEmpty(props.UserMetadata))
+        {
+            Row(rows, "General", "Notes", props.UserMetadata);
+        }
+        return new SbEntityProperties
+        {
+            EntityPath = entityPath,
+            EntityKind = "topic",
+            RequiresSession = false,
+            Properties = rows,
+        };
+    }
+
+    private static void Row(List<SbEntityProperty> rows, string group, string name, string value) =>
+        rows.Add(new SbEntityProperty { Group = group, Name = name, Value = value });
+
+    private static void Row(List<SbEntityProperty> rows, string group, string name, bool value) =>
+        Row(rows, group, name, value ? "Yes" : "No");
+
+    private static void Row(List<SbEntityProperty> rows, string group, string name, TimeSpan value) =>
+        Row(rows, group, name, value == TimeSpan.MaxValue ? "Never" : value.ToString("c", CultureInfo.InvariantCulture));
+
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
     {
         try
@@ -801,7 +1423,7 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         return parsed;
     }
 
-    private static SbMessage MapMessage(ServiceBusReceivedMessage m) => new()
+    internal static SbMessage MapMessage(ServiceBusReceivedMessage m) => new()
     {
         MessageId = m.MessageId,
         CorrelationId = m.CorrelationId,

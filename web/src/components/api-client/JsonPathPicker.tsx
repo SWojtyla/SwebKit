@@ -55,7 +55,7 @@ export function JsonPathPicker({ initialBody, initialPath, onSelect, onClose }: 
       data-testid="jsonpath-picker-overlay"
     >
       <div
-        className="flex h-[600px] w-[700px] flex-col rounded-lg border bg-card shadow-lg"
+        className="flex h-[600px] w-[700px] flex-col rounded-lg border bg-popover shadow-lg"
         role="dialog"
         aria-modal="true"
         aria-label="JSONPath picker"

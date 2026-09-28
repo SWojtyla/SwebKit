@@ -6,17 +6,21 @@ import { AgentMarkdown } from "./AgentMarkdown";
 import { AgentVisualizationPanel } from "./AgentVisualizationPanel";
 import { parseVisualBlocks } from "./visual-blocks";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
-import { PendingActionCard, PendingActionExpiredNotice } from "./PendingActionCard";
+import {
+    PendingActionCard,
+    PendingActionExpiredNotice,
+} from "./PendingActionCard";
 import { AcpPermissionCard } from "./AcpPermissionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentThoughtBlock } from "./AgentThoughtBlock";
+import { AgentFeedbackButton } from "./AgentFeedbackButton";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { BarChart3 } from "lucide-react";
 
 interface GlobalAgentPanelProps {
-  open: boolean;
-  onClose: () => void;
+    open: boolean;
+    onClose: () => void;
 }
 
 /**
@@ -38,276 +42,386 @@ interface GlobalAgentPanelProps {
  * same global session in a different container, not a new surface with new behavior.
  */
 export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
-  const [input, setInput] = useState("");
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [showVisuals, setShowVisuals] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+    const [input, setInput] = useState("");
+    const [showClearConfirm, setShowClearConfirm] = useState(false);
+    const [showVisuals, setShowVisuals] = useState(false);
+    const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { messages, mode, setMode, send, isStreaming, cancel, toolStatus, clear, isClearPending, status } =
-    useGlobalAgentConversation();
-  const { feed: pendingActionFeed, dismissExpired } = usePendingActionsFeed();
-  const acpPermissions = useAcpPermissions();
+    const {
+        messages,
+        mode,
+        setMode,
+        send,
+        isStreaming,
+        cancel,
+        toolStatus,
+        clear,
+        isClearPending,
+        status,
+    } = useGlobalAgentConversation();
+    const { feed: pendingActionFeed, dismissExpired } = usePendingActionsFeed();
+    const acpPermissions = useAcpPermissions();
 
-  const lastAssistantContent = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "assistant") return messages[i].content;
-    }
-    return "";
-  }, [messages]);
-  const visualCount = useMemo(() => parseVisualBlocks(lastAssistantContent).length, [lastAssistantContent]);
+    const lastAssistantContent = useMemo(() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === "assistant") return messages[i].content;
+        }
+        return "";
+    }, [messages]);
+    const visualCount = useMemo(
+        () => parseVisualBlocks(lastAssistantContent).length,
+        [lastAssistantContent],
+    );
 
-  // Hand-off channel: another surface (e.g. the dashboard command bar) queues a
-  // prompt via useAgentPanelStore.queuePrompt and this panel — the single owner of
-  // the stream — sends it. Waiting for isStreaming=false keeps a queued prompt
-  // from colliding with a turn already in flight.
-  const queuedPrompt = useAgentPanelStore((s) => s.queuedPrompt);
-  const clearQueuedPrompt = useAgentPanelStore((s) => s.clearQueuedPrompt);
-  useEffect(() => {
-    if (!queuedPrompt || isStreaming) return;
-    clearQueuedPrompt();
-    send(queuedPrompt);
-  }, [queuedPrompt, isStreaming, send, clearQueuedPrompt]);
+    // Hand-off channel: another surface (e.g. the dashboard command bar) queues a
+    // prompt via useAgentPanelStore.queuePrompt and this panel — the single owner of
+    // the stream — sends it. Waiting for isStreaming=false keeps a queued prompt
+    // from colliding with a turn already in flight.
+    const queuedPrompt = useAgentPanelStore((s) => s.queuedPrompt);
+    const clearQueuedPrompt = useAgentPanelStore((s) => s.clearQueuedPrompt);
+    useEffect(() => {
+        if (!queuedPrompt || isStreaming) return;
+        clearQueuedPrompt();
+        send(queuedPrompt);
+    }, [queuedPrompt, isStreaming, send, clearQueuedPrompt]);
 
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, isStreaming]);
+    // Follow the tail of the conversation — but only while the user hasn't scrolled
+    // up themselves. Once they scroll away from the bottom, streaming tokens must not
+    // yank the view back down; sending a new message re-pins.
+    const pinnedToBottomRef = useRef(true);
+    const handleMessagesScroll = () => {
+        const el = scrollRef.current;
+        if (el)
+            pinnedToBottomRef.current =
+                el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    };
+    useEffect(() => {
+        if (scrollRef.current && pinnedToBottomRef.current)
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }, [messages, isStreaming]);
 
-  const handleSend = () => {
-    if (!input.trim() || isStreaming) return;
-    send(input);
-    setInput("");
-  };
+    const handleSend = () => {
+        if (!input.trim() || isStreaming) return;
+        pinnedToBottomRef.current = true;
+        send(input);
+        setInput("");
+    };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
+        }
+    };
 
-  const handleClear = () => {
-    clear(() => setShowClearConfirm(false));
-  };
+    const handleClear = () => {
+        clear(() => setShowClearConfirm(false));
+    };
 
-  return (
-    <ResizablePanel
-      visible={open}
-      position="right"
-      defaultWidth={384}
-      minWidth={280}
-      maxWidth={600}
-      maxWidthVw={60}
-      storageKey="global-agent-panel"
-      showHeader={false}
-      data-testid="global-agent-panel"
-    >
-      <div className="flex h-full flex-col overflow-hidden">
-        <div className="flex items-center justify-between border-b px-4 py-3">
-        <div>
-          <div className="flex items-center gap-1.5">
-            <h2 className="text-sm font-semibold" data-testid="global-agent-panel-title">AI Agent</h2>
-            <div className="flex rounded border" role="radiogroup" aria-label="Assistant mode">
-              <button
-                role="radio"
-                aria-checked={mode === "ask"}
-                onClick={() => setMode("ask")}
-                className={`px-1.5 py-0.5 text-[10px] ${mode === "ask" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-                data-testid="global-agent-panel-mode-ask"
-              >
-                Ask
-              </button>
-              <button
-                role="radio"
-                aria-checked={mode === "ask_and_do"}
-                onClick={() => setMode("ask_and_do")}
-                className={`border-l px-1.5 py-0.5 text-[10px] ${mode === "ask_and_do" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-                data-testid="global-agent-panel-mode-ask-and-do"
-              >
-                Ask &amp; do
-              </button>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground" data-testid="global-agent-panel-history-count">
-            {status.data?.historyCount ?? 0} messages in history
-            {status.data && status.data.estimatedTokens > 0 && (
-              <> · ~{status.data.estimatedTokens.toLocaleString()} tokens</>
-            )}
-            <ContextUsageIndicator
-              percent={status.data?.contextUsagePercent ?? 0}
-              warningAt={status.data?.contextUsageWarningPercent ?? 75}
-            />
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {showClearConfirm ? (
-            <>
-              <button
-                onClick={handleClear}
-                disabled={isClearPending}
-                title={isClearPending ? "Clearing…" : undefined}
-                className="rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
-                data-testid="global-agent-panel-clear-confirm"
-              >
-                Yes, clear
-              </button>
-              <button
-                onClick={() => setShowClearConfirm(false)}
-                className="rounded-md border px-2 py-1 text-xs hover:bg-accent"
-                data-testid="global-agent-panel-clear-cancel"
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => setShowVisuals((v) => !v)}
-                disabled={visualCount === 0}
-                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50 ${showVisuals ? "bg-accent" : ""}`}
-                data-testid="global-agent-panel-toggle-visuals"
-                title={
-                  visualCount === 0
-                    ? "No visuals in the latest response"
-                    : showVisuals
-                      ? "Close visualization workspace"
-                      : "Open visualization workspace"
-                }
-              >
-                <BarChart3 className="h-3 w-3" /> Visualize
-              </button>
-              <button
-                onClick={() => setShowClearConfirm(true)}
-                disabled={messages.length === 0}
-                title={messages.length === 0 ? "Nothing to clear" : undefined}
-                className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                data-testid="global-agent-panel-clear"
-              >
-                Clear
-              </button>
-            </>
-          )}
-          <button
-            onClick={onClose}
-            className="rounded-md px-2 py-1 text-sm hover:bg-accent"
-            data-testid="global-agent-panel-close"
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-
-      {pendingActionFeed.length > 0 && (
-        <div className="space-y-2 border-b px-4 py-3" data-testid="global-agent-panel-pending-actions">
-          {pendingActionFeed.map((item) =>
-            item.expired ? (
-              <PendingActionExpiredNotice
-                key={item.action.id}
-                action={item.action}
-                onDismiss={() => dismissExpired(item.action.id)}
-              />
-            ) : (
-              <PendingActionCard key={item.action.id} action={item.action} />
-            ),
-          )}
-        </div>
-      )}
-
-      {acpPermissions.data && acpPermissions.data.length > 0 && (
-        <div className="space-y-2 border-b px-4 py-3" data-testid="global-agent-panel-acp-permissions">
-          {acpPermissions.data.map((p) => (
-            <AcpPermissionCard key={p.id} permission={p} />
-          ))}
-        </div>
-      )}
-
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-4 py-3" data-testid="global-agent-panel-messages">
-        {messages.length === 0 && (
-          <p className="text-sm text-muted-foreground" data-testid="global-agent-panel-empty">
-            Ask about your Kubernetes clusters, Service Bus queues, Redis caches, Storage accounts, and more.
-          </p>
-        )}
-        {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div
-              className={`min-w-0 max-w-[90%] [overflow-wrap:anywhere] rounded-lg px-3 py-2 text-sm ${
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : msg.error
-                    ? "bg-destructive/10 border border-destructive/30"
-                    : "bg-muted"
-              }`}
-            >
-              {msg.role === "assistant" ? (
-                <AgentMarkdown
-                  content={msg.content}
-                  className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1"
-                />
-              ) : (
-                <div className="whitespace-pre-wrap">{msg.content}</div>
-              )}
-              {msg.role === "assistant" && msg.thoughts && <AgentThoughtBlock thoughts={msg.thoughts} />}
-              {msg.role === "assistant" && msg.steps && <AgentReasoningTrace steps={msg.steps} />}
-              {msg.role === "assistant" && msg.summarized && <AgentSummarizedNotice />}
-              {msg.role === "assistant" && msg.stopped && (
-                <div className="mt-1 text-xs italic text-muted-foreground" data-testid="global-agent-panel-stopped-notice">
-                  Stopped by user.
+    return (
+        <ResizablePanel
+            visible={open}
+            position="right"
+            defaultWidth={384}
+            minWidth={280}
+            maxWidth={600}
+            maxWidthVw={60}
+            storageKey="global-agent-panel"
+            showHeader={false}
+            data-testid="global-agent-panel"
+        >
+            <div className="flex h-full flex-col overflow-hidden">
+                <div className="flex items-center justify-between border-b px-4 py-3">
+                    <div>
+                        <div className="flex items-center gap-1.5">
+                            <h2
+                                className="text-sm font-semibold"
+                                data-testid="global-agent-panel-title"
+                            >
+                                AI Agent
+                            </h2>
+                            <div
+                                className="flex rounded border"
+                                role="radiogroup"
+                                aria-label="Assistant mode"
+                            >
+                                <button
+                                    role="radio"
+                                    aria-checked={mode === "ask"}
+                                    onClick={() => setMode("ask")}
+                                    className={`px-1.5 py-0.5 text-[10px] ${mode === "ask" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                                    data-testid="global-agent-panel-mode-ask"
+                                >
+                                    Ask
+                                </button>
+                                <button
+                                    role="radio"
+                                    aria-checked={mode === "ask_and_do"}
+                                    onClick={() => setMode("ask_and_do")}
+                                    className={`border-l px-1.5 py-0.5 text-[10px] ${mode === "ask_and_do" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                                    data-testid="global-agent-panel-mode-ask-and-do"
+                                >
+                                    Ask &amp; do
+                                </button>
+                            </div>
+                        </div>
+                        <p
+                            className="text-xs text-muted-foreground"
+                            data-testid="global-agent-panel-history-count"
+                        >
+                            {status.data?.historyCount ?? 0} messages in history
+                            {status.data && status.data.estimatedTokens > 0 && (
+                                <>
+                                    {" "}
+                                    · ~
+                                    {status.data.estimatedTokens.toLocaleString()}{" "}
+                                    tokens
+                                </>
+                            )}
+                            <ContextUsageIndicator
+                                percent={status.data?.contextUsagePercent ?? 0}
+                                warningAt={
+                                    status.data?.contextUsageWarningPercent ??
+                                    75
+                                }
+                            />
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {showClearConfirm ? (
+                            <>
+                                <button
+                                    onClick={handleClear}
+                                    disabled={isClearPending}
+                                    title={
+                                        isClearPending ? "Clearing…" : undefined
+                                    }
+                                    className="rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+                                    data-testid="global-agent-panel-clear-confirm"
+                                >
+                                    Yes, clear
+                                </button>
+                                <button
+                                    onClick={() => setShowClearConfirm(false)}
+                                    className="rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                                    data-testid="global-agent-panel-clear-cancel"
+                                >
+                                    Cancel
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={() => setShowVisuals((v) => !v)}
+                                    disabled={visualCount === 0}
+                                    className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50 ${showVisuals ? "bg-accent" : ""}`}
+                                    data-testid="global-agent-panel-toggle-visuals"
+                                    title={
+                                        visualCount === 0
+                                            ? "No visuals in the latest response"
+                                            : showVisuals
+                                              ? "Close visualization workspace"
+                                              : "Open visualization workspace"
+                                    }
+                                >
+                                    <BarChart3 className="h-3 w-3" /> Visualize
+                                </button>
+                                <button
+                                    onClick={() => setShowClearConfirm(true)}
+                                    disabled={messages.length === 0}
+                                    title={
+                                        messages.length === 0
+                                            ? "Nothing to clear"
+                                            : undefined
+                                    }
+                                    className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                                    data-testid="global-agent-panel-clear"
+                                >
+                                    Clear
+                                </button>
+                            </>
+                        )}
+                        <button
+                            onClick={onClose}
+                            className="rounded-md px-2 py-1 text-sm hover:bg-accent"
+                            data-testid="global-agent-panel-close"
+                        >
+                            ✕
+                        </button>
+                    </div>
                 </div>
-              )}
-            </div>
-          </div>
-        ))}
-        {isStreaming && messages[messages.length - 1]?.content === "" && (
-          <div className="flex justify-start" data-testid="global-agent-panel-loading">
-            <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
-              {toolStatus ? `Thinking… (${toolStatus})` : "Thinking…"}
-            </div>
-          </div>
-        )}
-      </div>
 
-      {showVisuals && (
-        <div className="border-t bg-card/30 px-4 py-3" data-testid="global-agent-panel-visualization-section">
-          <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
-            <BarChart3 className="h-3.5 w-3.5" /> Visualizations
-          </h3>
-          <AgentVisualizationPanel content={lastAssistantContent} />
-        </div>
-      )}
+                {pendingActionFeed.length > 0 && (
+                    <div
+                        className="max-h-[45%] space-y-2 overflow-y-auto border-b px-4 py-3"
+                        data-testid="global-agent-panel-pending-actions"
+                    >
+                        {pendingActionFeed.map((item) =>
+                            item.expired ? (
+                                <PendingActionExpiredNotice
+                                    key={item.action.id}
+                                    action={item.action}
+                                    onDismiss={() =>
+                                        dismissExpired(item.action.id)
+                                    }
+                                />
+                            ) : (
+                                <PendingActionCard
+                                    key={item.action.id}
+                                    action={item.action}
+                                />
+                            ),
+                        )}
+                    </div>
+                )}
 
-      <div className="border-t px-4 py-3">
-        <div className="flex items-end gap-2">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask the AI agent..."
-            rows={2}
-            className="flex-1 resize-none rounded-md border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            disabled={isStreaming}
-            data-testid="global-agent-panel-input"
-          />
-          {isStreaming ? (
-            <button
-              onClick={cancel}
-              className="rounded-md border border-destructive/40 px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10"
-              data-testid="global-agent-panel-stop"
-            >
-              Stop
-            </button>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={!input.trim()}
-              title={!input.trim() ? "Type a message first" : undefined}
-              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              data-testid="global-agent-panel-send"
-            >
-              Send
-            </button>
-          )}
-        </div>
-      </div>
-      </div>
-    </ResizablePanel>
-  );
+                {acpPermissions.data && acpPermissions.data.length > 0 && (
+                    <div
+                        className="max-h-[30%] space-y-2 overflow-y-auto border-b px-4 py-3"
+                        data-testid="global-agent-panel-acp-permissions"
+                    >
+                        {acpPermissions.data.map((p) => (
+                            <AcpPermissionCard key={p.id} permission={p} />
+                        ))}
+                    </div>
+                )}
+
+                <div
+                    ref={scrollRef}
+                    onScroll={handleMessagesScroll}
+                    className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-4 py-3"
+                    data-testid="global-agent-panel-messages"
+                >
+                    {messages.length === 0 && (
+                        <p
+                            className="text-sm text-muted-foreground"
+                            data-testid="global-agent-panel-empty"
+                        >
+                            Ask about your Kubernetes clusters, Service Bus
+                            queues, Redis caches, Storage accounts, and more.
+                        </p>
+                    )}
+                    {messages.map((msg) => (
+                        <div
+                            key={msg.id}
+                            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                        >
+                            <div
+                                className={`min-w-0 max-w-[90%] [overflow-wrap:anywhere] rounded-lg px-3 py-2 text-sm ${
+                                    msg.role === "user"
+                                        ? "bg-primary text-primary-foreground"
+                                        : msg.error
+                                          ? "bg-destructive/10 border border-destructive/30"
+                                          : "bg-muted"
+                                }`}
+                            >
+                                {msg.role === "assistant" ? (
+                                    <AgentMarkdown
+                                        content={msg.content}
+                                        className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1"
+                                    />
+                                ) : (
+                                    <div className="whitespace-pre-wrap">
+                                        {msg.content}
+                                    </div>
+                                )}
+                                {msg.role === "assistant" && msg.thoughts && (
+                                    <AgentThoughtBlock
+                                        thoughts={msg.thoughts}
+                                    />
+                                )}
+                                {msg.role === "assistant" && msg.steps && (
+                                    <AgentReasoningTrace steps={msg.steps} />
+                                )}
+                                {msg.role === "assistant" && msg.summarized && (
+                                    <AgentSummarizedNotice />
+                                )}
+                                {msg.role === "assistant" && msg.stopped && (
+                                    <div
+                                        className="mt-1 text-xs italic text-muted-foreground"
+                                        data-testid="global-agent-panel-stopped-notice"
+                                    >
+                                        Stopped by user.
+                                    </div>
+                                )}
+                                {msg.role === "assistant" && (
+                                    <div className="flex justify-end">
+                                        <AgentFeedbackButton
+                                            message={msg}
+                                            testId="global-agent-panel-thumbs-down"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                    {isStreaming &&
+                        messages[messages.length - 1]?.content === "" && (
+                            <div
+                                className="flex justify-start"
+                                data-testid="global-agent-panel-loading"
+                            >
+                                <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+                                    {toolStatus
+                                        ? `Thinking… (${toolStatus})`
+                                        : "Thinking…"}
+                                </div>
+                            </div>
+                        )}
+                </div>
+
+                {showVisuals && (
+                    <div
+                        className="border-t bg-card/30 px-4 py-3"
+                        data-testid="global-agent-panel-visualization-section"
+                    >
+                        <h3 className="mb-2 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+                            <BarChart3 className="h-3.5 w-3.5" /> Visualizations
+                        </h3>
+                        <AgentVisualizationPanel
+                            content={lastAssistantContent}
+                        />
+                    </div>
+                )}
+
+                <div className="border-t px-4 py-3">
+                    <div className="flex items-end gap-2">
+                        <textarea
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Ask the AI agent..."
+                            rows={2}
+                            className="flex-1 resize-none rounded-md border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            disabled={isStreaming}
+                            data-testid="global-agent-panel-input"
+                        />
+                        {isStreaming ? (
+                            <button
+                                onClick={cancel}
+                                className="rounded-md border border-destructive/40 px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10"
+                                data-testid="global-agent-panel-stop"
+                            >
+                                Stop
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleSend}
+                                disabled={!input.trim()}
+                                title={
+                                    !input.trim()
+                                        ? "Type a message first"
+                                        : undefined
+                                }
+                                className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                                data-testid="global-agent-panel-send"
+                            >
+                                Send
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </ResizablePanel>
+    );
 }

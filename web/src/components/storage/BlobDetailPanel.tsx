@@ -953,7 +953,7 @@ export function BlobDetailPanel() {
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
                     data-testid="storage-copy-dialog"
                 >
-                    <div className="rounded-lg border bg-card p-6 shadow-lg w-96">
+                    <div className="rounded-lg border bg-popover p-6 shadow-lg w-96">
                         <h3 className="mb-4 text-lg font-semibold">
                             Copy Blob
                         </h3>

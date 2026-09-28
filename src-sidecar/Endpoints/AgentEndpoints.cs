@@ -31,6 +31,12 @@ public static class AgentEndpoints
 
         app.MapPost("/api/agent/screen-state", PublishScreenState);
 
+        // ── Chat feedback (agent-colleague item 5): thumbs-down flushes the retained
+        //    exchange to agent-feedback.json for prompt-tuning regression cases ──
+
+        app.MapPost("/api/agent/feedback", SubmitFeedbackAsync);
+        app.MapGet("/api/agent/feedback", ListFeedbackAsync);
+
         // ── Capability test ─────────────────────────────────────────────────────
 
         app.MapPost("/api/agent/profiles/{id}/test", TestProfileAsync);
@@ -75,14 +81,95 @@ public static class AgentEndpoints
         if (snapshot.GetRawText().Length > ScreenStateStore.MaxSnapshotBytes)
             return Results.BadRequest($"snapshot exceeds {ScreenStateStore.MaxSnapshotBytes} bytes");
 
+        var entities = ValidateEntities(req.Entities);
+        if (entities is null)
+            return Results.BadRequest(
+                $"entities must be <= {ScreenStateStore.MaxEntities} entries, each with an " +
+                "`<area>.<kind>.<id>` key and a payload <= " +
+                $"{ScreenStateStore.MaxEntityBytes} bytes, totaling <= " +
+                $"{ScreenStateStore.MaxEntitiesBytes} bytes");
+
         store.Publish(new ScreenStateSnapshot
         {
             Route = req.Route ?? string.Empty,
             FeatureArea = req.FeatureArea,
             CapturedAt = req.CapturedAt ?? DateTimeOffset.UtcNow,
             Snapshot = snapshot,
+            Entities = entities,
         });
         return Results.NoContent();
+    }
+
+    /// <summary>Enforces the agent-colleague item-4 entity contract on the publish path: ids
+    /// follow <c>&lt;area&gt;.&lt;kind&gt;.&lt;id&gt;</c>, each detail stays within
+    /// <see cref="ScreenStateStore.MaxEntityBytes"/>, and the map stays within
+    /// <see cref="ScreenStateStore.MaxEntities"/>/<see cref="ScreenStateStore.MaxEntitiesBytes"/>.
+    /// Returns null on any cap/shape violation (caller → 400). Entities whose property names hit
+    /// the shared sensitive-key denylist (<see cref="SwebKit.Core.Security.SensitiveDataKeys"/>)
+    /// are dropped rather than failing the whole publish — a serializer that over-shares loses
+    /// that entity instead of taking down all screen state.</summary>
+    private static Dictionary<string, JsonElement>? ValidateEntities(Dictionary<string, JsonElement>? entities)
+    {
+        if (entities is null || entities.Count == 0)
+            return [];
+
+        if (entities.Count > ScreenStateStore.MaxEntities)
+            return null;
+
+        var accepted = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        var totalBytes = 0;
+        foreach (var (id, detail) in entities)
+        {
+            if (!ScreenStateStore.IsEntityId(id))
+                return null;
+
+            // Clone before measuring so the stored value is detached from the request's
+            // JsonDocument lifetime, same as the snapshot above.
+            var cloned = detail.Clone();
+            var bytes = cloned.GetRawText().Length;
+            if (bytes > ScreenStateStore.MaxEntityBytes || totalBytes + bytes > ScreenStateStore.MaxEntitiesBytes)
+                return null;
+            totalBytes += bytes;
+
+            if (SwebKit.Core.Security.SensitiveDataKeys.ContainsDeniedKey(cloned))
+                continue; // dropped — see the doc comment
+
+            accepted[id] = cloned;
+        }
+
+        return accepted;
+    }
+
+    /// <summary>Thumbs-down sink (agent-colleague item 5): resolves the client-sent
+    /// <c>exchangeId</c> against the in-memory <see cref="AgentExchangeBuffer"/>, builds the
+    /// persisted entry through <see cref="AgentFeedbackRedactor"/> (4 KB field truncation,
+    /// sensitive-key denylist, pending-action payloads structurally absent), and appends it to
+    /// <c>agent-feedback.json</c>. An evicted/unknown exchangeId still records — a bare
+    /// thumbs-down is itself signal — just without the exchange context.</summary>
+    internal static async Task<IResult> SubmitFeedbackAsync(
+        AgentExchangeBuffer exchanges,
+        SwebKit.Core.Configuration.AgentFeedbackRepository repository,
+        AgentFeedbackRequest req,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.ExchangeId))
+            return Results.BadRequest("exchangeId is required");
+
+        var found = exchanges.TryGet(req.ExchangeId, out var exchange);
+        var entry = AgentFeedbackRedactor.CreateEntry(req, found ? exchange : null);
+        await repository.AddAsync(entry);
+        return TypedResults.Ok<object>(new { recorded = true, exchangeFound = found, feedbackId = entry.Id });
+    }
+
+    /// <summary>Newest-first list for Settings → AI Agent's feedback section; the same payload
+    /// the "Export JSON" button downloads, so what's on screen is what ships to a regression
+    /// suite.</summary>
+    internal static async Task<Ok<IReadOnlyList<SwebKit.Core.Models.AgentFeedbackEntry>>> ListFeedbackAsync(
+        SwebKit.Core.Configuration.AgentFeedbackRepository repository,
+        CancellationToken ct)
+    {
+        return TypedResults.Ok<IReadOnlyList<SwebKit.Core.Models.AgentFeedbackEntry>>(
+            await repository.GetAllAsync());
     }
 
     private static readonly JsonSerializerOptions StreamEventJsonOptions = new()
@@ -148,6 +235,7 @@ public static class AgentEndpoints
         Token = evt.Token,
         ToolName = evt.ToolName,
         ErrorMessage = evt.ErrorMessage,
+        ExchangeId = evt.ExchangeId,
         Result = evt.Result is null
             ? null
             : new SidecarAgentReply
@@ -171,6 +259,10 @@ public static class AgentEndpoints
         public string? ToolName { get; init; }
         public SidecarAgentReply? Result { get; init; }
         public string? ErrorMessage { get; init; }
+
+        /// <summary>agent-colleague item 5 — present only on the terminal "done" event; the id a
+        /// thumbs-down sends back to <c>POST /api/agent/feedback</c>.</summary>
+        public string? ExchangeId { get; init; }
     }
 
     internal static async Task<Ok<object>> ClearHistory(SidecarAgentChatService agent, string? sessionId = null)
@@ -241,6 +333,8 @@ public static class AgentEndpoints
                 Risk = a.Risk.ToString(),
                 Preview = a.Preview,
                 ExpiresAt = a.ExpiresAt,
+                Origin = a.Origin,
+                OriginSessionId = a.OriginSessionId,
             })
             .ToList();
         return TypedResults.Ok<IReadOnlyList<PendingActionSummary>>(summaries);
@@ -333,6 +427,16 @@ public sealed class PendingActionSummary
     public required string Risk { get; init; }
     public required string Preview { get; init; }
     public required DateTimeOffset ExpiresAt { get; init; }
+
+    /// <summary>What parked this action (monitoring-closed-loop): null for an interactive chat
+    /// turn, "investigation" for a background proactive-investigation proposal — the UI uses it
+    /// to badge "AI proposes…" cards differently from user-driven ones.</summary>
+    public string? Origin { get; init; }
+
+    /// <summary>The originating report/session id when <see cref="Origin"/> is set
+    /// (<c>proactive-{ruleId}-{firedAtMs}</c>) — links a confirm card back to its insight
+    /// report.</summary>
+    public string? OriginSessionId { get; init; }
 }
 
 public sealed class AgentChatRequest
@@ -368,4 +472,20 @@ public sealed class ScreenStatePublishRequest
     public string? FeatureArea { get; set; }
     public DateTimeOffset? CapturedAt { get; set; }
     public JsonElement Snapshot { get; set; }
+
+    /// <summary>Entity-indexed bounded details (agent-colleague item 4), keyed by
+    /// <c>&lt;area&gt;.&lt;kind&gt;.&lt;id&gt;</c> — validated in <see cref="AgentEndpoints"/>
+    /// against the <see cref="ScreenStateStore"/> caps.</summary>
+    public Dictionary<string, JsonElement>? Entities { get; set; }
+}
+
+/// <summary>Request body for <c>POST /api/agent/feedback</c> (agent-colleague item 5). The UI
+/// sends just the exchangeId + sentiment; <c>comment</c>/<c>tags</c> leave room for a richer
+/// feedback UI later without a wire change.</summary>
+public sealed class AgentFeedbackRequest
+{
+    public string? ExchangeId { get; set; }
+    public string? Sentiment { get; set; }
+    public string? Comment { get; set; }
+    public List<string>? Tags { get; set; }
 }

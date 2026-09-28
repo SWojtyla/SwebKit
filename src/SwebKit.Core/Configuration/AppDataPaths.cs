@@ -25,8 +25,20 @@ public static class AppDataPaths
     public static string LegacyUiStateJson => Path.Combine(LegacyRoot, "ui-state.json");
     public static string UserSettingsJson => Path.Combine(Root, "user-settings.json");
     public static string ScheduledMessagesJson => Path.Combine(Root, "scheduled-messages.json");
+    /// <summary>
+    /// Crash journal for Service Bus power ops (reach-message). An entry left "running" here after
+    /// a restart marks an interrupted operation — the broker-side stamp scan then rediscovers how
+    /// many messages actually parked.
+    /// </summary>
+    public static string SbOperationsJournalJson => Path.Combine(Root, "sb-operations-journal.json");
     public static string MonitoringAlertsJson => Path.Combine(Root, "monitoring-alerts.json");
     public static string MonitoringInsightsJson => Path.Combine(Root, "monitoring-insights.json");
+    public static string MonitoringSilencesJson => Path.Combine(Root, "monitoring-silences.json");
+    public static string MonitoringHistoryJson => Path.Combine(Root, "monitoring-history.json");
+    /// <summary>Persisted thumbs-down regression cases (agent-colleague item 5) — redacted
+    /// exchange context flushed by <c>POST /api/agent/feedback</c>, exported from Settings → AI
+    /// Agent for prompt tuning.</summary>
+    public static string AgentFeedbackJson => Path.Combine(Root, "agent-feedback.json");
     public static string CollectionsJson => Path.Combine(Root, "collections.json");
     public static string EnvironmentsJson => Path.Combine(Root, "environments.json");
     public static string ApiLinkedRootsJson => Path.Combine(Root, "api-linked-roots.json");

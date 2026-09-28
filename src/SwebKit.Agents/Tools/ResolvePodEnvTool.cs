@@ -1,5 +1,6 @@
 using System.Text.Json;
 using SwebKit.Core.Abstractions;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 using YamlDotNet.RepresentationModel;
 
@@ -18,7 +19,7 @@ namespace SwebKit.Agents.Tools;
 public sealed class ResolvePodEnvTool(
     IAksClientFactory aksFactory,
     DemoAksClient demoAksClient,
-    AppStateService appState) : IAgentTool
+    AppStateService appState) : IAccessAwareTool
 {
     /// <summary>Caps on a single resolved ConfigMap value and on envFrom key expansion — large
     /// blobs (an appsettings.json dumped into a ConfigMap) or wide envFrom prefixes would
@@ -35,6 +36,12 @@ public sealed class ResolvePodEnvTool(
         "Omit pod_name/namespace to use the pod selected in the UI.";
 
     public FeatureArea FeatureArea => FeatureArea.Aks;
+
+    // Pod/ConfigMap/Secret reads — matching the report's kubernetes.read row.
+    public string Capability => AccessCapabilities.KubernetesRead;
+
+    public string? GetConnectionKey(JsonElement arguments) =>
+        AksToolContext.ResolveConnectionKey(appState, AksToolContext.GetContext(arguments));
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -63,6 +70,12 @@ public sealed class ResolvePodEnvTool(
         try
         {
             yaml = await client.GetResourceYamlAsync(ns, "Pod", podName, ct);
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Without the pod spec there is nothing to resolve — let the registry classify this
+            // into a structured access_denied result instead of a generic error.
+            throw;
         }
         catch (Exception ex)
         {

@@ -23,6 +23,13 @@ const KEYBOARD_SHORTCUTS = [
   { keys: "Ctrl+Shift+E", description: "Search entities (Service Bus)" },
   { keys: "Ctrl+S", description: "Save current request (API Client)" },
   { keys: "Ctrl+Enter", description: "Send request (API Client)" },
+  // Shared grid navigation (useGridKeyboardNav — ResultsGrid, MessageList, Redis key browser)
+  { keys: "J / K or ↓ / ↑", description: "Move row focus (message lists, result grids, key browser)" },
+  { keys: "E / Enter", description: "Inspect the focused row" },
+  { keys: "Space", description: "Toggle the focused row's selection (Service Bus, Redis)" },
+  { keys: "/", description: "Focus the grid's filter field (Service Bus, Redis)" },
+  { keys: "G / Shift+G", description: "Jump to first / last row" },
+  { keys: "H / L or ← / →", description: "Collapse / expand namespace (Redis key browser)" },
 ];
 
 export function KeyboardShortcutsPanel({ open, onClose }: Props) {

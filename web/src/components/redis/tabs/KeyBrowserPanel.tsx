@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Folder } from "lucide-react";
+import { useGridKeyboardNav } from "@/lib/hooks/useGridKeyboardNav";
 import {
   useRedisBrowser,
   useRedisConnection,
@@ -47,6 +48,92 @@ export function KeyBrowserPanel() {
   });
 
   const virtualItems = redisVirtualizer.getVirtualItems();
+
+  // The `/` shortcut target — the pattern input above the tree.
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Keyboard nav (ux-power-pack §4): j/k + arrows move a focused row through
+  // the flattened namespace tree (the virtualizer mounts it before focus
+  // lands), e/Enter inspects (expand/collapse namespaces, open keys),
+  // h/ArrowLeft collapses or steps to the parent, l/ArrowRight expands or steps
+  // to the first child, / focuses the pattern input, g/G jump first/last.
+  const flatRows = ctx.flatRedisRows;
+  const gridNav = useGridKeyboardNav({
+    containerRef: ctx.redisTreeRef,
+    itemCount: flatRows.length,
+    resetKey: `${ctx.resolvedCacheId}|${ctx.pattern}`,
+    getFilterInput: () => searchInputRef.current,
+    scrollToIndex: (index) => redisVirtualizer.scrollToIndex(index),
+    onInspect: (index) => {
+      const row = flatRows[index];
+      if (!row) return;
+      if (row.kind === "namespace") ctx.toggleNamespace(row.node.path);
+      else ctx.setSelectedKey(row.key);
+    },
+    onToggleSelect: (index) => {
+      const row = flatRows[index];
+      if (!row) return;
+      if (row.kind === "key") ctx.toggleKeySelection(row.key);
+      else ctx.toggleSubtreeSelection(row.node);
+    },
+    onCollapse: (index) => {
+      const row = flatRows[index];
+      if (!row) return false;
+      if (
+        row.kind === "namespace" &&
+        ctx.expandedNamespaces.has(row.node.path)
+      ) {
+        ctx.toggleNamespace(row.node.path);
+        return true;
+      }
+      if (row.kind === "key") {
+        // Keys are flattened at their namespace's own depth, after all
+        // expanded descendants — the parent ns row is the nearest previous
+        // namespace row with the same node.path.
+        for (let j = index - 1; j >= 0; j--) {
+          const candidate = flatRows[j];
+          if (
+            candidate.kind === "namespace" &&
+            candidate.node.path === row.node.path
+          ) {
+            gridNav.focusIndex(j);
+            return true;
+          }
+        }
+        return false;
+      }
+      // Already-collapsed namespace → step to the parent: nearest previous
+      // namespace row at a lower depth.
+      for (let j = index - 1; j >= 0; j--) {
+        const candidate = flatRows[j];
+        if (candidate.kind === "namespace" && candidate.depth < row.depth) {
+          gridNav.focusIndex(j);
+          return true;
+        }
+      }
+      return false;
+    },
+    onExpand: (index) => {
+      const row = flatRows[index];
+      if (!row || row.kind !== "namespace") return false;
+      if (!ctx.expandedNamespaces.has(row.node.path)) {
+        ctx.toggleNamespace(row.node.path);
+        return true;
+      }
+      // Already expanded → step to the first child row (a deeper namespace,
+      // or one of this node's own keys which share its depth).
+      const next = flatRows[index + 1];
+      if (
+        next &&
+        (next.depth > row.depth ||
+          (next.kind === "key" && next.node.path === row.node.path))
+      ) {
+        gridNav.focusIndex(index + 1);
+        return true;
+      }
+      return false;
+    },
+  });
 
   // Committed on blur/Enter, not per keystroke — typing used to recompute the whole namespace
   // tree (`namespaceTree` depends on `separator`) on every character, which also kept re-tripping
@@ -128,7 +215,10 @@ export function KeyBrowserPanel() {
           onClick={() => ctx.setSelectedKey(key)}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
+              // stopPropagation keeps this from also reaching the grid-nav
+              // window listener (space would toggle the bulk checkbox too).
               e.preventDefault();
+              e.stopPropagation();
               ctx.setSelectedKey(key);
             }
           }}
@@ -173,6 +263,7 @@ export function KeyBrowserPanel() {
         <div className="flex gap-2">
           <input
             type="text"
+            ref={searchInputRef}
             data-testid="redis-key-search"
             value={ctx.searchInput}
             onChange={(e) => ctx.setSearchInput(e.target.value)}
@@ -299,11 +390,16 @@ export function KeyBrowserPanel() {
           >
             {virtualItems.map((item) => {
               const row = ctx.flatRedisRows[item.index];
+              const isFocused = gridNav.focusedIndex === item.index;
               return (
                 <div
                   key={item.key}
                   data-index={item.index}
+                  data-grid-nav-row={item.index}
                   ref={redisVirtualizer.measureElement}
+                  tabIndex={isFocused ? 0 : -1}
+                  onFocus={() => gridNav.setFocusedIndex(item.index)}
+                  className={`outline-none ${isFocused ? "bg-accent/40 rounded-md" : ""}`}
                   style={{
                     position: "absolute",
                     top: 0,

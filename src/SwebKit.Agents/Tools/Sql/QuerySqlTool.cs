@@ -2,6 +2,7 @@ using System.Text.Json;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Models;
+using SwebKit.Core.Security;
 using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Sql;
@@ -12,7 +13,7 @@ namespace SwebKit.Agents.Tools.Sql;
 /// ScriptDom write guard the HTTP endpoints use applies here: the agent can never mutate
 /// through this tool (writes go through <see cref="ProposeExecuteSqlTool"/> → user confirm).
 /// </summary>
-public sealed class QuerySqlTool : IAgentTool
+public sealed class QuerySqlTool : IAccessAwareTool
 {
     private const int MaxRows = 50;
 
@@ -30,6 +31,16 @@ public sealed class QuerySqlTool : IAgentTool
     public string Name => "query_sql";
     public string Description => $"Runs a read-only SQL query against a configured connection and returns up to {MaxRows} rows. Mutating statements are rejected; ask the user to confirm a write instead.";
     public FeatureArea FeatureArea => FeatureArea.Sql;
+
+    // Data-plane queries — matching the report's sql.query row (denials here come from the
+    // observed-denial feed, since the sql.query probe itself uses a self-permission query).
+    public string Capability => AccessCapabilities.SqlQuery;
+
+    public string? GetConnectionKey(JsonElement arguments)
+    {
+        var connectionId = arguments.TryGetProperty("connection_id", out var c) ? c.GetString() : null;
+        return SqlToolContext.ResolveConnection(_appState, _profiles, connectionId)?.Id;
+    }
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
@@ -73,6 +84,12 @@ public sealed class QuerySqlTool : IAgentTool
         catch (SqlWriteGuardException ex)
         {
             return JsonSerializer.Serialize(new { error = ex.Message });
+        }
+        catch (Exception ex) when (AccessAdvisor.IsAccessDenied(ex))
+        {
+            // Let the registry classify this into a structured access_denied result (and feed the
+            // access report) instead of flattening it into a generic error.
+            throw;
         }
         catch (Exception ex)
         {

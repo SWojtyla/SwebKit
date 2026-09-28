@@ -9,7 +9,10 @@ public sealed record PodSnapshot(
     string Phase,
     int ReadyContainers,
     int TotalContainers,
-    int RestartCount);
+    int RestartCount,
+    /// <summary>Controller ownerReference kind (Job, ReplicaSet…) — used to recognise
+    /// normal lifecycle cleanup so it isn't reported as a termination.</summary>
+    string? OwnerKind = null);
 
 /// <summary>
 /// A single detected health transition for one pod within a namespace.
@@ -66,6 +69,13 @@ public static class PodHealthDiffer
             if (currentByName.ContainsKey(podName))
                 continue;
 
+            // Normal lifecycle cleanup is not a health event: pods already in a
+            // terminal phase are garbage-collected (TTL/history controllers), and
+            // Job-owned pods are deleted by the CronJob/Job controller on schedule —
+            // including a Job pod that completed and was reaped between two ticks.
+            if (IsExpectedCleanup(prev))
+                continue;
+
             var key = CooldownKey(ns, podName, PodHealthEventType.PodTerminated);
             if (!IsInCooldown(activeCooldowns, key, now))
             {
@@ -94,8 +104,22 @@ public static class PodHealthDiffer
         return results;
     }
 
+    /// <summary>True when a pod's disappearance is routine controller cleanup rather
+    /// than a health signal: it was already in a terminal phase (a Failed pod's entry
+    /// into Failed was already reported, and both phases only await garbage
+    /// collection), or a Job owns it (CronJob history-limit / Job deletion).</summary>
+    private static bool IsExpectedCleanup(PodSnapshot prev) =>
+        prev.Phase is "Succeeded" or "Failed" ||
+        string.Equals(prev.OwnerKind, "Job", StringComparison.OrdinalIgnoreCase);
+
     private static PodDiffResult? DetectTransition(PodInfo pod, PodSnapshot prev)
     {
+        // A pod that reached a successful terminal state is finished — nothing about
+        // it is a health regression. Completing pods flip Ready to 0/N as containers
+        // exit, which would otherwise read as ContainerNotReady.
+        if (pod.Phase == "Succeeded")
+            return null;
+
         // CrashLoopBackOff takes priority — covers Status field and restart increase.
         bool isCrashLoop =
             pod.Status.Contains("CrashLoopBackOff", StringComparison.OrdinalIgnoreCase) ||
