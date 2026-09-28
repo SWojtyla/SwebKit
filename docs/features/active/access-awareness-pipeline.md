@@ -1,6 +1,6 @@
 # Access Awareness Phases 2–4 — access report, request artifacts, declared-object SQL, request webhook
 
-State: In Progress
+State: Done
 
 Phase 1 (classification + agent `access_denied` results + SQL `MetadataHidden`) is shipped —
 see `access-denial-awareness.md`. This plan covers the rest of the arc.

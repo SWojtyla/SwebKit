@@ -1,6 +1,6 @@
 # UX Power Pack — palette, pinned rail, env badge, keyboard grids, toast dedupe
 
-State: In Progress
+State: Done
 
 ## Goal
 

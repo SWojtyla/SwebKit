@@ -1,6 +1,6 @@
 # Service Bus Power Ops — reach-message, DLQ triage, sessions, replay
 
-State: In Progress
+State: Done
 
 ## Goal
 
