@@ -1,6 +1,6 @@
 # Monitoring → Closed Loop — autofix proposals, rule suggestions, silences, ops dashboard
 
-State: In Progress
+State: Done
 
 ## Goal
 
@@ -102,10 +102,11 @@ background run is safe-by-construction: worst case is a parked card.
 - [x] Ops tab + history summary endpoint (`/api/monitoring/history/summary`,
       `AlertHistorySummaryBuilder`, `OpsDashboardPanel` on `?tab=ops`)
 - [x] `AGENT.md`/`monitoring.md` posture revision documented
-- [ ] Validation pending: the autofix slice landed from an interrupted agent
-      run — targeted tests green (Agents 42, sidecar 57) but the full matrix
-      (all four .NET suites + vitest + playwright monitoring/service-bus)
-      has NOT been re-run end-to-end.
+- [x] Validation: full matrix green — Core 843, Azure 168, Agents 304, Sidecar
+      692+ (all monitoring incl. autofix/summary), vitest 710, Playwright full
+      suite 400/401 (one dialog-overflow regression found and fixed via
+      `max-h` on `Dialog`). `get_alert_history` now reads the durable store
+      (commit e27ce678).
 
 ## Test plan
 

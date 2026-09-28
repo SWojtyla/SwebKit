@@ -113,7 +113,10 @@ see `access-denial-awareness.md`. This plan covers the rest of the arc.
 - [x] Access Settings tab + report UI (commit 952d8b1a)
 - [x] `IAzurePrincipalContext` + ARM fields + `ScopeResolver` + artifact endpoint +
       dialog (commit 952d8b1a — PascalCase remedy-kind wire contract pinned by test)
-- [ ] `DeclaredObjects` + schema merge + columns endpoint + SchemaTree/settings UI
+- [x] `DeclaredObjects` + schema merge + columns endpoint + SchemaTree/settings UI
+      (commit 4fe8fc89 — `exec:`-prefixed procs, per-object denial payloads,
+      declared objects excluded from schema compare, `demo-sql-prd` seeds a
+      granted view + runnable proc + object-denied view)
 - [ ] `AccessRequestConfig` + credential-store plumbing + sender + webhook UI
 
 ## Test plan

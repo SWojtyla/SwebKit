@@ -90,10 +90,12 @@ order    → prefix restored first (original seq order), target's reprocessed co
 - [x] Models: `RequiresSession`, `SbSessionSummary`, resubmit-edited request
       (commit d6b51aae); preview/op/journal records, replay request still open
 - [x] `IServiceBusClient`: PeekSessions, ResubmitEdited (throwing defaults);
-      entity props, Replay, park/restore primitives still open
-- [ ] `SbOperationService` (in-memory ops + background task + journal) + endpoints
-- [ ] `ReachMessagePanel` wizard + progress polling; `DlqTriagePanel`;
-      `ReplayToPanel`
+      park/restore primitives via `ReachParkProcessor` (commit 139fa291);
+      entity props + cross-env Replay still open
+- [x] `SbOperationService` (journaled park→act→restore, stamp-scan crash
+      recovery, cancel/resume/dismiss endpoints) (commit 139fa291)
+- [x] `ReachMessagePanel` wizard + progress polling; `DlqTriagePanel`
+      (commit 139fa291); `ReplayToPanel` (cross-env requeue) still open
 - [x] composer `editResubmit` mode + session badges/gating (commit d6b51aae)
 - [x] Demo client: honest resubmit/complete + `order-sessions` session-flagged
       demo entity (commit d6b51aae)

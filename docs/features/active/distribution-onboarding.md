@@ -1,6 +1,10 @@
 # Distribution & Onboarding — team packs, demo tour, updater, deep links
 
-State: Planned
+State: Done — all four items shipped in commit 350adfff (team pack with
+credential-stripped export + dry-run import, DemoAwareKeyVaultResolver +
+PRD-day tour stop, notify-only update check, swebkit:// deep links with
+single-instance forwarding). Signed auto-update stays deferred per
+non-goals (private release assets need auth).
 
 ## Goal
 

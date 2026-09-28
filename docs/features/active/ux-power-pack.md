@@ -63,14 +63,18 @@ precedent (`CollectionTree`), notification center (`NotificationSystem`).
 
 ## Implementation tasks
 
-- [ ] `palette-items.ts` builder extraction + item extensions (SB fan-out, AKS ctx,
-      saved queries, pins, actions)
-- [ ] deep-link consumers: Aks `state.context`, Sql `state.sql`, SB `state.compose`,
-      Redis `?cache=`
-- [ ] `PinnedRail` + per-surface pin buttons
+- [x] `palette-items.ts` builder extraction + item extensions (SB fan-out, AKS ctx,
+      saved queries, pins, actions) (commit d6280441)
+- [x] deep-link consumers: Aks `state.context`, Sql `state.sql` (+ live `?connection=`
+      retarget), SB `state.compose`, Redis `?cache=`, API Client `state.newRequest`
+      (commit d6280441)
+- [x] `PinnedRail` + per-surface pin buttons (SB entity, Redis cache, Storage
+      account, AKS namespaces, SQL connection) (commit d6280441)
 - [x] `EnvironmentTag` model + Settings UI + `EnvironmentBadge` + PRD banner
       (commit 16f6bfa6)
-- [ ] `useGridKeyboardNav` + five grid integrations (staged)
+- [x] `useGridKeyboardNav` + grid integrations — ResultsGrid, MessageList,
+      KeyBrowserPanel landed (commit d6280441); BlobBrowserPanel + AKS ResourceTable
+      remain staged follow-ups (hook ready)
 - [x] `notification-dedupe.ts` + NotificationSystem merge (commit 16f6bfa6)
 
 ## Test plan
