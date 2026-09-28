@@ -45,17 +45,24 @@ None.
 |---|------|-------|----------------------|
 | 1 | AI Cockpit | `/` | Health tiles show `Ready`, deployments > 0, service cards show `2 namespaces`, `1 cache`, `1 account` |
 | 2 | Kubernetes | `/aks` | Deployment table with pods counts and `Available`/`Progressing`/`Unavailable` rows |
-| 3 | Service Bus | `/service-bus` | Namespace dropdown contains `orders-dev` and `payments-dev` |
-| 4 | Redis | `/redis` | Cache selector shows `Demo Cache` and key tree with ~17 keys |
-| 5 | Storage | `/storage` | Container buttons `configs`, `exports`, `fixtures` |
-| 6 | API Client | `/api-client` | Collection tree includes `Demo API Samples`, `JSONPlaceholder`, `HTTPBin`, `GitHub API` |
-| 7 | AI Agent | `/agent` | Agent input visible, no crash (empty conversation) |
-| 8 | Monitoring | `/monitoring` | `Alert Rules (0)` and `Alert History (0)` tabs visible |
+| 3 | Rows: click vs. right-click | `/aks` | Same AKS page — spotlight on the resource table convention |
+| 4 | Service Bus | `/service-bus` | Namespace dropdown contains `orders-dev` and `payments-dev` |
+| 5 | Redis | `/redis` | Cache selector shows `Demo Cache` and key tree with ~17 keys |
+| 6 | Storage | `/storage` | Container buttons `configs`, `exports`, `fixtures` |
+| 7 | API Client | `/api-client` | Collection tree includes `Demo API Samples`, `JSONPlaceholder`, `HTTPBin`, `GitHub API` |
+| 8 | AI Agent | `/agent` | Agent input visible, no crash (empty conversation) |
+| 9 | Monitoring | `/monitoring` | `Alert Rules (0)` and `Alert History (0)` tabs visible |
+| 10 | PRD day: read-only production | `/sql?connection=demo-sql-prd` | `sql-schema-partial` banner + declared-objects tree — queries work, catalog browsing is denied (no VIEW DEFINITION) |
+| 11 | Access gaps report | `/settings?tab=access` | Access report shows a `Denied` row for `sql.metadata` on `orders-prd-sql` with a SQL-grant remedy |
+
+Steps 10–11 carry `scenarioId: "prd-day"` in `DEMO_TOUR_STEPS` — the restricted demo connection
+(`demo-sql-prd`) is what makes them truthful: the denied Access-report row and the hidden schema
+are real demo restrictions, not scripted UI.
 
 ## Key test assertions
 
 - Starting the tour auto-enables demo mode: the top-right toggle text changes from `Live` to `Demo` / `Demo Mode ON` and dashboard metrics update within a few seconds.
-- Each `Next` click advances the progress text (e.g. `1 / 8` to `2 / 8`) and navigates to the route above.
+- Each `Next` click advances the progress text (e.g. `1 / 12` to `2 / 12`) and navigates to the route above.
 - `Back` returns to the previous step and route.
 - `Stop` removes `demo-tour-card` immediately and leaves the current page rendered.
 

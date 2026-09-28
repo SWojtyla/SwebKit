@@ -9,10 +9,10 @@ import type {
 // ── Access-awareness report + request artifacts ──────────────────────────────
 
 /** `GET /api/access/report`. `refresh` re-probes every capability instead of serving
- * the sidecar's 5-minute cache — that's the "Refresh" button's path. */
+ * the sidecar's 5-minute cache — that's the "Refresh" button's path. The param is
+ * always sent: the endpoint binds a non-nullable `bool`, so omitting it is a 400. */
 export async function fetchAccessReport(refresh = false, signal?: AbortSignal): Promise<AccessReport> {
-    const qs = refresh ? "?refresh=true" : "";
-    return apiFetch<AccessReport>(`/api/access/report${qs}`, { signal });
+    return apiFetch<AccessReport>(`/api/access/report?refresh=${refresh}`, { signal });
 }
 
 /** Re-probes one connection's rows — cheaper than a full refresh. */

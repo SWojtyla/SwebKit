@@ -452,6 +452,9 @@ public class ConfigEndpointsTests
             new() { Id = "renamed", Server = "b.database.windows.net", Database = "orders", DisplayName = "Old" },
             new() { Id = "server-changed", Server = "old.database.windows.net", Database = "orders" },
             new() { Id = "database-changed", Server = "a.database.windows.net", Database = "old" },
+            // DeclaredObjects is part of the pooled client's view of the world — the cached
+            // ISqlClient holds the entry instance it was built from, so an edit must evict.
+            new() { Id = "declared-changed", Server = "a.database.windows.net", Database = "orders", DeclaredObjects = ["prd.v_orders"] },
             new() { Id = "removed", Server = "gone.database.windows.net", Database = "orders" },
         };
         var after = new List<SqlConnectionEntry>
@@ -460,11 +463,12 @@ public class ConfigEndpointsTests
             new() { Id = "renamed", Server = "b.database.windows.net", Database = "orders", DisplayName = "New" },
             new() { Id = "server-changed", Server = "new.database.windows.net", Database = "orders" },
             new() { Id = "database-changed", Server = "a.database.windows.net", Database = "new" },
+            new() { Id = "declared-changed", Server = "a.database.windows.net", Database = "orders", DeclaredObjects = ["prd.v_orders", "exec:prd.p_recalc"] },
             new() { Id = "added", Server = "new.database.windows.net", Database = "orders" },
         };
 
         Assert.Equal(
-            ["server-changed", "database-changed", "removed"],
+            ["server-changed", "database-changed", "declared-changed", "removed"],
             ConfigEndpoints.StaleSqlConnectionIds(before, after).ToList());
     }
 

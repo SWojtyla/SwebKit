@@ -22,10 +22,12 @@ import {
     Beaker,
     Keyboard,
     Waves,
+    Feather,
     Clock,
     AlertTriangle,
 } from "lucide-react";
 import { CommandPalette } from "./CommandPalette";
+import { PinnedRail } from "./PinnedRail";
 import { EnvironmentBadge } from "./EnvironmentBadge";
 import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
 import { GlobalAgentPanel } from "@/components/agent/GlobalAgentPanel";
@@ -48,6 +50,7 @@ import {
     saveViewPreference,
 } from "@/lib/stores/panel-preferences";
 import { notifyScreenRouteChanged } from "@/lib/stores/screen-state";
+import { initDeepLinks, type DeepLinkContext } from "@/lib/deep-links";
 import { FATHOM_UNLOCK_THRESHOLD } from "@/lib/types";
 import { useSettingsStore, isTheme } from "@/lib/stores/settings";
 import { useAgentPanelStore } from "@/lib/stores/agent-panel";
@@ -365,6 +368,35 @@ export function AppLayout() {
         };
     }, [queryClient, notify]);
 
+    // `swebkit://` deep links (distribution-onboarding): the Tauri deep-link and
+    // single-instance plugins emit URL events; cold-start links are queued Rust-side and
+    // drained by initDeepLinks. Alias resolution reads the latest profile via the ref so
+    // links arriving before (or after) a profile reload both resolve correctly.
+    const deepLinkContextRef = useRef<DeepLinkContext>({});
+    useEffect(() => {
+        deepLinkContextRef.current = {
+            serviceBusNamespaces: profile?.serviceBusNamespaces,
+            sqlConnections: profile?.config.sqlConfig?.connections,
+        };
+    }, [profile]);
+
+    useEffect(() => {
+        let disposed = false;
+        let unlisten: (() => void) | undefined;
+        void initDeepLinks({
+            navigate,
+            notify: (message) => notify("info", "Deep link", message),
+            context: () => deepLinkContextRef.current,
+        }).then((dispose) => {
+            if (disposed) dispose();
+            else unlisten = dispose;
+        });
+        return () => {
+            disposed = true;
+            unlisten?.();
+        };
+    }, [navigate, notify]);
+
     const contextTitle =
         navItems.find((n) => n.to === location.pathname)?.label ?? "SwebKit";
     const areaHealth = ([
@@ -467,6 +499,7 @@ export function AppLayout() {
                         </NavLink>
                     ))}
                 </nav>
+                <PinnedRail collapsed={navCollapsed} />
             </aside>
 
             <div className="flex flex-1 flex-col overflow-hidden">
@@ -517,6 +550,9 @@ export function AppLayout() {
                             ) : theme === "fathom-dark" ||
                               theme === "fathom-light" ? (
                                 <Waves className="h-4 w-4" />
+                            ) : theme === "letterpress-light" ||
+                              theme === "letterpress-dark" ? (
+                                <Feather className="h-4 w-4" />
                             ) : (
                                 <Moon className="h-4 w-4" />
                             )}
@@ -680,6 +716,10 @@ export function AppLayout() {
                                 ? "Fathom · Abyss"
                                 : theme === "fathom-light"
                                   ? "Fathom · Shallows"
+                                  : theme === "letterpress-light"
+                                    ? "Letterpress · Day"
+                                    : theme === "letterpress-dark"
+                                      ? "Letterpress · Night"
                                   : "Light"}{" "}
                         theme
                     </span>

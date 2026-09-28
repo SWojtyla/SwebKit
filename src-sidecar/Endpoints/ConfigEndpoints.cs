@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Models;
 using SwebKit.Core.Security;
 using SwebKit.Core.Serialization;
 using SwebKit.Core.Services;
@@ -19,6 +20,10 @@ public static class ConfigEndpoints
         app.MapGet("/api/config/export", ExportAsync);
 
         app.MapPost("/api/config/import", ImportAsync);
+
+        app.MapGet("/api/config/team-pack/export", ExportTeamPackAsync);
+
+        app.MapPost("/api/config/team-pack/import", ImportTeamPackAsync);
 
         app.MapGet("/api/config/profiles", GetProfilesAsync);
         app.MapPut("/api/config/profiles", SaveProfileAsync);
@@ -60,6 +65,95 @@ public static class ConfigEndpoints
         return TypedResults.Ok();
     }
 
+    /// <summary>
+    /// <c>GET /api/config/team-pack/export?sections=maps,sqlQueries,…</c> — writes a secrets-free
+    /// team pack. <c>sections</c> is optional; omit it for every section.
+    /// </summary>
+    internal static async Task<IResult> ExportTeamPackAsync(TeamPackService svc, string? sections)
+    {
+        if (!TryParseTeamPackSections(sections, out var selection))
+        {
+            return ApiErrors.BadRequest(
+                $"Unknown team-pack section in '{sections}'. Valid values: {string.Join(", ", TeamPackSections.All)}.");
+        }
+
+        var pack = await svc.ExportAsync(selection).ConfigureAwait(false);
+        return TypedResults.Text(svc.Serialize(pack), "application/json");
+    }
+
+    /// <summary>
+    /// <c>POST /api/config/team-pack/import?dryRun=true&amp;strategy=replace</c> — merges (or
+    /// replaces) the pack's sections and returns the change report. <c>dryRun</c> previews the
+    /// same report without persisting anything. Disabled in demo mode.
+    /// </summary>
+    internal static async Task<IResult> ImportTeamPackAsync(
+        TeamPackService svc,
+        HttpRequest req,
+        DemoModeService demo,
+        IAccessReportService accessReports,
+        bool dryRun = false,
+        string? strategy = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (demo.IsDemoMode)
+        {
+            return ApiErrors.BadRequest("Team pack import is disabled in demo mode.");
+        }
+
+        string json;
+        using (var reader = new StreamReader(req.Body))
+        {
+            json = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        TeamPack pack;
+        try
+        {
+            pack = svc.Deserialize(json);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            return ApiErrors.BadRequest(ex.Message);
+        }
+
+        var result = await svc.ImportAsync(pack, new TeamPackImportOptions
+        {
+            DryRun = dryRun,
+            Strategy = string.Equals(strategy, "replace", StringComparison.OrdinalIgnoreCase)
+                ? TeamPackMergeStrategy.Replace
+                : TeamPackMergeStrategy.Merge,
+        }).ConfigureAwait(false);
+
+        if (!dryRun)
+        {
+            // Pack imports can touch maps/queries/rules the probes read — drop every cached row.
+            accessReports.InvalidateAll();
+        }
+
+        return Results.Ok(result);
+    }
+
+    private static bool TryParseTeamPackSections(string? sections, out HashSet<string>? selection)
+    {
+        selection = null;
+        if (string.IsNullOrWhiteSpace(sections))
+        {
+            return true;
+        }
+
+        selection = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in sections.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var canonical = TeamPackSections.All.FirstOrDefault(s => string.Equals(s, raw, StringComparison.OrdinalIgnoreCase));
+            if (canonical is null)
+            {
+                return false;
+            }
+            selection.Add(canonical);
+        }
+        return true;
+    }
+
     internal static IResult GetProfilesAsync(ProfileRepository repo, DemoModeService demo)
     {
         // Clone before applying demo overlays so the in-memory repository is not mutated.
@@ -92,6 +186,9 @@ public static class ConfigEndpoints
                     ActiveConnectionId = demoSqlConnections[0].Id,
                 };
             }
+            // The demo vault pair (working dev + denied prod) — the "PRD day" tour stop needs a
+            // locked-down vault to point its Key Vault-sourced variables at.
+            result.Config.KeyVaults = [.. demo.GetDemoKeyVaults()];
         }
         return Results.Ok(result);
     }
@@ -120,11 +217,17 @@ public static class ConfigEndpoints
                 redis.ActiveCacheId = redis.Caches.FirstOrDefault()?.Id;
         }
         data.Config?.StorageAccounts?.RemoveAll(a => a.Id == DemoModeService.DemoStorageId);
+        data.Config?.KeyVaults?.RemoveAll(v =>
+            v.Id is DemoModeService.DemoKeyVaultDevId or DemoModeService.DemoKeyVaultProdId);
         if (data.Config?.SqlConfig is { } sql)
         {
             sql.Connections.RemoveAll(c =>
-                c.Id == DemoModeService.DemoSqlConnectionId || c.Id == DemoModeService.DemoSqlConnectionId2);
-            if (sql.ActiveConnectionId is DemoModeService.DemoSqlConnectionId or DemoModeService.DemoSqlConnectionId2)
+                c.Id is DemoModeService.DemoSqlConnectionId
+                    or DemoModeService.DemoSqlConnectionId2
+                    or DemoModeService.DemoSqlConnectionIdRestricted);
+            if (sql.ActiveConnectionId is DemoModeService.DemoSqlConnectionId
+                or DemoModeService.DemoSqlConnectionId2
+                or DemoModeService.DemoSqlConnectionIdRestricted)
                 sql.ActiveConnectionId = sql.Connections.FirstOrDefault()?.Id;
         }
 
@@ -257,6 +360,8 @@ public static class ConfigEndpoints
     /// Ids of SQL connections whose pooled client a profile save must drop: the entry was removed,
     /// or a connection-affecting field changed. <c>DisplayName</c>/<c>Active</c>/<c>AllowWrites</c>
     /// edits don't affect the pooled client, so those stay warm (same rule as the Redis diff).
+    /// <c>DeclaredObjects</c> does count: the pooled client holds the entry instance it was
+    /// built from, so an edit there must rebuild for GetSchemaAsync to merge the new list.
     /// </summary>
     internal static IEnumerable<string> StaleSqlConnectionIds(
         IReadOnlyList<SqlConnectionEntry>? before,
@@ -270,7 +375,8 @@ public static class ConfigEndpoints
 
     private static bool SameSqlConnection(SqlConnectionEntry a, SqlConnectionEntry b) =>
         string.Equals(a.Server, b.Server, StringComparison.OrdinalIgnoreCase) &&
-        string.Equals(a.Database, b.Database, StringComparison.OrdinalIgnoreCase);
+        string.Equals(a.Database, b.Database, StringComparison.OrdinalIgnoreCase) &&
+        a.DeclaredObjects.SequenceEqual(b.DeclaredObjects, StringComparer.OrdinalIgnoreCase);
 
     internal static IResult GetEnvironments(EnvironmentRepository repo) =>
         Results.Ok(new { repo.Environments, repo.UiState });

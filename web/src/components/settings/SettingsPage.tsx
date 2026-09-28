@@ -68,15 +68,22 @@ export function SettingsPage() {
 
     // Jump straight to a section requested from the command palette (each Settings sub-section is
     // registered there as a nav item carrying `state: { tab }`), mirroring the same `location.state`
-    // deep-link convention every other feature area's palette entries already use.
+    // deep-link convention every other feature area's palette entries already use. The `?tab=`
+    // search param does the same thing through the URL itself — the `swebkit://settings/<tab>`
+    // deep link and the demo tour land here.
     useEffect(() => {
         const state = location.state as { tab?: string } | null;
         if (state?.tab && TAB_IDS.has(state.tab)) {
             // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
             setActiveTab(state.tab as TabId);
-            navigate(location.pathname, { replace: true, state: null });
+            navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+            return;
         }
-    }, [location, navigate]);
+        const tabParam = new URLSearchParams(location.search).get("tab");
+        if (tabParam && TAB_IDS.has(tabParam) && tabParam !== activeTab) {
+            setActiveTab(tabParam as TabId);
+        }
+    }, [location, navigate, activeTab]);
 
     if (isLoading) {
         return (
@@ -128,7 +135,13 @@ export function SettingsPage() {
                         return (
                             <button
                                 key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
+                                onClick={() => {
+                                    setActiveTab(tab.id);
+                                    // Keep the URL honest so a copied link lands on the same tab.
+                                    const params = new URLSearchParams(location.search);
+                                    params.set("tab", tab.id);
+                                    navigate(`${location.pathname}?${params}`, { replace: true });
+                                }}
                                 data-testid={`settings-tab-${tab.id}`}
                                 className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
                                     activeTab === tab.id

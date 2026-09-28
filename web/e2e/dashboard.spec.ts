@@ -171,6 +171,40 @@ test.describe("Dashboard", () => {
     await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
   });
 
+  // The "PRD day" scenario is the tour's access-awareness story: the restricted demo SQL
+  // connection (demo-sql-prd) really has no VIEW DEFINITION, and the Access report's denied
+  // row is the same row a real user would see — nothing about the walkthrough is faked.
+  test("demo tour PRD-day stops land on the restricted SQL connection and the Access gaps report", async ({ page }) => {
+    await setDemoMode(page, true);
+    await page.goto("/");
+    await page.getByTestId("demo-tour-start").click();
+    await expect(page.getByTestId("demo-tour-card")).toBeVisible();
+
+    // The prd-day stops are near the end — walk forward until the SQL one is reached
+    // (bounded so a missing step fails fast instead of looping forever).
+    for (let i = 0; i < 20; i++) {
+      const title = await page.getByTestId("demo-tour-step-title").textContent();
+      if (title === "PRD day: read-only production") break;
+      await page.getByTestId("demo-tour-next").click();
+    }
+
+    await expect(page).toHaveURL(/\/sql\?connection=demo-sql-prd/);
+    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("PRD day: read-only production");
+    // The real metadata-hidden state of the restricted demo connection: the catalog is
+    // hidden (no VIEW DEFINITION), so the tree is declared-objects-only.
+    await expect(page.getByTestId("sql-schema-partial")).toBeVisible();
+
+    await page.getByTestId("demo-tour-next").click();
+    await expect(page).toHaveURL(/\/settings\?tab=access/);
+    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("Access gaps report");
+    await expect(page.getByTestId("access-report")).toBeVisible();
+    await expect(page.getByTestId("access-report")).toContainText("Denied");
+
+    // Finishing the last stop ends the tour.
+    await page.getByTestId("demo-tour-next").click();
+    await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
+  });
+
   test("runs cross-feature demo scenario in a focused visualization workspace", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("cross-feature-demo-button").click();

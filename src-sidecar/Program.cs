@@ -53,6 +53,7 @@ builder.Services.AddSingleton<UiStateRepository>();
 builder.Services.AddSingleton<SwebKit.Core.Services.AppStateService>();
 builder.Services.AddSingleton<SwebKit.Core.Abstractions.IAppEventBus, SwebKit.Core.Services.AppEventBus>();
 builder.Services.AddSingleton<ConfigurationBundleService>();
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.TeamPackService>();
 builder.Services.AddSingleton<SwebKit.Core.Services.SwebKitCollectionImporter>();
 builder.Services.AddSingleton<SwebKit.Core.Services.PostmanCollectionImporter>();
 builder.Services.AddSingleton<SwebKit.Core.Services.SwebKitEnvironmentImporter>();
@@ -302,7 +303,12 @@ builder.Services.AddHttpClient(HttpRequestExecutor.ClientName)
 
 // API client request execution pipeline
 builder.Services.AddSingleton<ICredentialStore, SidecarCredentialStore>();
-builder.Services.AddSingleton<IKeyVaultSecretResolver, SidecarKeyVaultResolver>();
+// Demo mode swaps resolution entirely (DemoModeService's canned vaults + the *prod*/*restricted*
+// denial rule); outside demo mode DemoAwareKeyVaultResolver is a transparent pass-through.
+builder.Services.AddSingleton<SidecarKeyVaultResolver>();
+builder.Services.AddSingleton<DemoAwareKeyVaultResolver>();
+builder.Services.AddSingleton<IKeyVaultSecretResolver>(
+    sp => sp.GetRequiredService<DemoAwareKeyVaultResolver>());
 builder.Services.AddSingleton<IVariableGeneratorService, VariableGeneratorService>();
 builder.Services.AddSingleton<IVariableSubstitutionService, VariableSubstitutionService>();
 builder.Services.AddSingleton<IAuthInheritanceResolver, AuthInheritanceResolver>();

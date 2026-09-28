@@ -18,6 +18,7 @@ export * from "./useWorkspaceTopology";
 export * from "./useWorkspaceWarmup";
 export * from "./useUpdateSearchParams";
 export * from "./useNow";
+export * from "./useUpdateCheck";
 
 // Re-exported from the original hooks.ts for callers that imported it from
 // "@/lib/hooks" instead of "@/lib/useNotifyMutation" directly.

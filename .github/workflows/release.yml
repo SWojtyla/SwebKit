@@ -54,6 +54,18 @@ jobs:
         working-directory: src-tauri
         run: node ../web/node_modules/@tauri-apps/cli/tauri.js build
 
+      # The app's notify-only update check reads this file from
+      # releases/latest/download/latest.json — a two-field manifest, no signatures:
+      # it is a notification source only, never an installer input.
+      - name: Generate update manifest (latest.json)
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.tag_name || github.ref_name }}"
+          @{
+            version = $tag.TrimStart('v')
+            url = "https://github.com/SWojtyla/SwebKit/releases/tag/$tag"
+          } | ConvertTo-Json | Set-Content -Path latest.json -Encoding utf8
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -63,3 +75,4 @@ jobs:
           files: |
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
+            latest.json
