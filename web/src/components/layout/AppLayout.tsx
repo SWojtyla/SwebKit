@@ -23,6 +23,7 @@ import {
     Keyboard,
     Waves,
     Feather,
+    Droplets,
     Clock,
     AlertTriangle,
 } from "lucide-react";
@@ -553,6 +554,9 @@ export function AppLayout() {
                             ) : theme === "letterpress-light" ||
                               theme === "letterpress-dark" ? (
                                 <Feather className="h-4 w-4" />
+                            ) : theme === "cascade-light" ||
+                              theme === "cascade-dark" ? (
+                                <Droplets className="h-4 w-4" />
                             ) : (
                                 <Moon className="h-4 w-4" />
                             )}
@@ -720,6 +724,10 @@ export function AppLayout() {
                                     ? "Letterpress · Day"
                                     : theme === "letterpress-dark"
                                       ? "Letterpress · Night"
+                                      : theme === "cascade-light"
+                                        ? "Cascade · Clear"
+                                        : theme === "cascade-dark"
+                                          ? "Cascade · Deep"
                                   : "Light"}{" "}
                         theme
                     </span>
