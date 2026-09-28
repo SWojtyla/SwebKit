@@ -4,6 +4,10 @@ import type {
     AccessReportEntry,
     AccessRequestArtifact,
     AccessRequestArtifactInput,
+    AccessRequestSendInput,
+    AccessRequestSendResult,
+    AccessRequestWebhookConfig,
+    AccessRequestWebhookInput,
 } from "../types";
 
 // ── Access-awareness report + request artifacts ──────────────────────────────
@@ -30,4 +34,29 @@ export async function requestAccessArtifact(
     input: AccessRequestArtifactInput,
 ): Promise<AccessRequestArtifact> {
     return apiSend<AccessRequestArtifact>("/api/access/request", "POST", input);
+}
+
+// ── Phase 4 — request webhook config + send ──────────────────────────────────
+
+/** The webhook config view — never carries the trigger URL itself (credential store),
+ * only whether one is stored. */
+export async function fetchAccessWebhook(signal?: AbortSignal): Promise<AccessRequestWebhookConfig> {
+    return apiFetch<AccessRequestWebhookConfig>("/api/access/webhook", { signal });
+}
+
+/** Saves webhook config; a non-empty `url` is written to the credential store,
+ * `clearUrl` removes it, neither leaves it alone. */
+export async function saveAccessWebhook(
+    input: AccessRequestWebhookInput,
+): Promise<AccessRequestWebhookConfig> {
+    return apiSend<AccessRequestWebhookConfig>("/api/access/webhook", "PUT", input);
+}
+
+/** Renders the template and POSTs it to the configured webhook. The result is honest:
+ * `sent` means the trigger accepted the call, not that access was granted. `dryRun`
+ * renders without sending (the settings test path). */
+export async function sendAccessRequest(
+    input: AccessRequestSendInput,
+): Promise<AccessRequestSendResult> {
+    return apiSend<AccessRequestSendResult>("/api/access/request/send", "POST", input);
 }

@@ -86,3 +86,43 @@ export interface AccessRequestArtifact {
     assignmentKind: string;
     webhookConfigured: boolean;
 }
+
+// ── Phase 4 — request webhook (Power Automate / Teams Power App trigger) ─────
+
+/** `GET /api/access/webhook` view. The trigger URL itself is never returned — it lives
+ * in the OS credential store; `hasUrl` reports whether a secret is actually there.
+ * `effectiveBodyTemplate` is the stored template or the built-in default. */
+export interface AccessRequestWebhookConfig {
+    enabled: boolean;
+    hasUrl: boolean;
+    urlCredentialKey: string | null;
+    bodyTemplate: string | null;
+    effectiveBodyTemplate: string;
+}
+
+/** `PUT /api/access/webhook` input. `url` replaces the stored secret; `clearUrl` deletes
+ * it; neither leaves the stored URL untouched. */
+export interface AccessRequestWebhookInput {
+    enabled: boolean;
+    bodyTemplate?: string | null;
+    url?: string;
+    clearUrl?: boolean;
+}
+
+export interface AccessRequestSendInput extends AccessRequestArtifactInput {
+    justification?: string;
+    /** Render the body and report back without POSTing — the settings "test" path. */
+    dryRun?: boolean;
+}
+
+/** Honest outcome of `POST /api/access/request/send`. `sent` means "the trigger accepted
+ * the call" — never that access was granted. `demo` marks the labeled simulated failure
+ * demo mode answers with instead of a real POST. */
+export interface AccessRequestSendResult {
+    sent: boolean;
+    dryRun: boolean;
+    demo: boolean;
+    statusCode: number | null;
+    error: string | null;
+    renderedBody: string | null;
+}

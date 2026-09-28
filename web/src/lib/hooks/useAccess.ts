@@ -1,8 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     fetchAccessReport,
+    fetchAccessWebhook,
     refreshAccessEntry,
     requestAccessArtifact,
+    saveAccessWebhook,
+    sendAccessRequest,
 } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
 import type {
@@ -10,6 +13,10 @@ import type {
     AccessReportEntry,
     AccessRequestArtifact,
     AccessRequestArtifactInput,
+    AccessRequestSendInput,
+    AccessRequestSendResult,
+    AccessRequestWebhookConfig,
+    AccessRequestWebhookInput,
 } from "../types";
 
 // ── Access-awareness report + request artifacts ──────────────────────────────
@@ -73,5 +80,41 @@ export function useAccessRequestArtifact() {
         mutationFn: requestAccessArtifact,
         onError: (error) =>
             notify("error", "Couldn't build access request", String(error)),
+    });
+}
+
+// ── Phase 4 — request webhook ────────────────────────────────────────────────
+
+/** The webhook config view for the Access settings card. `hasUrl` (not `enabled`)
+ * tells whether a trigger URL is actually stored in the OS credential store. */
+export function useAccessWebhook() {
+    return useQuery({
+        queryKey: ["access", "webhook"],
+        queryFn: ({ signal }) => fetchAccessWebhook(signal),
+        retry: false,
+    });
+}
+
+/** Saves webhook config and writes the returned view straight into the cache — the
+ * response *is* the new state, so no refetch round-trip. */
+export function useSaveAccessWebhook() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation<AccessRequestWebhookConfig, Error, AccessRequestWebhookInput>({
+        mutationFn: saveAccessWebhook,
+        onSuccess: (view) => qc.setQueryData(["access", "webhook"], view),
+        onError: (error) =>
+            notify("error", "Couldn't save webhook settings", String(error)),
+    });
+}
+
+/** POST /api/access/request/send — the result object carries the honest outcome
+ * (sent/failed + status); a rejected promise means the endpoint itself failed. */
+export function useSendAccessRequest() {
+    const { notify } = useNotification();
+    return useMutation<AccessRequestSendResult, Error, AccessRequestSendInput>({
+        mutationFn: sendAccessRequest,
+        onError: (error) =>
+            notify("error", "Couldn't send access request", String(error)),
     });
 }

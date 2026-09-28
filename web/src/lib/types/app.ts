@@ -35,6 +35,14 @@ export interface AppConfig {
     /** Legacy single-map storage — pre-maps profiles still carry nodes here and
      * the sidecar migrates them into `maps` on load/save. */
     topology: WorkspaceTopology;
+    /** Access-request webhook (Settings → Access). Persisted so whole-profile PUTs
+     * round-trip it; the trigger URL itself never lives here — only the
+     * credential-store key. */
+    accessRequest?: {
+        urlCredentialKey?: string | null;
+        bodyTemplate?: string | null;
+        enabled: boolean;
+    } | null;
 }
 
 // ── Workspace topology (workspace-intelligence Module 1) ────────────────────
@@ -68,12 +76,6 @@ export interface UserSettings {
     autoSaveRequests: boolean;
     agent: AgentConfig;
     logging: LoggingSettings;
-    /** Incremented once per app launch by the sidecar; drives the Fathom theme's unlock progress. */
-    sessionCount: number;
-    /** Sticky once true — the Fathom theme, once earned, stays available even if sessionCount is later reset. */
-    fathomUnlocked: boolean;
-    /** Set only via the hidden six-click gesture on the status bar version number — no other UI surfaces it. */
-    fathomDeveloperOverride: boolean;
     /** Port-forward pins set elsewhere in the app; surfaced here so saves from this page don't erase them. */
     pinnedPortForwards: Record<
         string,
@@ -87,9 +89,6 @@ export interface UserSettings {
         }[]
     >;
 }
-
-/** Sessions needed before Fathom unlocks. Mirrors UserSettings.FathomUnlockThreshold (server-enforced; this constant only drives the progress bar). */
-export const FATHOM_UNLOCK_THRESHOLD = 100;
 
 export interface LoggingSettings {
     enabled: boolean;

@@ -65,8 +65,18 @@ test.describe("Settings → Access report", () => {
         await expect(
             page.getByTestId("access-request-copy"),
         ).toBeVisible();
-        // Phase 4's webhook isn't wired — no Send button yet.
-        await expect(page.getByTestId("access-request-send")).toHaveCount(0);
+
+        // Phase 4: demo mode surfaces the Send path but never fires a real POST —
+        // clicking it must show the clearly-labeled simulated 403, not a fake success.
+        const send = page.getByTestId("access-request-send");
+        await expect(send).toBeVisible();
+        await send.click();
+        await expect(
+            page.getByTestId("access-request-send-demo"),
+        ).toContainText("Demo mode");
+        await expect(
+            page.getByTestId("access-request-send-demo"),
+        ).toContainText("403");
 
         await page.getByTestId("access-request-close").click();
         await expect(dialog).not.toBeVisible();

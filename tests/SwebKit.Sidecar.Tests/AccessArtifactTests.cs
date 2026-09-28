@@ -336,7 +336,8 @@ public class AccessRequestArtifactEndpointTests
         string capability) =>
         AccessEndpoints.CreateRequestArtifactAsync(
             new AccessRequestArtifactRequest(featureArea, connectionKey, capability),
-            profile, demo, new StubServiceProvider(principalContext), CancellationToken.None);
+            profile, demo, new StubServiceProvider(principalContext),
+            new FakeCredentialStore(), CancellationToken.None);
 
     private static AccessRequestArtifact Artifact(IResult result) =>
         Assert.IsType<Ok<AccessRequestArtifact>>(result).Value!;
@@ -482,7 +483,8 @@ public class AccessRequestArtifactEndpointTests
 
         var result = await AccessEndpoints.CreateRequestArtifactAsync(
             new AccessRequestArtifactRequest("", "x", "y"),
-            profile, demo, new StubServiceProvider(null), CancellationToken.None);
+            profile, demo, new StubServiceProvider(null),
+            new FakeCredentialStore(), CancellationToken.None);
 
         Assert.IsNotType<Ok<AccessRequestArtifact>>(result);
     }

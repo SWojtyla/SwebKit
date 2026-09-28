@@ -1,7 +1,17 @@
+using SwebKit.Core.Security;
+
 namespace SwebKit.Core.Domain;
 
 public class AppConfig
 {
+    /// <summary>
+    /// The access-request webhook for this environment (access-awareness Phase 4) — where
+    /// "Send request" on a denied access-report row POSTs. The trigger URL itself never
+    /// lands here (it embeds a SAS sig); only the credential-store key does. Null when
+    /// nothing is configured — the request dialog then offers copy only.
+    /// </summary>
+    public AccessRequestConfig? AccessRequest { get; set; }
+
     public string Name { get; set; } = "Default";
 
     /// <summary>Flags the profile as production — the shell shows a destructive-tinted PRD badge
