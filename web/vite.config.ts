@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
   clearScreen: false,
@@ -18,17 +18,17 @@ export default defineConfig({
   envPrefix: ["VITE_", "TAURI_"],
   build: {
     target: "es2022",
-    minify: "esbuild",
     sourcemap: false,
     rollupOptions: {
       output: {
         // Split the heaviest third-party deps out of the app chunk so no single
         // file trips Vite's 500 kB warning and the browser can cache them apart
-        // from application code.
-        manualChunks: {
-          react: ["react", "react-dom", "react-router"],
-          query: ["@tanstack/react-query"],
-          icons: ["lucide-react"],
+        // from application code. Vite 8 (Rolldown) only accepts the function form.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (/[\\/]node_modules[\\/](react|react-dom|react-router)[\\/]/.test(id)) return "react";
+          if (id.includes("node_modules/@tanstack/react-query/")) return "query";
+          if (id.includes("node_modules/lucide-react/")) return "icons";
         },
       },
     },
