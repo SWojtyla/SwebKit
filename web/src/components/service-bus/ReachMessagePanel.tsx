@@ -134,7 +134,7 @@ export function ReachMessagePanel({ nsId, entity, defaultTarget, onClose }: Prop
             data-testid="reach-message-overlay"
         >
             <div
-                className="w-2/3 max-w-2xl rounded-lg border bg-card shadow-xl"
+                className="w-2/3 max-w-2xl rounded-lg border bg-popover shadow-xl"
                 data-testid="reach-message-panel"
             >
                 <div className="flex items-center justify-between border-b px-4 py-3">

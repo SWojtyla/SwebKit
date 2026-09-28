@@ -119,7 +119,7 @@ export function DlqTriagePanel({ nsId, entity, onClose }: Props) {
             data-testid="dlq-triage-overlay"
         >
             <div
-                className="flex max-h-[80vh] w-2/3 max-w-3xl flex-col rounded-lg border bg-card shadow-xl"
+                className="flex max-h-[80vh] w-2/3 max-w-3xl flex-col rounded-lg border bg-popover shadow-xl"
                 data-testid="dlq-triage-panel"
             >
                 <div className="flex items-center justify-between border-b px-4 py-3">

@@ -117,7 +117,7 @@ export function ResultsGrid({
             </div>
             <div ref={containerRef} className="min-h-0 flex-1 overflow-auto">
                 <table className="w-full border-collapse text-xs">
-                    <thead className="sticky top-0 bg-card">
+                    <thead className="sticky top-0 bg-popover">
                         <tr>
                             {result.columns.map((col) => (
                                 <th

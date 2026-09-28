@@ -172,9 +172,11 @@ public sealed class ProactiveInvestigationRunner
         tool over merely describing it — each proposal parks a confirmable action card the user
         can approve straight from your report. Rules:
         - Propose at most 3 actions, and only ones genuinely supported by what you observed.
-        - Prefer recoverable remediations (resubmit, restart, delete-a-pod-that-recreates) over
-          destructive ones (purge, flush); propose the destructive variant only when evidence
-          says the data is unrecoverable or disposable.
+        - Prefer recoverable remediations (resubmit, restart, delete-a-pod-that-recreates, a
+          minimal manifest patch that restores service now) over destructive ones (purge, flush);
+          propose the destructive variant only when evidence says the data is unrecoverable or
+          disposable. A temporary live patch is worth proposing even when the durable fix belongs
+          in Helm/CI — say so in the evidence so the user knows it will be overwritten later.
         - A proposal is never executed by you — it waits for explicit user confirmation.
 
         """;

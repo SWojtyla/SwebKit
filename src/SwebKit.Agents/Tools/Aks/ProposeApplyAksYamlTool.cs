@@ -5,6 +5,11 @@ using SwebKit.Core.Services;
 
 namespace SwebKit.Agents.Tools.Aks;
 
+/// <remarks><see cref="BackgroundProposalEligible"/> is true: a background investigation often
+/// finds a concrete manifest-level fix (a bad env value, a wrong image tag) that the named
+/// restart/delete-pod actions can't express — and an incident wants the temporary live patch
+/// even when the durable fix lands later through Helm/CI. A call still only parks a
+/// <see cref="PendingAgentAction"/>; execution needs explicit user confirmation.</remarks>
 public sealed class ProposeApplyAksYamlTool(
     IAksClientFactory aksFactory,
     DemoAksClient demoAksClient,
@@ -13,6 +18,7 @@ public sealed class ProposeApplyAksYamlTool(
 {
     public string Name => "propose_apply_aks_yaml";
     public string Description => "Validates and proposes applying a Kubernetes YAML manifest. The user must confirm before it is applied.";
+    public bool BackgroundProposalEligible => true;
     public FeatureArea FeatureArea => FeatureArea.Aks;
     public ToolKind Kind => ToolKind.Mutate;
     public ToolRisk Risk => ToolRisk.High;
@@ -23,7 +29,7 @@ public sealed class ProposeApplyAksYamlTool(
           "properties": {
             "kind": { "type": "string", "description": "Kubernetes resource kind." },
             "name": { "type": "string", "description": "Resource name." },
-            "namespace": { "type": "string", "description": "Kubernetes namespace. Omit to use the UI selection or configured default." },
+            "namespace": { "type": "string", "description": "Kubernetes namespace. Omit to use the UI selection or configured default — always pass it explicitly in a background investigation, where no UI selection exists and the configured default may not be the alerting namespace." },
             "yaml": { "type": "string", "description": "Complete YAML manifest to apply." }
           },
           "required": ["kind", "name", "yaml"]

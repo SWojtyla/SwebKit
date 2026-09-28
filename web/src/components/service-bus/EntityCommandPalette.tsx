@@ -107,7 +107,7 @@ export function EntityCommandPalette({ open, nsId, onClose, onSelectEntity, onAc
     <PaletteOverlay
       overlayTestId="entity-command-palette"
       ariaLabel="Search entities"
-      dialogClassName="w-96 rounded-lg border bg-card shadow-lg"
+      dialogClassName="w-96 rounded-lg border bg-popover shadow-lg"
       paddingTopClassName="pt-20"
       onClose={onClose}
     >

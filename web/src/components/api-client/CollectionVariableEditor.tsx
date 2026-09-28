@@ -40,7 +40,7 @@ export function CollectionVariableEditor({ collection, onSave, onClose }: Collec
       {/* Wide enough for a real variable name beside its value, and capped so a
           collection with twenty of them scrolls instead of running off-screen. */}
       <div
-        className="flex max-h-[80vh] w-[min(56rem,92vw)] flex-col rounded-lg border bg-card shadow-lg"
+        className="flex max-h-[80vh] w-[min(56rem,92vw)] flex-col rounded-lg border bg-popover shadow-lg"
         data-testid="col-var-editor"
       >
         <div className="flex items-center justify-between border-b px-4 py-3">

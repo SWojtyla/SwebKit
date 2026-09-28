@@ -70,7 +70,7 @@ export function CollectionImportDialog({ onClose }: CollectionImportDialogProps)
       data-testid="collection-import-overlay"
     >
       <div
-        className="w-[480px] rounded-lg border bg-card shadow-lg"
+        className="w-[480px] rounded-lg border bg-popover shadow-lg"
         role="dialog"
         aria-modal="true"
         aria-label="Import collection"

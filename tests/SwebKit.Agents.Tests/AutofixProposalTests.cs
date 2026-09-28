@@ -76,6 +76,7 @@ public class AutofixProposalTests
         [
             new ProposeRestartAksDeploymentTool(appState, coordinator),
             new ProposeDeleteAksPodTool(appState, coordinator),
+            new ProposeApplyAksYamlTool(Mock.Of<IAksClientFactory>(), new DemoAksClient(), appState, coordinator),
             new ProposePurgeDeadLettersTool(appState, coordinator),
             new ProposeResubmitDeadLettersTool(appState, coordinator),
             new ProposeFlushRedisDatabaseTool(redisState, profiles, coordinator),
@@ -91,8 +92,9 @@ public class AutofixProposalTests
     [Fact]
     public void ExistingProposeTools_AreNotBackgroundEligible()
     {
-        // The whitelist is opt-in per tool — pre-existing propose_* tools (API client, blob copy,
-        // SQL execute, alert-rule creation) stay out of background runs.
+        // The whitelist is opt-in per tool — propose_* tools that don't remediate a live
+        // incident (SQL execute, alert-rule creation, API client, blob copy) stay out of
+        // background runs.
         Assert.False(((IAgentTool)new ProposeCreateAlertRuleTool(new AgentActionCoordinator())).BackgroundProposalEligible);
         Assert.False(((IAgentTool)new Tools.Sql.ProposeExecuteSqlTool(new AgentActionCoordinator())).BackgroundProposalEligible);
     }

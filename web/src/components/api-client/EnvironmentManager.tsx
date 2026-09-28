@@ -166,7 +166,7 @@ export function EnvironmentManager({
     >
       <div
         ref={dialogRef}
-        className="relative flex flex-col overflow-hidden rounded-lg border bg-card shadow-lg"
+        className="relative flex flex-col overflow-hidden rounded-lg border bg-popover shadow-lg"
         style={{ width: size.width, height: size.height, minWidth: MIN_SIZE.width, minHeight: MIN_SIZE.height }}
         data-testid="env-manager"
         role="dialog"

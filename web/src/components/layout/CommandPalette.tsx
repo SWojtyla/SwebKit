@@ -105,7 +105,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       overlayTestId="command-palette-overlay"
       dialogTestId="command-palette"
       ariaLabel="Command palette"
-      dialogClassName="w-full max-w-lg rounded-lg border bg-card shadow-lg"
+      dialogClassName="w-full max-w-lg rounded-lg border bg-popover shadow-lg"
       onClose={onClose}
       onOverlayKeyDown={(e) => {
         if (e.key === "Escape") {

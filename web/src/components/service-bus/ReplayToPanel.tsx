@@ -164,7 +164,7 @@ export function ReplayToPanel({
             data-testid="replay-to-overlay"
         >
             <div
-                className="w-2/3 max-w-2xl rounded-lg border bg-card shadow-xl"
+                className="w-2/3 max-w-2xl rounded-lg border bg-popover shadow-xl"
                 data-testid="replay-to-panel"
             >
                 <div className="flex items-center justify-between border-b px-4 py-3">

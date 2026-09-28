@@ -95,7 +95,7 @@ export function MessageListToolbar(p: FilterToolbarProps) {
                     Saved
                 </button>
                 {p.showSavedFilters && (
-                    <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded-md border bg-card p-2 shadow-lg">
+                    <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded-md border bg-popover p-2 shadow-lg">
                         {p.savedFilters.length === 0 ? (
                             <div className="text-xs text-muted-foreground">
                                 No saved filters

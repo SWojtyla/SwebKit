@@ -163,7 +163,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         <div className="relative">
             <button
                 onClick={() => setShowHistory(!showHistory)}
-                className="relative flex h-9 w-9 items-center justify-center rounded-md border bg-card text-sidebar-foreground shadow-sm transition-colors hover:bg-sidebar-active"
+                className="relative flex h-9 w-9 items-center justify-center rounded-md border bg-popover text-sidebar-foreground shadow-sm transition-colors hover:bg-sidebar-active"
                 title="Notifications"
                 data-testid="notification-bell"
             >
@@ -179,7 +179,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             </button>
             {showHistory && (
                 <div
-                    className="absolute bottom-full left-0 z-50 mb-2 w-80 rounded-lg border bg-card shadow-lg"
+                    className="absolute bottom-full left-0 z-50 mb-2 w-80 rounded-lg border bg-popover shadow-lg"
                     data-testid="notification-history"
                 >
                     <div className="flex items-center justify-between border-b px-3 py-2">
@@ -365,3 +365,4 @@ function NotificationIcon({ type }: { type: NotificationType }) {
         return <AlertCircle className="h-4 w-4 text-destructive" />;
     return <Info className="h-4 w-4 text-blue-500" />;
 }
+
