@@ -110,6 +110,11 @@ builder.Services.AddSingleton<SwebKit.Core.Abstractions.IMonitoringConnectionPoo
 // known-denial short-circuit.
 builder.Services.AddSingleton<SwebKit.Core.Security.IAccessReportService,
     SwebKit.Sidecar.Services.AccessReportService>();
+// Access-request webhook sender (Phase 4) — POSTs the rendered body template to the
+// configured trigger URL. The 15s timeout is the only policy: a wedged Power Automate
+// flow must time out honestly, not hang the dialog open.
+builder.Services.AddHttpClient<SwebKit.Sidecar.Services.AccessRequestSender>(
+    client => client.Timeout = SwebKit.Sidecar.Services.AccessRequestSender.Timeout);
 
 // Each signal source is registered both as its concrete type and as IAlertSignalSource so the
 // engine can resolve the full IAlertSignalSource list via DI.
@@ -242,20 +247,32 @@ builder.Services.AddSingleton<IAgentTool, ProposeExecuteSqlTool>();
 // registered IAgentTool, including this one). Registered last among IAgentTool entries purely for
 // readability — registration order has no bearing on the circular-dependency fix.
 builder.Services.AddSingleton<IAgentTool, InvestigateWorkspaceIssueTool>();
+// agent-colleague item 7 — cross-environment compare over workspace maps (LogicalName correlation).
+builder.Services.AddSingleton<IAgentTool, SwebKit.Agents.Tools.Compare.CompareEnvironmentsTool>();
 
 // Screen state (agent-workspace-awareness Module 1) — the store lives in SwebKit.Agents so the
 // tool can inject it; the endpoint publishes into it, get_screen_state reads it.
 builder.Services.AddSingleton<ScreenStateStore>();
 builder.Services.AddSingleton<IAgentTool, GetScreenStateTool>();
+builder.Services.AddSingleton<IAgentTool, GetScreenDetailTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeCreateAlertRuleTool>();
 builder.Services.AddSingleton<IAgentTool, ListAlertRulesTool>();
 // Lives in the sidecar — the alert-history ring buffer is held by MonitoringAlertEvaluationService.
 builder.Services.AddSingleton<IAgentTool, SwebKit.Sidecar.Services.GetAlertHistoryTool>();
+// Same sidecar precedent: merges the engine's ring buffer + durable history with the pooled
+// AKS client (agent-colleague item 6, "what changed since T?" timeline).
+builder.Services.AddSingleton<IAgentTool, SwebKit.Sidecar.Services.GetChangeTimelineTool>();
 
 builder.Services.AddSingleton<IAgentToolRegistry, AgentToolRegistry>();
 
 builder.Services.AddSingleton<SidecarAgentChatService>();
 builder.Services.AddSingleton<ExternalMcpToolSource>();
+
+// Thumbs-down → regression cases (agent-colleague item 5): the exchange buffer is what
+// POST /api/agent/feedback resolves an exchangeId against; the repository is the persisted
+// agent-feedback.json store behind it and the Settings list/export.
+builder.Services.AddSingleton<SwebKit.Sidecar.Services.AgentExchangeBuffer>();
+builder.Services.AddSingleton<SwebKit.Core.Configuration.AgentFeedbackRepository>();
 
 // Agent action confirm-before-execute flow (ai-augmented-app technical-plan.md Module 3). Wired
 // here as infrastructure even though nothing in the sidecar can propose an action yet — the API
@@ -458,12 +475,6 @@ if (RedisCredentialMigration.MigrateCaches(profileRepository.Config.RedisConfig,
 await app.Services.GetRequiredService<EnvironmentRepository>().LoadAsync();
 await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
 await userSettingsRepository.LoadAsync();
-// Fathom theme unlock progress: one increment per launch, and the unlock is sticky once earned
-// (a later SessionCount reset — e.g. via settings import — must not re-lock a theme the user
-// already reached, hence checking FathomUnlocked with ||= rather than recomputing from scratch).
-userSettingsRepository.Settings.SessionCount++;
-userSettingsRepository.Settings.FathomUnlocked |= userSettingsRepository.Settings.SessionCount >= UserSettings.FathomUnlockThreshold;
-await userSettingsRepository.SaveAsync();
 await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
 // Force-instantiate now so its constructor subscribes to MonitoringAlertEvaluationService.AlertFired
 // before the first alert can possibly fire — a plain AddSingleton registration alone only makes it
