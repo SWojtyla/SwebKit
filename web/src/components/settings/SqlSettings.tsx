@@ -16,13 +16,14 @@ import { ProfileListLayout } from "./ProfileListLayout";
 /** A connection is worth confirming removal of once it has a real server — an untouched
  * "New Connection" placeholder can go without the extra click (same rule RedisSettings uses). */
 function isConfigured(conn: SqlConnectionEntry): boolean {
-    return conn.server.trim() !== "";
+    // server is typed string but can arrive null from persisted profiles.json
+    return (conn.server ?? "").trim() !== "";
 }
 
 /** Grouping key for the collapsible server headers — connections are per-database entries,
  * so several rows can share one server. Entries still being typed group under "(no server)". */
 function serverGroupKey(conn: SqlConnectionEntry): string {
-    return conn.server.trim().toLowerCase() || "";
+    return (conn.server ?? "").trim().toLowerCase();
 }
 
 export function SqlSettings() {
@@ -331,8 +332,8 @@ function ConnectionRow({
     const test = useSqlAdHocTest();
     const browse = useSqlBrowseDatabases();
     const [formValues, setFormValues] = useState({
-        server: connection.server,
-        database: connection.database,
+        server: connection.server ?? "",
+        database: connection.database ?? "",
     });
     const [browseOpen, setBrowseOpen] = useState(false);
 
@@ -440,7 +441,13 @@ function ConnectionRow({
                 <button
                     onClick={() => test.mutate(formValues)}
                     disabled={test.isPending || !formValues.server.trim()}
-                    title={test.isPending ? "Testing…" : !formValues.server.trim() ? "Enter a server first" : undefined}
+                    title={
+                        test.isPending
+                            ? "Testing…"
+                            : !formValues.server.trim()
+                              ? "Enter a server first"
+                              : undefined
+                    }
                     className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                     data-testid={`sql-test-connection-${connection.id}`}
                 >
@@ -452,7 +459,13 @@ function ConnectionRow({
                         browse.mutate(formValues);
                     }}
                     disabled={browse.isPending || !formValues.server.trim()}
-                    title={browse.isPending ? "Loading…" : !formValues.server.trim() ? "Enter a server first" : undefined}
+                    title={
+                        browse.isPending
+                            ? "Loading…"
+                            : !formValues.server.trim()
+                              ? "Enter a server first"
+                              : undefined
+                    }
                     className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                     data-testid={`sql-browse-databases-${connection.id}`}
                 >
@@ -601,8 +614,13 @@ function DeclaredObjectsEditor({
     // silently saving a truncated list.
     useEffect(() => {
         return () => {
-            const { entries, invalid } = parseDeclaredObjectsText(draftRef.current);
-            if (invalid.length === 0 && entries.join("\n") !== committedRef.current) {
+            const { entries, invalid } = parseDeclaredObjectsText(
+                draftRef.current,
+            );
+            if (
+                invalid.length === 0 &&
+                entries.join("\n") !== committedRef.current
+            ) {
                 onCommitRef.current(entries);
             }
         };
@@ -629,10 +647,7 @@ function DeclaredObjectsEditor({
 
     return (
         <div>
-            <label
-                htmlFor={testId}
-                className="mb-1 block text-sm font-medium"
-            >
+            <label htmlFor={testId} className="mb-1 block text-sm font-medium">
                 Declared objects
             </label>
             <textarea
@@ -647,18 +662,25 @@ function DeclaredObjectsEditor({
                 data-testid={testId}
             />
             {error && (
-                <p className="mt-1 text-xs text-destructive" data-testid={`${testId}-error`}>
+                <p
+                    className="mt-1 text-xs text-destructive"
+                    data-testid={`${testId}-error`}
+                >
                     {error}
                 </p>
             )}
             <p className="mt-1 text-xs text-muted-foreground">
                 One <code>schema.name</code> per line (prefix a procedure with{" "}
-                <code>exec:</code>). For connections where catalog browsing is denied,
-                declared objects still appear in the schema tree — columns load lazily on
-                expand, needing only SELECT on the object.
+                <code>exec:</code>). For connections where catalog browsing is
+                denied, declared objects still appear in the schema tree —
+                columns load lazily on expand, needing only SELECT on the
+                object.
             </p>
             {value.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-1" data-testid={`${testId}-list`}>
+                <div
+                    className="mt-1 flex flex-wrap gap-1"
+                    data-testid={`${testId}-list`}
+                >
                     {value.map((entry) => (
                         <span
                             key={entry}
@@ -668,7 +690,9 @@ function DeclaredObjectsEditor({
                             {entry}
                             <button
                                 type="button"
-                                onClick={() => onCommit(value.filter((e) => e !== entry))}
+                                onClick={() =>
+                                    onCommit(value.filter((e) => e !== entry))
+                                }
                                 className="text-muted-foreground hover:text-destructive"
                                 aria-label={`Remove ${entry}`}
                                 data-testid={`${testId}-remove-${entry}`}

@@ -11,7 +11,8 @@ import { ProfileListLayout } from "./ProfileListLayout";
  * untouched "New Storage Account" placeholder can go without the extra click. */
 function isConfigured(account: StorageConfig): boolean {
     return (
-        account.accountName.trim() !== "" ||
+        // accountName is typed string but can arrive null from persisted profiles.json
+        (account.accountName ?? "").trim() !== "" ||
         !!account.connectionStringRef?.trim()
     );
 }

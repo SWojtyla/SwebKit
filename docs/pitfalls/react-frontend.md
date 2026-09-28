@@ -133,6 +133,20 @@ Enums cross the wire as their member names (`profiles.json` stores `"authMode": 
 When mirroring one in `types.ts`, copy the member names verbatim, and remember that one bad field
 fails the entire document, not just that property.
 
+### Persisted `profiles.json` can hand `null` to a `string`-typed field
+
+TypeScript types describe the schema, not the file — a profile written by an older version,
+hand-edited, or partially migrated can carry `null` (or omit the field) where the interface
+says `string`. Every `.trim()` / `.toLowerCase()` on such a field is a render-time crash the
+error boundary swallows into "Something went wrong" — e.g. a `DraftInput` seeded with a null
+`server` crashed on _unmount_ (`draftRef.current.trim()`), so the bug only surfaced when the
+user switched settings tabs, far from the offending row.
+
+Treat persisted config fields as `string | null` at runtime: coerce at the boundary
+(`value ?? ""` — `DraftInput` now does this internally) and keep "is this entry configured?"
+helpers null-safe (`(conn.server ?? "").trim()`). For new fields, prefer a C# `= ""` default
+over `string?` so the file never carries null in the first place.
+
 ### Settings fields write the whole profile, so commit on blur, not per keystroke
 
 The profile is a single document: every field's save is a full `PUT` plus an atomic rewrite of

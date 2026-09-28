@@ -9,9 +9,10 @@ import { ProfileListLayout } from "./ProfileListLayout";
 /** A namespace is worth confirming removal of once it has real configured data — an
  * untouched "New Namespace" placeholder can go without the extra click. */
 function isConfigured(ns: ServiceBusNamespace): boolean {
+    // typed string fields can arrive null from persisted profiles.json
     return (
-        ns.fullyQualifiedNamespace.trim() !== "" ||
-        ns.credentialKey.trim() !== ""
+        (ns.fullyQualifiedNamespace ?? "").trim() !== "" ||
+        (ns.credentialKey ?? "").trim() !== ""
     );
 }
 

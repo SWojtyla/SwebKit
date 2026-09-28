@@ -116,6 +116,8 @@ public partial class DemoAksClient
                     PodIP = $"10.16.{Rng.Next(30, 40)}.{Rng.Next(1, 255)}",
                     NodeName = $"aks-nodepool1-{37000000 + Rng.Next(100):D8}-vmss00000{Rng.Next(0, 6)}",
                     StartTime = DateTimeOffset.UtcNow.AddHours(-Rng.Next(1, 72)),
+                    OwnerKind = "ReplicaSet",
+                    OwnerName = $"{d.Name}-{suffix[..5]}",
                     Containers = [d.Name, "istio-proxy"],
                     Labels = new Dictionary<string, string>
                     {

@@ -11,100 +11,111 @@ import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
 /// Committing on blur keeps the save granularity at "one edit" instead of "one keystroke",
 /// which is also the granularity the undo story wants.
 
-export interface DraftInputProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "onBlur"> {
-  value: string;
-  /** Called with the final text, on blur or Enter, and only when it actually changed. */
-  onCommit: (value: string) => void;
-  /** Called with the in-progress text on every keystroke — for callers that need the
-   * current form value before commit (e.g. "test what I typed" actions). */
-  onDraftChange?: (value: string) => void;
+export interface DraftInputProps extends Omit<
+    InputHTMLAttributes<HTMLInputElement>,
+    "value" | "onChange" | "onBlur"
+> {
+    value: string;
+    /** Called with the final text, on blur or Enter, and only when it actually changed. */
+    onCommit: (value: string) => void;
+    /** Called with the in-progress text on every keystroke — for callers that need the
+     * current form value before commit (e.g. "test what I typed" actions). */
+    onDraftChange?: (value: string) => void;
 }
 
-export function DraftInput({ value, onCommit, onDraftChange, onKeyDown, ...rest }: DraftInputProps) {
-  const [draft, setDraft] = useState(value);
-  const committedRef = useRef(value);
+export function DraftInput({
+    value,
+    onCommit,
+    onDraftChange,
+    onKeyDown,
+    ...rest
+}: DraftInputProps) {
+    // Persisted profile JSON can deliver null for fields typed `string` — the draft must be a
+    // real string because the unmount/blur commit calls .trim() on it.
+    const safeValue = value ?? "";
+    const [draft, setDraft] = useState(safeValue);
+    const committedRef = useRef(safeValue);
 
-  // Latest draft and callback, for the unmount commit below — a cleanup closure captures
-  // the values from the render it was created in, which would be stale by then.
-  const draftRef = useRef(draft);
-  const onCommitRef = useRef(onCommit);
-  const skipNextBlurRef = useRef(false);
-  useEffect(() => {
-    draftRef.current = draft;
-    onCommitRef.current = onCommit;
-  });
+    // Latest draft and callback, for the unmount commit below — a cleanup closure captures
+    // the values from the render it was created in, which would be stale by then.
+    const draftRef = useRef(draft);
+    const onCommitRef = useRef(onCommit);
+    const skipNextBlurRef = useRef(false);
+    useEffect(() => {
+        draftRef.current = draft;
+        onCommitRef.current = onCommit;
+    });
 
-  // Re-sync when the stored value diverges from what we last committed — another save
-  // landing, a different record being rendered into the same input, or a commit that the
-  // parent normalized (e.g. clamped) back to the value already stored. Guarded on the last
-  // value we committed so a save echoing back our own text does not fight the cursor.
-  // Runs on every render, not [value]: a commit normalized back to the stored value leaves
-  // the prop byte-identical, so a change-guarded effect never fires and the raw typed text
-  // would stick while a different value was saved. The committedRef guard prevents both a
-  // setDraft loop and clobbering in-progress typing.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (value !== committedRef.current) {
-      committedRef.current = value;
-      setDraft(value);
-    }
-  });
+    // Re-sync when the stored value diverges from what we last committed — another save
+    // landing, a different record being rendered into the same input, or a commit that the
+    // parent normalized (e.g. clamped) back to the value already stored. Guarded on the last
+    // value we committed so a save echoing back our own text does not fight the cursor.
+    // Runs on every render, not [value]: a commit normalized back to the stored value leaves
+    // the prop byte-identical, so a change-guarded effect never fires and the raw typed text
+    // would stick while a different value was saved. The committedRef guard prevents both a
+    // setDraft loop and clobbering in-progress typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => {
+        if (safeValue !== committedRef.current) {
+            committedRef.current = safeValue;
+            setDraft(safeValue);
+        }
+    });
 
-  // Committing only on blur would lose an edit when the field goes away without one —
-  // switching settings tabs or navigating unmounts the input, and React fires no blur.
-  useEffect(() => {
-    return () => {
-      const next = draftRef.current.trim();
-      if (next !== committedRef.current) {
-        onCommitRef.current(next);
-      }
+    // Committing only on blur would lose an edit when the field goes away without one —
+    // switching settings tabs or navigating unmounts the input, and React fires no blur.
+    useEffect(() => {
+        return () => {
+            const next = draftRef.current.trim();
+            if (next !== committedRef.current) {
+                onCommitRef.current(next);
+            }
+        };
+    }, []);
+
+    const commit = () => {
+        // Settings values are identifiers (URLs, hosts, keys, names) — edge whitespace is never
+        // meaningful but is invisible in the box and breaks connection tests when pasted in.
+        const next = draft.trim();
+        if (next !== draft) {
+            setDraft(next);
+            draftRef.current = next;
+        }
+        if (next === committedRef.current) return;
+        committedRef.current = next;
+        onCommit(next);
     };
-  }, []);
 
-  const commit = () => {
-    // Settings values are identifiers (URLs, hosts, keys, names) — edge whitespace is never
-    // meaningful but is invisible in the box and breaks connection tests when pasted in.
-    const next = draft.trim();
-    if (next !== draft) {
-      setDraft(next);
-      draftRef.current = next;
-    }
-    if (next === committedRef.current) return;
-    committedRef.current = next;
-    onCommit(next);
-  };
-
-  return (
-    <input
-      {...rest}
-      value={draft}
-      onChange={(e) => {
-        setDraft(e.target.value);
-        // "Test what I typed" consumers get the value as it will be committed — trimmed —
-        // so a paste with a stray trailing space tests the same string that will be saved.
-        onDraftChange?.(e.target.value.trim());
-      }}
-      onBlur={() => {
-        if (skipNextBlurRef.current) {
-          skipNextBlurRef.current = false;
-          return;
-        }
-        commit();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          commit();
-          // Blur too, so Enter and click-away feel the same and the value is visibly settled.
-          (e.target as HTMLInputElement).blur();
-        } else if (e.key === "Escape") {
-          skipNextBlurRef.current = true;
-          draftRef.current = committedRef.current;
-          setDraft(committedRef.current);
-          (e.target as HTMLInputElement).blur();
-        }
-        onKeyDown?.(e);
-      }}
-    />
-  );
+    return (
+        <input
+            {...rest}
+            value={draft}
+            onChange={(e) => {
+                setDraft(e.target.value);
+                // "Test what I typed" consumers get the value as it will be committed — trimmed —
+                // so a paste with a stray trailing space tests the same string that will be saved.
+                onDraftChange?.(e.target.value.trim());
+            }}
+            onBlur={() => {
+                if (skipNextBlurRef.current) {
+                    skipNextBlurRef.current = false;
+                    return;
+                }
+                commit();
+            }}
+            onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                    commit();
+                    // Blur too, so Enter and click-away feel the same and the value is visibly settled.
+                    (e.target as HTMLInputElement).blur();
+                } else if (e.key === "Escape") {
+                    skipNextBlurRef.current = true;
+                    draftRef.current = committedRef.current;
+                    setDraft(committedRef.current);
+                    (e.target as HTMLInputElement).blur();
+                }
+                onKeyDown?.(e);
+            }}
+        />
+    );
 }

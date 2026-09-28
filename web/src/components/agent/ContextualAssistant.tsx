@@ -109,13 +109,25 @@ export function ContextualAssistant({
             setScope("feature");
     }, [workspaceScopeDisabled, scope, setScope]);
 
+    // Follow the tail of the conversation — but only while the user hasn't scrolled
+    // up themselves. Once they scroll away from the bottom, streaming tokens must not
+    // yank the view back down; sending a new message re-pins.
+    const pinnedToBottomRef = useRef(true);
+    const handleMessagesScroll = () => {
+        const el = scrollRef.current;
+        if (el)
+            pinnedToBottomRef.current =
+                el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    };
     useEffect(() => {
-        if (scrollRef.current)
+        if (scrollRef.current && pinnedToBottomRef.current)
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }, [messages, chat.isStreaming]);
 
     const sendText = (text: string, scopeOverride?: AgentChatScope) => {
         if (!text || chat.isStreaming) return;
+
+        pinnedToBottomRef.current = true;
 
         const assistantId = nextMsgId();
         setMessages((prev) => [
@@ -342,7 +354,7 @@ export function ContextualAssistant({
 
                     {pendingActionFeed.length > 0 && (
                         <div
-                            className="space-y-2 border-b px-4 py-3"
+                            className="max-h-[45%] space-y-2 overflow-y-auto border-b px-4 py-3"
                             data-testid="contextual-assistant-pending-actions"
                         >
                             {pendingActionFeed.map((item) =>
@@ -366,7 +378,7 @@ export function ContextualAssistant({
 
                     {acpPermissions.data && acpPermissions.data.length > 0 && (
                         <div
-                            className="space-y-2 border-b px-4 py-3"
+                            className="max-h-[30%] space-y-2 overflow-y-auto border-b px-4 py-3"
                             data-testid="contextual-assistant-acp-permissions"
                         >
                             {acpPermissions.data.map((p) => (
@@ -377,7 +389,8 @@ export function ContextualAssistant({
 
                     <div
                         ref={scrollRef}
-                        className="flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-4 py-3"
+                        onScroll={handleMessagesScroll}
+                        className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-4 py-3"
                         data-testid="contextual-assistant-messages"
                     >
                         {messages.length === 0 && (

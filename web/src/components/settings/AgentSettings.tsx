@@ -5,7 +5,10 @@ import {
     useUserSettings,
     useUpdateUserSettings,
 } from "@/lib/hooks";
-import { useAgentFeedbackList, useTestAgentProfile } from "@/lib/hooks/useAgent";
+import {
+    useAgentFeedbackList,
+    useTestAgentProfile,
+} from "@/lib/hooks/useAgent";
 import { useObservabilityResources } from "@/lib/hooks/useProfile";
 import { useNotification } from "@/components/layout/notification-context";
 import {
@@ -40,11 +43,12 @@ const providerLabel: Record<AgentProfile["provider"], string> = {
 /** A profile is worth confirming removal of once it has real configured data — an untouched
  * "New Profile" placeholder can go without the extra click. */
 function isConfigured(p: AgentProfile): boolean {
+    // typed string fields can arrive null from persisted profiles.json
     return (
-        p.baseUrl.trim() !== "" ||
-        p.model.trim() !== "" ||
-        p.credentialKey.trim() !== "" ||
-        p.command.trim() !== ""
+        (p.baseUrl ?? "").trim() !== "" ||
+        (p.model ?? "").trim() !== "" ||
+        (p.credentialKey ?? "").trim() !== "" ||
+        (p.command ?? "").trim() !== ""
     );
 }
 
@@ -375,7 +379,11 @@ export function AgentSettings() {
                                 <button
                                     onClick={() => runTest(i)}
                                     disabled={testingId === p.id}
-                                    title={testingId === p.id ? "Testing…" : undefined}
+                                    title={
+                                        testingId === p.id
+                                            ? "Testing…"
+                                            : undefined
+                                    }
                                     className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                                     data-testid={`agent-profile-test-${p.id}`}
                                 >
@@ -513,9 +521,9 @@ function AgentFeedbackSection() {
                 <div>
                     <h3 className="text-base font-semibold">Agent feedback</h3>
                     <p className="text-xs text-muted-foreground">
-                        Answers you marked unhelpful (👎 in chat), with the exchange context needed
-                        to reproduce them — kept to the last 200. Export them as JSON for prompt
-                        tuning.
+                        Answers you marked unhelpful (👎 in chat), with the
+                        exchange context needed to reproduce them — kept to the
+                        last 200. Export them as JSON for prompt tuning.
                     </p>
                 </div>
                 <button
@@ -540,14 +548,11 @@ function AgentFeedbackSection() {
                     className="text-xs text-muted-foreground"
                     data-testid="agent-feedback-empty"
                 >
-                    Nothing recorded yet — thumbs-down an assistant answer in chat to capture it
-                    here.
+                    Nothing recorded yet — thumbs-down an assistant answer in
+                    chat to capture it here.
                 </p>
             ) : (
-                <ul
-                    className="space-y-1.5"
-                    data-testid="agent-feedback-list"
-                >
+                <ul className="space-y-1.5" data-testid="agent-feedback-list">
                     {feedback.data.map((entry) => (
                         <li
                             key={entry.id}
@@ -559,11 +564,16 @@ function AgentFeedbackSection() {
                                     {new Date(entry.createdAt).toLocaleString()}
                                 </span>
                                 <span className="text-muted-foreground">
-                                    {entry.sentiment === "down" ? "👎" : entry.sentiment}
-                                    {entry.featureArea ? ` · ${entry.featureArea}` : ""}
+                                    {entry.sentiment === "down"
+                                        ? "👎"
+                                        : entry.sentiment}
+                                    {entry.featureArea
+                                        ? ` · ${entry.featureArea}`
+                                        : ""}
                                     {entry.toolsUsed.length > 0 &&
                                         ` · ${entry.toolsUsed.length} tool${entry.toolsUsed.length === 1 ? "" : "s"}`}
-                                    {!entry.exchangeFound && " · context expired"}
+                                    {!entry.exchangeFound &&
+                                        " · context expired"}
                                 </span>
                             </div>
                             <p className="mt-0.5 text-muted-foreground">
@@ -664,7 +674,11 @@ function ObservabilitySettings({
                         type="button"
                         onClick={() => resources.refetch()}
                         disabled={resources.isLoading}
-                        title={resources.isLoading ? "Loading resources…" : undefined}
+                        title={
+                            resources.isLoading
+                                ? "Loading resources…"
+                                : undefined
+                        }
                         className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
                         data-testid="observability-refresh"
                     >
@@ -807,11 +821,16 @@ function AcpProfileFields({
                     // First enabled extra ⇒ external tool calls are no longer gated by our
                     // propose/confirm pipeline, so flip the approval default on. The checkbox
                     // stays user-overridable below.
-                    const hadEnabled = profile.extraMcpServers.some((s) => s.enabled);
+                    const hadEnabled = profile.extraMcpServers.some(
+                        (s) => s.enabled,
+                    );
                     const hasEnabled = servers.some((s) => s.enabled);
                     onUpdate(
                         !hadEnabled && hasEnabled
-                            ? { extraMcpServers: servers, requireToolApproval: true }
+                            ? {
+                                  extraMcpServers: servers,
+                                  requireToolApproval: true,
+                              }
                             : { extraMcpServers: servers },
                     );
                 }}
@@ -834,8 +853,8 @@ function AcpProfileFields({
                 proposals you confirm separately. Filesystem and terminal access
                 stay disabled either way. It is switched on automatically the
                 first time you attach an external MCP server, since those tools
-                bypass the propose/confirm pipeline — you can still turn it
-                back off.
+                bypass the propose/confirm pipeline — you can still turn it back
+                off.
             </p>
         </>
     );
@@ -918,7 +937,9 @@ function McpServersEditor({
                             value={server.transport}
                             onChange={(e) =>
                                 patch(server.id, {
-                                    transport: e.target.value as "http" | "stdio",
+                                    transport: e.target.value as
+                                        | "http"
+                                        | "stdio",
                                 })
                             }
                             className="rounded-md border bg-card px-2 py-1 text-sm"
@@ -930,7 +951,9 @@ function McpServersEditor({
                         <button
                             type="button"
                             onClick={() =>
-                                onCommit(value.filter((s) => s.id !== server.id))
+                                onCommit(
+                                    value.filter((s) => s.id !== server.id),
+                                )
                             }
                             className="rounded-md border px-2 py-1 text-xs hover:bg-accent"
                             data-testid={`${testId}-remove-${server.id}`}
@@ -950,8 +973,12 @@ function McpServersEditor({
                             />
                             <KeyValueEditor
                                 value={server.headers}
-                                onCommit={(headers) => patch(server.id, { headers })}
-                                placeholder={"Headers, one per line (no secrets):\nKey=Value"}
+                                onCommit={(headers) =>
+                                    patch(server.id, { headers })
+                                }
+                                placeholder={
+                                    "Headers, one per line (no secrets):\nKey=Value"
+                                }
                                 testId={`${testId}-headers-${server.id}`}
                             />
                         </>
@@ -961,7 +988,9 @@ function McpServersEditor({
                                 <DraftInput
                                     type="text"
                                     value={server.command}
-                                    onCommit={(v) => patch(server.id, { command: v })}
+                                    onCommit={(v) =>
+                                        patch(server.id, { command: v })
+                                    }
                                     className="flex-1 rounded-md border bg-card px-2 py-1 text-sm"
                                     placeholder="Command (e.g. npx)"
                                     data-testid={`${testId}-command-${server.id}`}
@@ -969,7 +998,9 @@ function McpServersEditor({
                                 <DraftInput
                                     type="text"
                                     value={server.arguments}
-                                    onCommit={(v) => patch(server.id, { arguments: v })}
+                                    onCommit={(v) =>
+                                        patch(server.id, { arguments: v })
+                                    }
                                     className="flex-1 rounded-md border bg-card px-2 py-1 text-sm"
                                     placeholder="Arguments"
                                     data-testid={`${testId}-args-${server.id}`}
@@ -980,7 +1011,9 @@ function McpServersEditor({
                                 onCommit={(environmentVariables) =>
                                     patch(server.id, { environmentVariables })
                                 }
-                                placeholder={"Env vars, one per line:\nKEY=VALUE"}
+                                placeholder={
+                                    "Env vars, one per line:\nKEY=VALUE"
+                                }
                                 testId={`${testId}-env-${server.id}`}
                             />
                         </>
@@ -1043,5 +1076,3 @@ function EnvVarsEditor({
         />
     );
 }
-
-

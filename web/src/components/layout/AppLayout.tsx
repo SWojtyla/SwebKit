@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { CommandPalette } from "./CommandPalette";
 import { PinnedRail } from "./PinnedRail";
+import { setNotificationBellSlot } from "./notification-bell-slot";
 import { EnvironmentBadge } from "./EnvironmentBadge";
 import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
 import { GlobalAgentPanel } from "@/components/agent/GlobalAgentPanel";
@@ -42,10 +43,7 @@ import {
     useUpdateUserSettings,
     useWorkspaceWarmup,
 } from "@/lib/hooks";
-import {
-    classifyEnvironment,
-    environmentBadgeTitle,
-} from "@/lib/env-badge";
+import { classifyEnvironment, environmentBadgeTitle } from "@/lib/env-badge";
 import {
     loadViewPreference,
     saveViewPreference,
@@ -191,7 +189,9 @@ export function AppLayout() {
                 notify(
                     "info",
                     `${evt.ruleName} — silenced`,
-                    evt.suppressedBy ? `${evt.message} (${evt.suppressedBy})` : evt.message,
+                    evt.suppressedBy
+                        ? `${evt.message} (${evt.suppressedBy})`
+                        : evt.message,
                     undefined,
                     "/monitoring",
                 );
@@ -250,8 +250,6 @@ export function AppLayout() {
             );
         },
     );
-
-
 
     // The sidecar previously had no recovery path if it crashed mid-session: `restart_sidecar`
     // existed as a Tauri command but nothing ever called it, so a crash silently broke the app
@@ -350,13 +348,15 @@ export function AppLayout() {
 
     const contextTitle =
         navItems.find((n) => n.to === location.pathname)?.label ?? "SwebKit";
-    const areaHealth = ([
-        { id: "service-bus", label: "Service Bus" },
-        { id: "aks", label: "AKS" },
-        { id: "redis", label: "Redis" },
-        { id: "sql", label: "SQL" },
-        { id: "storage", label: "Storage" },
-    ] as const).map((area) => ({
+    const areaHealth = (
+        [
+            { id: "service-bus", label: "Service Bus" },
+            { id: "aks", label: "AKS" },
+            { id: "redis", label: "Redis" },
+            { id: "sql", label: "SQL" },
+            { id: "storage", label: "Storage" },
+        ] as const
+    ).map((area) => ({
         ...area,
         state: serviceHealth[area.id]?.connectivity ?? "checking",
     }));
@@ -451,6 +451,14 @@ export function AppLayout() {
                     ))}
                 </nav>
                 <PinnedRail collapsed={navCollapsed} />
+                {/* Docked notification bell: NotificationSystem portals the bell +
+                    history popover into this footer slot so it shares layout with
+                    the rail instead of floating over the last pinned item. */}
+                <div
+                    ref={setNotificationBellSlot}
+                    className="flex shrink-0 justify-center border-t p-2"
+                    data-testid="notification-bell-slot"
+                />
             </aside>
 
             <div className="flex flex-1 flex-col overflow-hidden">
@@ -590,44 +598,41 @@ export function AppLayout() {
                         className="flex min-w-0 items-center gap-3"
                         data-testid="status-bar-area-health"
                     >
-                        {areaHealth.map(
-                            ({ id, label, state }) => {
-                                const stateLabel = {
-                                    "not-configured": "Not configured",
-                                    checking: "Checking",
-                                    connected: "Connected",
-                                    degraded: "Degraded",
-                                    unavailable: "Unavailable",
-                                }[state];
-                                const stateClass =
-                                    state === "connected"
-                                        ? "fill-success text-success"
-                                        : state === "checking" || state === "degraded"
-                                          ? "fill-warning text-warning"
-                                          : state === "not-configured"
-                                            ? "fill-muted-foreground text-muted-foreground"
-                                            : "fill-destructive text-destructive";
+                        {areaHealth.map(({ id, label, state }) => {
+                            const stateLabel = {
+                                "not-configured": "Not configured",
+                                checking: "Checking",
+                                connected: "Connected",
+                                degraded: "Degraded",
+                                unavailable: "Unavailable",
+                            }[state];
+                            const stateClass =
+                                state === "connected"
+                                    ? "fill-success text-success"
+                                    : state === "checking" ||
+                                        state === "degraded"
+                                      ? "fill-warning text-warning"
+                                      : state === "not-configured"
+                                        ? "fill-muted-foreground text-muted-foreground"
+                                        : "fill-destructive text-destructive";
 
-                                return (
-                                    <div
-                                        key={id}
-                                        className="flex items-center gap-1"
-                                        data-testid={`status-bar-health-${id}`}
-                                        aria-label={`${label}: ${stateLabel}`}
-                                        title={`${label}: ${stateLabel}`}
-                                    >
-                                        <Circle
-                                            className={`h-1.5 w-1.5 ${stateClass}`}
-                                        />
-                                        <span>{label}</span>
-                                    </div>
-                                );
-                            },
-                        )}
+                            return (
+                                <div
+                                    key={id}
+                                    className="flex items-center gap-1"
+                                    data-testid={`status-bar-health-${id}`}
+                                    aria-label={`${label}: ${stateLabel}`}
+                                    title={`${label}: ${stateLabel}`}
+                                >
+                                    <Circle
+                                        className={`h-1.5 w-1.5 ${stateClass}`}
+                                    />
+                                    <span>{label}</span>
+                                </div>
+                            );
+                        })}
                     </div>
-                    {health?.version && (
-                        <span>v{health.version}</span>
-                    )}
+                    {health?.version && <span>v{health.version}</span>}
                     {isDemoMode && (
                         <span
                             className="text-warning"
@@ -676,7 +681,7 @@ export function AppLayout() {
                                         ? "Cascade · Clear"
                                         : theme === "cascade-dark"
                                           ? "Cascade · Deep"
-                                  : "Light"}{" "}
+                                          : "Light"}{" "}
                         theme
                     </span>
                     <span>SwebKit</span>

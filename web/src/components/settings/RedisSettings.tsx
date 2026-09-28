@@ -12,10 +12,11 @@ import { ProfileListLayout } from "./ProfileListLayout";
 /** A cache is worth confirming removal of once it has real configured data — an untouched
  * "New Cache" placeholder can go without the extra click. */
 function isConfigured(cache: RedisCacheEntry): boolean {
+    // typed string fields can arrive null from persisted profiles.json
     return (
-        cache.connectionString.trim() !== "" ||
-        cache.credentialKey.trim() !== "" ||
-        cache.cacheName.trim() !== ""
+        (cache.connectionString ?? "").trim() !== "" ||
+        (cache.credentialKey ?? "").trim() !== "" ||
+        (cache.cacheName ?? "").trim() !== ""
     );
 }
 
@@ -333,8 +334,8 @@ function CacheRow({
                         <code>
                             mycache.redis.cache.windows.net:6380,ssl=True,password=...
                         </code>
-                        . Saved into your OS credential store — the profile keeps
-                        only a key reference, never the secret itself.
+                        . Saved into your OS credential store — the profile
+                        keeps only a key reference, never the secret itself.
                     </p>
                 </div>
             )}

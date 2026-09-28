@@ -89,7 +89,7 @@ public class AksPodHealthSignalSourceTests
         AksPodParams = new AksPodAlertParams { Namespace = ns },
     };
 
-    private static PodInfo Pod(string name, string phase, string status, int restarts = 0) => new()
+    private static PodInfo Pod(string name, string phase, string status, int restarts = 0, string? ownerKind = null) => new()
     {
         Name = name,
         Namespace = "dev-briocomp",
@@ -98,6 +98,7 @@ public class AksPodHealthSignalSourceTests
         ReadyContainers = phase == "Running" ? 1 : 0,
         TotalContainers = 1,
         RestartCount = restarts,
+        OwnerKind = ownerKind,
     };
 
     private static AksPodHealthSignalSource Source(IAksClient? client) =>
@@ -160,5 +161,44 @@ public class AksPodHealthSignalSourceTests
 
         Assert.Equal(AlertSignalStatus.Skipped, result.Status);
         Assert.Equal("AKS not configured", result.Message);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_JobPodReapedBetweenTicks_DoesNotFire()
+    {
+        // The reported false positive: a CronJob's Job completes and the controller
+        // deletes its pod between two evaluations — the pod was still Running at the
+        // last tick, so the job-complete phase was never observed. Still not an alert.
+        var client = new RecordingAksClient();
+        client.EnqueuePods(Pod("sign-schedule-29843100-m72xh", "Running", "Running", ownerKind: "Job"));
+        client.EnqueuePods(); // pod reaped
+        var source = Source(client);
+        var rule = Rule("dev-briocomp");
+
+        var first = await source.EvaluateAsync(rule, CancellationToken.None);
+        var second = await source.EvaluateAsync(rule, CancellationToken.None);
+
+        Assert.Equal(AlertSignalStatus.Ok, first.Status);
+        Assert.Equal(AlertSignalStatus.Ok, second.Status);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_BareRunningPodDeleted_StillFires()
+    {
+        // The suppression is scoped: a bare (ownerless) pod that disappears while
+        // Running is still a real termination worth alerting on.
+        var client = new RecordingAksClient();
+        client.EnqueuePods(Pod("orphan-pod", "Running", "Running"));
+        client.EnqueuePods();
+        var source = Source(client);
+        var rule = Rule("dev-briocomp");
+
+        var first = await source.EvaluateAsync(rule, CancellationToken.None);
+        var second = await source.EvaluateAsync(rule, CancellationToken.None);
+
+        Assert.Equal(AlertSignalStatus.Ok, first.Status);
+        Assert.Equal(AlertSignalStatus.Firing, second.Status);
+        Assert.Contains("orphan-pod", second.Message);
+        Assert.Contains("PodTerminated", second.Detail);
     }
 }

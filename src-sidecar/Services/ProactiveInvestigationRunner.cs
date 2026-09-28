@@ -45,7 +45,8 @@ public sealed record ProactiveInvestigationResult(
 /// <item><b>Workspace scope:</b> every configured area's tools are visible (no context fence), the
 /// same visibility the "search across my whole workspace" escalation grants a user turn.</item>
 /// <item><b>Round + wall-clock caps:</b> <c>AgentModelRequest.MaxToolRounds</c> (same 5 the chat
-/// clients use) plus a hard wall-clock cancellation (90s default) — a slow or looping
+/// clients use) plus a hard wall-clock cancellation (5-minute default — long enough for a cold
+/// ACP process spawn + handshake to finish inside the budget) — a slow or looping
 /// investigation gives up rather than burning the provider.</item>
 /// </list>
 ///
@@ -57,7 +58,12 @@ public sealed record ProactiveInvestigationResult(
 /// </summary>
 public sealed class ProactiveInvestigationRunner
 {
-    private static readonly TimeSpan DefaultInvestigationBudget = TimeSpan.FromSeconds(90);
+    /// <summary>Five minutes, not the original 90s: an ACP-backed run spends part of the budget
+    /// on cold process spawn (<c>npx</c> download/start), the <c>initialize</c> handshake and
+    /// <c>session/new</c> before the agent makes its first tool call — a warm run fits in 90s,
+    /// a cold one reliably didn't, so the rich path silently degenerated to the shallow
+    /// single-shot fallback after every sidecar restart.</summary>
+    private static readonly TimeSpan DefaultInvestigationBudget = TimeSpan.FromMinutes(5);
 
     /// <summary>Same cap the chat clients use internally (AgentModelRequest.MaxToolRounds default).</summary>
     private const int MaxToolRounds = 5;
@@ -187,7 +193,7 @@ public sealed class ProactiveInvestigationRunner
     /// <see cref="IAgentTool"/>s (not just registry definitions) so the autofix gate can read
     /// <see cref="IAgentTool.BackgroundProposalEligible"/> without changing the orchestrator.
     /// <paramref name="budget"/> overrides the wall-clock cap (test seam — production uses the
-    /// 90-second default).</summary>
+    /// 5-minute default).</summary>
     public ProactiveInvestigationRunner(
         IAgentModelClient modelClient,
         IAgentToolRegistry toolRegistry,
@@ -294,6 +300,10 @@ public sealed class ProactiveInvestigationRunner
             UserMessage = BuildUserMessage(evt, startingResourceHint),
             Tools = tools,
             MaxToolRounds = MaxToolRounds,
+            // Same stamp the step-tracking executor carries — but Selection is also what the ACP
+            // client bakes into the MCP bridge URL, so without this an agent-side propose_* call
+            // would park actions that can't be linked back to this report.
+            Selection = selection,
         };
 
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -307,8 +317,10 @@ public sealed class ProactiveInvestigationRunner
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
+            // steps only counts calls through the local executor — ACP agents run their tool
+            // loop agent-side, so this reads 0 even when the agent was mid-investigation.
             _logger.LogWarning(
-                "Proactive investigation for rule {RuleId} ({RuleName}) hit the {Seconds}s budget — {Tools} tool calls made before cancellation.",
+                "Proactive investigation for rule {RuleId} ({RuleName}) hit the {Seconds}s budget — {Tools} locally-executed tool calls recorded before cancellation.",
                 evt.RuleId, evt.RuleName, (int)_budget.TotalSeconds,
                 steps.Count(s => s.Type == "tool_call"));
             return null;

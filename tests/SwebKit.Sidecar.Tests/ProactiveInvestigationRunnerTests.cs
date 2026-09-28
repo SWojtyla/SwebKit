@@ -446,4 +446,24 @@ public class ProactiveInvestigationRunnerTests
         Assert.Null(action.Origin);
         Assert.Null(action.OriginSessionId);
     }
+
+    [Fact]
+    public async Task InvestigateWithSessionId_RequestSelectionCarriesTheProvenanceStamp()
+    {
+        // For ACP profiles the local executor is bypassed — the model client bakes
+        // request.Selection into the MCP bridge URL instead. If the stamp only lived on the
+        // executor, agent-side propose_* calls would park actions the report can't find.
+        var read = new FakeInvestigationTool("fake_read", FeatureArea.Aks);
+        var modelClient = new ScriptedInvestigationModelClient();
+        var runner = BuildRunner(modelClient, new AgentToolRegistry([read]));
+
+        var result = await runner.InvestigateAsync(Fired(), "Aks/prod", map: null, CancellationToken.None,
+            sessionId: "proactive-r1-42");
+
+        Assert.NotNull(result);
+        var selection = modelClient.LastRequest!.Selection;
+        Assert.NotNull(selection);
+        Assert.Equal("investigation", selection![PendingActionProvenance.OriginKey]);
+        Assert.Equal("proactive-r1-42", selection[PendingActionProvenance.SessionIdKey]);
+    }
 }

@@ -80,6 +80,11 @@ public class PodInfo
     public string? PodIP { get; set; }
     public string? NodeName { get; set; }
     public DateTimeOffset? StartTime { get; set; }
+    /// <summary>Kind of the controller ownerReference (Job, ReplicaSet, StatefulSet…),
+    /// null for bare pods. Monitoring uses it to tell normal controller cleanup
+    /// (e.g. a CronJob deleting a finished Job's pod) from a real termination.</summary>
+    public string? OwnerKind { get; set; }
+    public string? OwnerName { get; set; }
     public List<string> Containers { get; set; } = [];
     public Dictionary<string, string> Labels { get; set; } = [];
     public string ReadyDisplay => $"{ReadyContainers}/{TotalContainers}";

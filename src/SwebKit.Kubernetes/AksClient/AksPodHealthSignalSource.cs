@@ -28,7 +28,7 @@ public sealed class AksPodHealthSignalSource : PodSignalSourceBase
         {
             _snapshots[rule.Id] = pods.ToDictionary(
                 p => p.Name,
-                p => new PodSnapshot(p.Phase, p.ReadyContainers, p.TotalContainers, p.RestartCount));
+                p => new PodSnapshot(p.Phase, p.ReadyContainers, p.TotalContainers, p.RestartCount, p.OwnerKind));
         }
 
         if (diffs.Count == 0)

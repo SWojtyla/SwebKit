@@ -417,6 +417,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                     .Where(t => t?.FinishedAt is not null)
                     .OrderByDescending(t => t!.FinishedAt)
                     .FirstOrDefault();
+                var (ownerKind, ownerName) = GetPodOwner(p.Metadata);
 
                 return new PodInfo
                 {
@@ -433,11 +434,30 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                     PodIP = p.Status?.PodIP,
                     NodeName = p.Spec?.NodeName,
                     StartTime = p.Status?.StartTime.HasValue == true ? new DateTimeOffset(p.Status.StartTime.Value) : null,
+                    OwnerKind = ownerKind,
+                    OwnerName = ownerName,
                     Containers = p.Spec?.Containers?.Select(c => c.Name).ToList() ?? [],
                     Labels = p.Metadata.Labels is not null ? new Dictionary<string, string>(p.Metadata.Labels) : []
                 };
             }).ToList();
         }).ConfigureAwait(false);
+    }
+
+    /// <summary>The pod's managing controller from <c>ownerReferences</c> — controller=true
+    /// first, then any named owner (same precedence as <c>GetJobSource</c>). A CronJob's pod
+    /// reports owner Kind=Job; that is enough to tell scheduled cleanup from a real
+    /// termination without a second API lookup.</summary>
+    private static (string? Kind, string? Name) GetPodOwner(V1ObjectMeta? metadata)
+    {
+        var ownerReference = metadata?.OwnerReferences?
+            .FirstOrDefault(owner => owner.Controller == true &&
+                                     !string.IsNullOrWhiteSpace(owner.Kind) &&
+                                     !string.IsNullOrWhiteSpace(owner.Name))
+            ?? metadata?.OwnerReferences?
+                .FirstOrDefault(owner => !string.IsNullOrWhiteSpace(owner.Kind) &&
+                                         !string.IsNullOrWhiteSpace(owner.Name));
+
+        return ownerReference is null ? (null, null) : (ownerReference.Kind, ownerReference.Name);
     }
 
     /// <summary>
