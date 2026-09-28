@@ -13,6 +13,7 @@ import {
     createMonitoringSilence,
     deleteMonitoringSilence,
     muteMonitoringRule,
+    getMonitoringHistorySummary,
 } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
 import { formatLocalDateTime } from "@/lib/datetime";
@@ -83,6 +84,17 @@ export function useMonitoringHistory() {
         queryKey: ["monitoring", "history"],
         queryFn: ({ signal }) => getMonitoringHistory(signal),
         refetchInterval: 15_000,
+    });
+}
+
+/** Ops-dashboard aggregate over the durable history (monitoring-closed-loop item 4):
+ * firings/hour, severity split, open incidents, MTTR. The Ops tab mounts the consumer,
+ * so no `enabled` gate is needed — it only fetches while visible. */
+export function useMonitoringHistorySummary(windowHours: number) {
+    return useQuery({
+        queryKey: ["monitoring", "history-summary", windowHours],
+        queryFn: ({ signal }) => getMonitoringHistorySummary(windowHours, signal),
+        refetchInterval: 30_000,
     });
 }
 

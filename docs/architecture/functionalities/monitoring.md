@@ -110,6 +110,7 @@ that validation — or via the agent tool — can carry one.
 | `/api/monitoring/rules/{id}` | PUT    | Update a rule (triggers engine reload)                                                             |
 | `/api/monitoring/rules/{id}` | DELETE | Delete a rule (triggers engine reload)                                                             |
 | `/api/monitoring/history`    | GET    | Durable history merged with the ring buffer (deduped, newest first)                               |
+| `/api/monitoring/history/summary` | GET | Ops aggregate over the durable store (`?windowHours=`, default 24, max 168): firings/hour buckets, severity counts, open incidents, MTTR |
 | `/api/monitoring/silences`   | GET/POST/DELETE | Silence windows (global or per-rule)                                              |
 | `/api/monitoring/rules/{id}/mute` | POST | Mute/unmute a rule until a timestamp (past `until` normalizes to unmuted)                        |
 | `/api/monitoring/stream`     | GET    | SSE: `alertFired`, `alertResolved`, `evaluationCompleted`, `proactiveInsightReady`, `proactiveInsightStatus` frames |
@@ -130,7 +131,30 @@ All components live in `web/src/components/monitoring/`.
 | `RuleMuteControl.tsx`      | Portal menu: mute 1h / until tomorrow / indefinite, or unmute        |
 | `SilencesSection.tsx`      | Create/list/delete maintenance windows on the Rules tab             |
 | `AlertHistoryPanel.tsx`    | Durable + live history (Fired/Resolved/Suppressed badges); its snooze button performs a real mute |
+| `OpsDashboardPanel.tsx`    | Ops tab: firings/hour chart, severity split, open incidents, MTTR (CSS bars, no chart dep) |
 | `ProactiveInsightCard.tsx` | Completed background AI investigation: hypothesis + evidence bullets |
+
+## Ops dashboard
+
+`GET /api/monitoring/history/summary` (`AlertHistorySummaryBuilder`, src-sidecar — pure,
+I/O-free aggregation) powers the Monitoring page's **Ops** tab (`?tab=ops`). It reads only
+the durable store — the volatile ring buffer is deliberately excluded so the dashboard means
+"the persisted record says". Windowed counts (firings/hour buckets, severity split, resolved)
+scope to `?windowHours=`; open incidents and the incident state machine run over *all*
+retained rows because "still open" is a property of now, not of the selected range.
+
+Two honesty constraints are load-bearing:
+
+- **Incidents reconstruct like the engine's `_openIncidents`**: one open incident per rule —
+  a firing opens it, later firings are cooldown re-notifications (`refireCount`), the first
+  `Resolved` closes it. MTTR is measured from the incident's *first* firing and only over
+  pairs whose resolve landed inside the window. A `Resolved` with no retained opening firing
+  (retention-cap eviction, or a firing written before the durable store existed) is counted
+  under `orphanedResolutions`, never paired — the summary doesn't invent durations.
+- **Detection latency is labelled, not measured**: `detectionLatencyBasis` is
+  `"rule-eval-interval"` — a firing's `at` is when the engine *observed* the breach, up to
+  one eval interval late. Open incidents carry `ruleIntervalSeconds` as that bound (null for
+  deleted rules); the tab renders it as "≤ X detection".
 
 ## Proactive AI investigation (agent-workspace-awareness)
 

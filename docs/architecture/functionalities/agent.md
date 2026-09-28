@@ -103,7 +103,13 @@ This provider-level permission is separate from SwebKit's `propose_*` domain-act
 `ProactiveInsightService` subscribes to fired Monitoring alerts whose `AiInvestigationEnabled` flag is on. It:
 
 1. Matches the fired resource against configured workspace maps when possible.
-2. Runs a workspace-scoped, ask-mode investigation with mutation tools structurally unavailable.
+2. Runs a workspace-scoped, ask-mode investigation with mutation tools structurally
+   unavailable — with one opt-in exception: rules whose `AutoFixProposalsEnabled` flag is on
+   (default false) additionally expose the tool-declared `BackgroundProposalEligible`
+   whitelist of `propose_*` tools (pod restart/delete, DLQ purge/resubmit, Redis flush).
+   Those tools only park a `PendingAgentAction` stamped with the investigation's
+   `Origin`/`OriginSessionId` and linked back to the report via `PendingActionIds` — nothing
+   executes without explicit user confirmation on the pending-action card.
 3. Enforces tool-round and wall-clock budgets.
 4. Persists a report and seeds a dedicated conversation session.
 5. Publishes `InsightReady` over Monitoring SSE.
@@ -148,7 +154,10 @@ The always-mounted shell subscription emits the OS notification/in-app toast. Da
 
 - Never place provider credentials or resource secrets in stream events, prompts, screen state, or logs.
 - Mutation tools must remain proposal-only until explicit confirmation.
-- `ask` mode and proactive investigations must not expose mutation tools.
+- `ask` mode must not expose mutation tools. Proactive investigations expose none by
+  default; an opted-in rule (`AutoFixProposalsEnabled`) may expose only the tool-declared
+  `BackgroundProposalEligible` `propose_*` whitelist, which parks confirmable pending
+  actions rather than mutating — nothing executes without explicit user confirmation.
 - ACP tool access must use the resolved allowlist; never expose the entire registry by default.
 - Keep workspace/screen/tool context bounded to protect provider context limits.
 - External ACP processes are user-configured executables and must not receive filesystem/terminal client capabilities from SwebKit.

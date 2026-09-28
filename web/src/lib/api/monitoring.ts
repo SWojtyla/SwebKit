@@ -214,6 +214,78 @@ export async function getMonitoringHistory(
     return apiFetch<AlertHistoryEntry[]>("/api/monitoring/history", { signal });
 }
 
+// ── Ops summary (monitoring-closed-loop item 4) ──────────────────────────────
+
+/** One hour of the firings timeline. `fired` = firings that notified the user;
+ * `suppressed` = firings a silence/mute swallowed (still real firings). */
+export interface AlertHistoryBucket {
+    bucketStartUtc: string;
+    fired: number;
+    suppressed: number;
+}
+
+/** An incident with no closing Resolved row in retained history — "open" means
+ * "no recovery on record": still firing, recovered while the app was off, or the
+ * resolve row was trimmed by retention. `ruleIntervalSeconds` is the honest
+ * detection-latency bound; null when the rule was deleted. */
+export interface OpenAlertIncident {
+    ruleId: string;
+    ruleName: string;
+    severity: AlertSeverity;
+    sinceUtc: string;
+    message: string;
+    suppressed: boolean;
+    refireCount: number;
+    ruleIntervalSeconds?: number | null;
+}
+
+/** MTTR over fired→resolved pairs whose resolve landed inside the window.
+ * Null stats when no pair qualified — never a fabricated "0s". */
+export interface AlertHistoryMttr {
+    resolvedPairCount: number;
+    meanSeconds?: number | null;
+    medianSeconds?: number | null;
+    maxSeconds?: number | null;
+    /** Resolved rows whose opening firing predates retained history — counted,
+     * never paired, because their true duration is unrecoverable. */
+    orphanedResolutions: number;
+}
+
+/** Response of `GET /api/monitoring/history/summary` — the Ops tab's aggregate
+ * over the durable monitoring-history.json record. */
+export interface AlertHistorySummary {
+    windowHours: number;
+    windowStartUtc: string;
+    generatedAtUtc: string;
+    /** Exactly `windowHours` buckets, oldest first. */
+    firingsPerHour: AlertHistoryBucket[];
+    firedCount: number;
+    suppressedCount: number;
+    resolvedCount: number;
+    /** Severity name → firing count (Fired + Suppressed in-window). */
+    severityCounts: Record<string, number>;
+    /** All unresolved incidents in retained history (not just the window),
+     * capped at 100 rows — `openIncidentCount` is the true total. */
+    openIncidents: OpenAlertIncident[];
+    openIncidentCount: number;
+    mttr: AlertHistoryMttr;
+    /** "rule-eval-interval" — detection latency is bounded by each rule's eval
+     * interval, not measured from history. */
+    detectionLatencyBasis: string;
+    detectionLatencyNote: string;
+}
+
+export async function getMonitoringHistorySummary(
+    windowHours?: number,
+    signal?: AbortSignal,
+): Promise<AlertHistorySummary> {
+    const qs = windowHours ? `?windowHours=${windowHours}` : "";
+    return apiFetch<AlertHistorySummary>(
+        `/api/monitoring/history/summary${qs}`,
+        { signal },
+    );
+}
+
 // ── Silences + per-rule mute (monitoring-closed-loop item 3) ─────────────────
 
 export async function getMonitoringSilences(

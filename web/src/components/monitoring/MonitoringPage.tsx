@@ -39,6 +39,7 @@ import { AlertHistoryPanel } from "./AlertHistoryPanel";
 import { SilencesSection } from "./SilencesSection";
 import { ProactiveInsightCard } from "./ProactiveInsightCard";
 import { AiReportsPanel } from "./AiReportsPanel";
+import { OpsDashboardPanel } from "./OpsDashboardPanel";
 import { buildPrefilledRuleDraft } from "./prefillRule";
 
 // Keeps a burst of proactive insights from pushing the tab strip below the fold — a "+N more"
@@ -75,19 +76,21 @@ export function MonitoringPage() {
     const location = useLocation();
     const queryClient = useQueryClient();
 
-    // `?tab=` keeps the rules/history/reports split deep-linkable and restorable;
+    // `?tab=` keeps the rules/history/ops/reports split deep-linkable and restorable;
     // `?report=` selects one persisted AI report inside the reports tab.
     const [searchParams] = useSearchParams();
     const updateParams = useUpdateSearchParams();
-    const activeTab: "rules" | "history" | "reports" =
+    const activeTab: "rules" | "history" | "ops" | "reports" =
         searchParams.get("tab") === "history"
             ? "history"
-            : searchParams.get("tab") === "reports"
-              ? "reports"
-              : "rules";
+            : searchParams.get("tab") === "ops"
+              ? "ops"
+              : searchParams.get("tab") === "reports"
+                ? "reports"
+                : "rules";
     const selectedReportId = searchParams.get("report");
     const setActiveTab = useCallback(
-        (tab: "rules" | "history" | "reports") =>
+        (tab: "rules" | "history" | "ops" | "reports") =>
             updateParams({
                 tab: tab === "rules" ? null : tab,
                 // Keep a selected report when landing on the reports tab; clear it
@@ -477,7 +480,7 @@ export function MonitoringPage() {
             </div>
 
             <div className="flex gap-1 border-b px-6">
-                {(["rules", "history", "reports"] as const).map((tab) => (
+                {(["rules", "history", "ops", "reports"] as const).map((tab) => (
                     <button
                         key={tab}
                         data-testid={`monitoring-tab-${tab}`}
@@ -492,7 +495,9 @@ export function MonitoringPage() {
                             ? `Alert Rules (${rules.length})`
                             : tab === "history"
                               ? `Alert History (${mergedHistory.length})`
-                              : `AI Reports (${insightReports.length})`}
+                              : tab === "ops"
+                                ? "Ops"
+                                : `AI Reports (${insightReports.length})`}
                     </button>
                 ))}
             </div>
@@ -571,6 +576,8 @@ export function MonitoringPage() {
                             mutedUntilByRule={mutedUntilByRule}
                         />
                     ))}
+
+                {activeTab === "ops" && <OpsDashboardPanel />}
 
                 {activeTab === "reports" && (
                     <AiReportsPanel

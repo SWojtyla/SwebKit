@@ -7,6 +7,11 @@ namespace SwebKit.Sidecar.Endpoints;
 
 public static class MonitoringEndpoints
 {
+    /// <summary>Defaults/bounds for <c>/history/summary?windowHours=</c> — 24h default,
+    /// 7-day ceiling (168 hourly buckets stays a small payload and a readable chart).</summary>
+    internal const int DefaultSummaryWindowHours = 24;
+    internal const int MaxSummaryWindowHours = 168;
+
     public static void MapMonitoringEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/monitoring");
@@ -33,9 +38,11 @@ public static class MonitoringEndpoints
 
         group.MapPost("/rules/{id}/mute", MuteRuleAsync);
 
-        // ── History snapshot ────────────────────────────────────────────────
+        // ── History snapshot + ops summary ──────────────────────────────────
 
         group.MapGet("/history", GetHistory);
+
+        group.MapGet("/history/summary", GetHistorySummaryAsync);
 
         // ── Persisted AI insight reports (ai-insight-reports) ───────────────
 
@@ -174,6 +181,27 @@ public static class MonitoringEndpoints
             At = a.FiredAt,
             Message = a.SuppressedBy is { } by ? $"{a.Message} (silenced: {by})" : a.Message,
         };
+    }
+
+    /// <summary>Aggregated ops summary (monitoring-closed-loop item 4) over the durable store:
+    /// firings-per-hour buckets, severity distribution, open incidents, and MTTR over
+    /// fired→resolved pairs — with honest gaps (unpairable resolves reported as orphans,
+    /// detection latency labelled as the eval-interval bound, never measured). Reads the
+    /// persisted record only; the volatile ring buffer is deliberately excluded so the
+    /// dashboard means "the durable record says".</summary>
+    internal static async Task<Ok<AlertHistorySummary>> GetHistorySummaryAsync(
+        int? windowHours,
+        IAlertHistoryRepository history,
+        IAlertRuleRepository rules)
+    {
+        var hours = Math.Clamp(
+            windowHours ?? DefaultSummaryWindowHours, 1, MaxSummaryWindowHours);
+        var entries = await history.GetAllAsync();
+        var intervals = (await rules.GetAllAsync())
+            .GroupBy(r => r.Id, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().IntervalSeconds, StringComparer.Ordinal);
+        return TypedResults.Ok(AlertHistorySummaryBuilder.Build(
+            entries, hours, DateTimeOffset.UtcNow, intervals));
     }
 
     // ── Silences + per-rule mute (monitoring-closed-loop item 3) ──────────────

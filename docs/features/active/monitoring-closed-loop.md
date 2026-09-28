@@ -99,8 +99,9 @@ background run is safe-by-construction: worst case is a parked card.
       opt-in (default off) + runner plumbing
 - [x] Origin stamping (`Origin`/`OriginSessionId`) + `pendingActionProposed`
       SSE frame + report card linkage (`PendingActionIds` on the report)
-- [ ] Ops tab + history summary endpoint
-- [ ] `AGENT.md`/`monitoring.md` posture revision documented
+- [x] Ops tab + history summary endpoint (`/api/monitoring/history/summary`,
+      `AlertHistorySummaryBuilder`, `OpsDashboardPanel` on `?tab=ops`)
+- [x] `AGENT.md`/`monitoring.md` posture revision documented
 - [ ] Validation pending: the autofix slice landed from an interrupted agent
       run — targeted tests green (Agents 42, sidecar 57) but the full matrix
       (all four .NET suites + vitest + playwright monitoring/service-bus)
