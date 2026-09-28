@@ -354,12 +354,34 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                 ReadyReplicas = d.Status?.ReadyReplicas ?? 0,
                 Status = DeriveDeploymentStatus(d.Status?.Conditions),
                 ImageTag = ExtractImageTag(d.Spec?.Template?.Spec?.Containers?.FirstOrDefault()?.Image),
+                LastUpdateTime = DeriveDeploymentLastUpdateTime(d.Status?.Conditions),
                 Labels = d.Metadata.Labels is not null ? new Dictionary<string, string>(d.Metadata.Labels) : [],
                 SelectorLabels = d.Spec?.Selector?.MatchLabels is not null
                     ? new Dictionary<string, string>(d.Spec.Selector.MatchLabels)
                     : []
             }).ToList();
         }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The newest timestamp across a deployment's status conditions — both
+    /// <c>lastUpdateTime</c> (refreshed whenever the controller rewrites the condition) and
+    /// <c>lastTransitionTime</c> (set only on status flips) count as "the deployment changed".
+    /// Returns null when no condition carries either timestamp.
+    /// </summary>
+    private static DateTimeOffset? DeriveDeploymentLastUpdateTime(
+        IEnumerable<k8s.Models.V1DeploymentCondition>? conditions)
+    {
+        if (conditions is null) return null;
+        DateTime? latest = null;
+        foreach (var c in conditions)
+        {
+            if (c.LastUpdateTime is { } u && (latest is null || u > latest))
+                latest = u;
+            if (c.LastTransitionTime is { } t && (latest is null || t > latest))
+                latest = t;
+        }
+        return latest is { } l ? new DateTimeOffset(l) : null;
     }
 
     private static string DeriveDeploymentStatus(IEnumerable<k8s.Models.V1DeploymentCondition>? conditions)
@@ -765,6 +787,67 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         }
 
         return releases.Values.OrderBy(r => r.Name).ToList();
+    }
+
+    public async Task<IReadOnlyList<HelmRevisionInfo>> GetHelmRevisionsAsync(string ns, CancellationToken ct = default)
+    {
+        return await WithAuthRetryAsync(async () =>
+        {
+            // One list of every Helm-owned Secret in the namespace — each revision of each
+            // release is a separate Secret, so this yields per-revision timestamps without
+            // the N+1 fan-out the interface default (releases → per-release history) does.
+            var secrets = await _client.CoreV1.ListNamespacedSecretAsync(
+                ns, labelSelector: "owner=helm", cancellationToken: ct).ConfigureAwait(false);
+
+            return MapHelmRevisions(secrets.Items, ns);
+        }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Maps Helm release Secrets (<c>owner=helm</c>) to one <see cref="HelmRevisionInfo"/> per
+    /// revision — unlike <see cref="MapHelmReleases"/>, which collapses to the latest revision
+    /// per release. The Secret's <c>creationTimestamp</c> is the moment Helm wrote that revision,
+    /// i.e. the deploy/upgrade/rollback's actual time. Filters defensively for the same reason
+    /// <see cref="MapHelmReleases"/> does.
+    /// </summary>
+    internal static List<HelmRevisionInfo> MapHelmRevisions(IEnumerable<V1Secret> secrets, string ns)
+    {
+        var revisions = new List<HelmRevisionInfo>();
+        foreach (var secret in secrets)
+        {
+            var labels = secret.Metadata.Labels;
+            if (labels is not { } l || !l.TryGetValue("owner", out var owner) || owner != "helm")
+                continue;
+
+            var name = (l.TryGetValue("name", out var n) ? n : null) ?? secret.Metadata.Name;
+            var version = l.TryGetValue("version", out var ver) && int.TryParse(ver, out var v) ? v : 1;
+            var status = (l.TryGetValue("status", out var s) ? s : null) ?? "unknown";
+            var chart = l.TryGetValue("chart", out var c) ? c : null;
+
+            revisions.Add(new HelmRevisionInfo
+            {
+                ReleaseName = name,
+                Revision = version,
+                Status = status,
+                Chart = chart,
+                AppVersion = TryParseChartVersion(chart),
+                Updated = secret.Metadata.CreationTimestamp.HasValue
+                    ? new DateTimeOffset(secret.Metadata.CreationTimestamp.Value)
+                    : null,
+                Description = status switch
+                {
+                    "deployed" => "Upgrade complete",
+                    "superseded" => "Superseded by new release",
+                    "failed" => "Upgrade failed",
+                    _ => null
+                }
+            });
+        }
+
+        return revisions
+            .OrderBy(r => r.ReleaseName, StringComparer.Ordinal)
+            .ThenBy(r => r.Revision)
+            .ToList();
     }
 
     /// <summary>
@@ -1426,6 +1509,7 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
 
                 revisions.Add(new HelmRevisionInfo
                 {
+                    ReleaseName = releaseName,
                     Revision = version,
                     Status = status,
                     Chart = chart,
