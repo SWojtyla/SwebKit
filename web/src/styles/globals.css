@@ -454,6 +454,195 @@
   --cm-active-line: rgba(224, 101, 53, 8%);
 }
 
+/* ── Cascade Theme (prototype) ─────────────────────────────────────────
+   Liquid glass: surfaces are translucent panes over slowly drifting
+   caustic light — the aurora background layer becomes light refracting
+   through water instead of a glow. Cards carry a specular top edge baked
+   into the shadow tokens (the bright rim where light catches the glass),
+   and the radius grows to 1rem so every surface reads fluid, not flat.
+   Clear is frost over glacier water; Deep is the same pane at night —
+   translucent white over near-black, edges doing the describing. ── */
+.cascade-light {
+  --background: #e6f1f4;
+  --foreground: #0f2833;
+  --card: rgba(255, 255, 255, 55%);
+  --card-foreground: #0f2833;
+  --primary: #0b8fa8;
+  --primary-foreground: #f0fafc;
+  --primary-glow: rgba(11, 143, 168, 22%);
+  --secondary: rgba(255, 255, 255, 60%);
+  --secondary-foreground: #1c4356;
+  --muted: rgba(216, 233, 238, 70%);
+  --muted-foreground: #577b88;
+  --accent: rgba(211, 233, 239, 75%);
+  --accent-foreground: #0f2833;
+  --destructive: #d95d50;
+  --destructive-foreground: #fdf3f1;
+  --success: #2e9e7b;
+  --success-foreground: #f0faf6;
+  --warning: #b98a2e;
+  --warning-foreground: #2e200a;
+  --info: #3d84ab;
+  --info-foreground: #f0f8fc;
+  --border: rgba(255, 255, 255, 65%);
+  --input: rgba(15, 40, 51, 12%);
+  --ring: #0b8fa8;
+  --sidebar: rgba(226, 240, 243, 70%);
+  --sidebar-foreground: #5a7d88;
+  --sidebar-active: rgba(11, 143, 168, 12%);
+  --header: rgba(232, 243, 246, 55%);
+  --popover: rgba(247, 252, 253, 92%);
+  --popover-foreground: #0f2833;
+  --radius: 1rem;
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 70%), 0 1px 2px rgba(23, 68, 84, 8%);
+  --shadow-md: inset 0 1px 0 rgba(255, 255, 255, 75%), 0 4px 16px rgba(23, 68, 84, 10%), 0 1px 3px rgba(23, 68, 84, 7%);
+  --shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 75%), 0 16px 40px rgba(23, 68, 84, 14%), 0 4px 10px rgba(23, 68, 84, 8%);
+  --shadow-glow: 0 0 28px rgba(11, 143, 168, 20%);
+  --aurora-1: #0b8fa8;
+  --aurora-2: #22b8cf;
+  --aurora-3: #5fc9de;
+}
+
+.cascade-dark {
+  --background: #060d12;
+  --foreground: #dceef3;
+  --card: rgba(255, 255, 255, 4%);
+  --card-foreground: #dceef3;
+  --primary: #38c8de;
+  --primary-foreground: #052730;
+  --primary-glow: rgba(56, 200, 222, 30%);
+  --secondary: rgba(255, 255, 255, 6%);
+  --secondary-foreground: #cfe6ec;
+  --muted: rgba(255, 255, 255, 4%);
+  --muted-foreground: #7da6b0;
+  --accent: rgba(56, 200, 222, 12%);
+  --accent-foreground: #dff5f8;
+  --destructive: #e07a68;
+  --destructive-foreground: #260f0b;
+  --success: #4fc497;
+  --success-foreground: #06251a;
+  --warning: #d4a24a;
+  --warning-foreground: #261a06;
+  --info: #5fb4d6;
+  --info-foreground: #06212c;
+  --border: rgba(255, 255, 255, 10%);
+  --input: rgba(255, 255, 255, 7%);
+  --ring: #38c8de;
+  --sidebar: rgba(5, 12, 16, 55%);
+  --sidebar-foreground: #7da6b0;
+  --sidebar-active: rgba(56, 200, 222, 12%);
+  --header: rgba(6, 13, 18, 50%);
+  --popover: rgba(11, 22, 28, 92%);
+  --popover-foreground: #dceef3;
+  --radius: 1rem;
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 6%), 0 1px 3px rgba(0, 0, 0, 35%);
+  --shadow-md: inset 0 1px 0 rgba(255, 255, 255, 7%), 0 6px 20px rgba(0, 0, 0, 42%), 0 1px 4px rgba(0, 0, 0, 28%);
+  --shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 7%), 0 18px 48px rgba(0, 0, 0, 48%), 0 5px 12px rgba(0, 0, 0, 32%);
+  --shadow-glow: 0 0 32px rgba(56, 200, 222, 25%);
+  --aurora-1: #38c8de;
+  --aurora-2: #4fc497;
+  --aurora-3: #5fb4d6;
+}
+
+/* The signature move: light drifting through water. Patches of aqua light
+   wander slowly across the fixed background layer — not decoration on top of
+   the surface but refraction *through* it. Kept faint enough to stay
+   readable; the motion, not the brightness, is what reads as water. */
+.cascade-light .aurora-bg::before {
+  opacity: 1;
+  background:
+    radial-gradient(ellipse 55% 40% at 25% 15%, rgba(95, 201, 222, 18%), transparent 60%),
+    radial-gradient(ellipse 45% 35% at 75% 45%, rgba(34, 184, 207, 14%), transparent 60%),
+    radial-gradient(ellipse 50% 30% at 45% 95%, rgba(11, 143, 168, 12%), transparent 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, 45%) 0%, transparent 30%);
+  animation: cascade-drift 26s ease-in-out infinite alternate;
+}
+
+.cascade-dark .aurora-bg::before {
+  opacity: 1;
+  background:
+    radial-gradient(ellipse 55% 40% at 25% 15%, rgba(56, 200, 222, 8%), transparent 60%),
+    radial-gradient(ellipse 45% 35% at 75% 45%, rgba(95, 180, 214, 7%), transparent 60%),
+    radial-gradient(ellipse 50% 30% at 45% 95%, rgba(56, 200, 222, 6%), transparent 55%);
+  animation: cascade-drift 26s ease-in-out infinite alternate;
+}
+
+@keyframes cascade-drift {
+  0% { background-position: 0% 0%, 0% 0%, 0% 0%, 0 0; }
+  50% { background-position: 7% -4%, -5% 6%, 4% -7%, 0 0; }
+  100% { background-position: -6% 5%, 8% -4%, -5% 6%, 0 0; }
+}
+
+/* Real glass needs refraction, not just tint: heavier blur + saturation so
+   whatever drifts behind a pane bends softly through it. */
+.cascade-light .glass,
+.cascade-light .glass-card {
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+}
+
+.cascade-dark .glass,
+.cascade-dark .glass-card {
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+}
+
+.cascade-light ::-webkit-scrollbar-thumb {
+  background: rgba(11, 143, 168, 30%);
+}
+
+.cascade-dark ::-webkit-scrollbar-thumb {
+  background: rgba(56, 200, 222, 25%);
+}
+
+.cascade-light ::-webkit-scrollbar-thumb:hover,
+.cascade-dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* Water palette for YAML tokens. */
+.cascade-light .yml-viewer .yml-key { color: #0b7d94; }
+.cascade-light .yml-viewer .yml-string { color: #2e8a6c; }
+.cascade-light .yml-viewer .yml-number { color: #a3691f; }
+.cascade-light .yml-viewer .yml-bool { color: #0b8fa8; }
+.cascade-light .yml-viewer .yml-comment { color: #6b8f9a; }
+
+.cascade-dark .yml-viewer .yml-key { color: #5fd0e3; }
+.cascade-dark .yml-viewer .yml-string { color: #4fc497; }
+.cascade-dark .yml-viewer .yml-number { color: #d4a24a; }
+.cascade-dark .yml-viewer .yml-bool { color: #38c8de; }
+.cascade-dark .yml-viewer .yml-comment { color: #5d828d; }
+
+.cascade-light {
+  --cm-key: #0b7d94;
+  --cm-string: #2e8a6c;
+  --cm-number: #a3691f;
+  --cm-bool: #0b8fa8;
+  --cm-null: #577b88;
+  --cm-punct: #577b88;
+  --cm-comment: #6b8f9a;
+  --cm-tag: #d95d50;
+  --cm-attr: #a3691f;
+  --cm-invalid: #d95d50;
+  --cm-gutter: #577b88;
+  --cm-active-line: rgba(11, 143, 168, 7%);
+}
+
+.cascade-dark {
+  --cm-key: #5fd0e3;
+  --cm-string: #4fc497;
+  --cm-number: #d4a24a;
+  --cm-bool: #38c8de;
+  --cm-null: #7da6b0;
+  --cm-punct: #7da6b0;
+  --cm-comment: #5d828d;
+  --cm-tag: #e07a68;
+  --cm-attr: #d4a24a;
+  --cm-invalid: #e07a68;
+  --cm-gutter: #5d828d;
+  --cm-active-line: rgba(56, 200, 222, 8%);
+}
+
 /* Comic Sans. On purpose. This is not a professional theme. */
 .fancy body {
   font-family: "Comic Sans MS", "Comic Sans", "Chalkboard SE", cursive, system-ui, sans-serif;

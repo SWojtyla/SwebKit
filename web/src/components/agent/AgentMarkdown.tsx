@@ -4,7 +4,7 @@ import type { Components, ExtraProps } from "react-markdown";
 import { useSettingsStore } from "@/lib/stores/settings";
 
 function getMermaidTheme(theme: string): "default" | "dark" {
-  return theme === "dark" || theme === "fathom-dark" || theme === "letterpress-dark" ? "dark" : "default";
+  return theme === "dark" || theme === "fathom-dark" || theme === "letterpress-dark" || theme === "cascade-dark" ? "dark" : "default";
 }
 
 export function MermaidBlock({ code }: { code: string }) {

@@ -10,6 +10,8 @@ const THEMES: { id: Theme; label: string; desc: string }[] = [
   { id: "fathom-light", label: "Fathom Shallows", desc: "Sunlit surface, a hint of gold" },
   { id: "letterpress-light", label: "Letterpress Day", desc: "Warm paper, ink, and a vermilion stamp" },
   { id: "letterpress-dark", label: "Letterpress Night", desc: "Candlelit pages, ember accents" },
+  { id: "cascade-light", label: "Cascade Clear", desc: "Frosted panes over drifting water light" },
+  { id: "cascade-dark", label: "Cascade Deep", desc: "Dark water, glass edges catching light" },
 ];
 
 export function AppearanceSettings() {
@@ -46,6 +48,7 @@ export function AppearanceSettings() {
           {THEMES.map((t) => {
             const isFathom = t.id === "fathom-dark" || t.id === "fathom-light";
             const isLetterpress = t.id === "letterpress-light" || t.id === "letterpress-dark";
+            const isCascade = t.id === "cascade-light" || t.id === "cascade-dark";
             const locked = isFathom && !fathomAvailable;
 
             return (
@@ -78,7 +81,11 @@ export function AppearanceSettings() {
                               ? "bg-[linear-gradient(180deg,#fdfaf2_0%,#f4efe3_55%,#e9e0cb_100%)]"
                               : t.id === "letterpress-dark"
                                 ? "bg-[linear-gradient(180deg,#2a211a_0%,#161210_55%,#0e0b08_100%)]"
-                                : "bg-[oklch(0.98_0.008_250)]"
+                                : t.id === "cascade-light"
+                                  ? "bg-[linear-gradient(160deg,#ffffff_0%,#e6f1f4_50%,#c9e5ec_100%)]"
+                                  : t.id === "cascade-dark"
+                                    ? "bg-[linear-gradient(160deg,#12303c_0%,#060d12_60%,#041418_100%)]"
+                                    : "bg-[oklch(0.98_0.008_250)]"
                   }`}
                 >
                   {t.id === "fancy" ? (
@@ -96,6 +103,22 @@ export function AppearanceSettings() {
                     >
                       Aa<span style={{ color: t.id === "letterpress-light" ? "#bc3f1e" : "#e06535" }}>.</span>
                     </span>
+                  ) : isCascade ? (
+                    <div
+                      className="h-7 w-10 rounded-2xl border"
+                      style={{
+                        background:
+                          t.id === "cascade-light"
+                            ? "rgba(255,255,255,0.45)"
+                            : "rgba(255,255,255,0.08)",
+                        borderColor:
+                          t.id === "cascade-light"
+                            ? "rgba(255,255,255,0.85)"
+                            : "rgba(255,255,255,0.22)",
+                        boxShadow:
+                          "inset 0 1px 0 rgba(255,255,255,0.7), 0 4px 10px rgba(11,143,168,0.25)",
+                      }}
+                    />
                   ) : (
                     <div className="flex gap-1.5">
                       <div className="h-6 w-6 rounded-full bg-[oklch(0.65_0.24_265)]" />
