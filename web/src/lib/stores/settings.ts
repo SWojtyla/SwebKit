@@ -11,10 +11,8 @@ export type Theme =
     | "cascade-light"
     | "cascade-dark";
 
-// Fathom is unlockable (Settings → Appearance gates it on usage) and deliberately left out of the
-// quick-cycle button/shortcut — that control has no way to know the unlock state from here, so it
-// only ever cycles the themes everyone always has.
-const THEME_CYCLE: Theme[] = ["dark", "light", "letterpress-light", "letterpress-dark", "cascade-light", "cascade-dark", "fancy"];
+// The quick-cycle button/shortcut rotates through every available theme.
+const THEME_CYCLE: Theme[] = ["dark", "light", "letterpress-light", "letterpress-dark", "cascade-light", "cascade-dark", "fathom-dark", "fathom-light", "fancy"];
 
 const THEME_CLASSES: Theme[] = ["dark", "fancy", "fathom-dark", "fathom-light", "letterpress-light", "letterpress-dark", "cascade-light", "cascade-dark"];
 

@@ -1,6 +1,6 @@
 import { useSettingsStore, type Theme } from "@/lib/stores/settings";
 import { useUserSettings, useUpdateUserSettings } from "@/lib/hooks";
-import { FATHOM_UNLOCK_THRESHOLD, type UserSettings } from "@/lib/types";
+import { type UserSettings } from "@/lib/types";
 
 const THEMES: { id: Theme; label: string; desc: string }[] = [
   { id: "dark", label: "Aurora Dark", desc: "Deep navy with indigo glows" },
@@ -22,10 +22,6 @@ export function AppearanceSettings() {
   if (isLoading || !settings) {
     return <div className="text-muted-foreground">Loading...</div>;
   }
-
-  const sessionCount = settings.sessionCount;
-  const fathomAvailable = settings.fathomUnlocked || settings.fathomDeveloperOverride || false;
-  const fathomProgress = Math.min(100, Math.round((sessionCount / FATHOM_UNLOCK_THRESHOLD) * 100));
 
   const selectTheme = (id: Theme) => {
     setTheme(id);
@@ -49,20 +45,15 @@ export function AppearanceSettings() {
             const isFathom = t.id === "fathom-dark" || t.id === "fathom-light";
             const isLetterpress = t.id === "letterpress-light" || t.id === "letterpress-dark";
             const isCascade = t.id === "cascade-light" || t.id === "cascade-dark";
-            const locked = isFathom && !fathomAvailable;
 
             return (
               <button
                 key={t.id}
-                onClick={() => !locked && selectTheme(t.id)}
-                disabled={locked}
-                title={locked ? `Unlocks after ${FATHOM_UNLOCK_THRESHOLD} sessions` : undefined}
+                onClick={() => selectTheme(t.id)}
                 className={`group relative overflow-hidden rounded-xl border-2 p-4 text-left transition-all duration-200 ${
-                  locked
-                    ? "cursor-default border-border opacity-60"
-                    : theme === t.id
-                      ? "border-primary glow"
-                      : "border-border hover:border-primary/40"
+                  theme === t.id
+                    ? "border-primary glow"
+                    : "border-border hover:border-primary/40"
                 }`}
                 data-testid={`appearance-theme-${t.id}`}
               >
@@ -91,11 +82,7 @@ export function AppearanceSettings() {
                   {t.id === "fancy" ? (
                     <span className="text-2xl drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]">✨🌈💅</span>
                   ) : isFathom ? (
-                    locked ? (
-                      <FathomGauge percent={fathomProgress} />
-                    ) : (
-                      <div className="h-6 w-6 rounded-full bg-[#e0a940] shadow-[0_0_10px_rgba(224,169,64,0.6)]" />
-                    )
+                    <div className="h-6 w-6 rounded-full bg-[#e0a940] shadow-[0_0_10px_rgba(224,169,64,0.6)]" />
                   ) : isLetterpress ? (
                     <span
                       className="font-serif text-2xl"
@@ -128,19 +115,12 @@ export function AppearanceSettings() {
                   )}
                 </div>
                 <div className="text-sm font-medium">{t.label}</div>
-                <div className="text-xs text-muted-foreground">
-                  {locked ? `${sessionCount} / ${FATHOM_UNLOCK_THRESHOLD} sessions` : t.desc}
-                </div>
-                {theme === t.id && !locked && (
+                <div className="text-xs text-muted-foreground">{t.desc}</div>
+                {theme === t.id && (
                   <div className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
                     <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
                       <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                  </div>
-                )}
-                {locked && (
-                  <div className="absolute right-3 top-3 text-muted-foreground" aria-label="Locked" title={`Unlocks at ${FATHOM_UNLOCK_THRESHOLD} sessions`}>
-                    🔒
                   </div>
                 )}
               </button>
@@ -187,15 +167,4 @@ export function AppearanceSettings() {
   );
 }
 
-function FathomGauge({ percent }: { percent: number }) {
-  return (
-    <div
-      className="relative h-9 w-9 rounded-full"
-      style={{ background: `conic-gradient(from -90deg, #e0a940 ${percent}%, rgba(255,255,255,0.15) ${percent}% 100%)` }}
-    >
-      <div className="absolute inset-[3px] flex items-center justify-center rounded-full bg-card text-[10px] font-semibold text-foreground">
-        {percent}%
-      </div>
-    </div>
-  );
-}
+

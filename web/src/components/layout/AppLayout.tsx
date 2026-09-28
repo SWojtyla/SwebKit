@@ -52,7 +52,6 @@ import {
 } from "@/lib/stores/panel-preferences";
 import { notifyScreenRouteChanged } from "@/lib/stores/screen-state";
 import { initDeepLinks, type DeepLinkContext } from "@/lib/deep-links";
-import { FATHOM_UNLOCK_THRESHOLD } from "@/lib/types";
 import { useSettingsStore, isTheme } from "@/lib/stores/settings";
 import { useAgentPanelStore } from "@/lib/stores/agent-panel";
 import { useMonitoringStream } from "@/lib/hooks/useMonitoring";
@@ -252,56 +251,7 @@ export function AppLayout() {
         },
     );
 
-    // Fathom's "thank you" moment: sessionCount lands on the threshold exactly once (it only ever
-    // increments), so this fires on the one launch that crosses it and never again — no separate
-    // "already celebrated" flag needed server-side.
-    const firedFathomToastRef = useRef(false);
-    useEffect(() => {
-        if (firedFathomToastRef.current || !userSettings) return;
-        if (
-            userSettings.sessionCount === FATHOM_UNLOCK_THRESHOLD &&
-            userSettings.fathomUnlocked
-        ) {
-            firedFathomToastRef.current = true;
-            notify(
-                "success",
-                "New depth reached",
-                "Fathom is unlocked in Settings → Appearance — thanks for taking SwebKit this deep.",
-            );
-        }
-    }, [userSettings, notify]);
 
-    // Hidden six-click gesture on the status bar version number: sets a developer-only override
-    // that skips the session-count gate on this machine, without any visible UI for it elsewhere.
-    const versionClicksRef = useRef(0);
-    const versionClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-        null,
-    );
-    const handleVersionClick = useCallback(() => {
-        versionClicksRef.current += 1;
-        if (versionClickTimerRef.current)
-            clearTimeout(versionClickTimerRef.current);
-        versionClickTimerRef.current = setTimeout(() => {
-            versionClicksRef.current = 0;
-        }, 1500);
-
-        if (versionClicksRef.current >= 6) {
-            versionClicksRef.current = 0;
-            if (userSettings && !userSettings.fathomDeveloperOverride) {
-                updateUserSettings.mutate(
-                    (prev) => ({ ...prev, fathomDeveloperOverride: true }),
-                    {
-                        onSuccess: () =>
-                            notify(
-                                "success",
-                                "Developer override armed",
-                                "Fathom is unlocked for this profile only.",
-                            ),
-                    },
-                );
-            }
-        }
-    }, [userSettings, updateUserSettings, notify]);
 
     // The sidecar previously had no recovery path if it crashed mid-session: `restart_sidecar`
     // existed as a Tauri command but nothing ever called it, so a crash silently broke the app
@@ -676,9 +626,7 @@ export function AppLayout() {
                         )}
                     </div>
                     {health?.version && (
-                        <span onClick={handleVersionClick}>
-                            v{health.version}
-                        </span>
+                        <span>v{health.version}</span>
                     )}
                     {isDemoMode && (
                         <span

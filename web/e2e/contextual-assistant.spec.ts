@@ -35,9 +35,6 @@ function mockUserSettings(page: import("@playwright/test").Page, capability: str
           activeProfileId: "p1",
         },
         logging: { enabled: false, minimumLevel: "Information" },
-        sessionCount: 0,
-        fathomUnlocked: false,
-        fathomDeveloperOverride: false,
       },
     });
   });
