@@ -37,6 +37,14 @@ public class WorkspaceResourceNode
     /// <see cref="Area"/> is <see cref="WorkspaceResourceArea.Aks"/> — two maps can pin the same
     /// namespace name on different clusters without the alert-investigation matcher confusing them.</summary>
     public string? KubeconfigContext { get; set; }
+
+    /// <summary>Optional logical-service name shared across maps (agent-colleague item 7 —
+    /// cross-environment compare). Two nodes on different maps carrying the same LogicalName are
+    /// "the same service in another environment", with the map name acting as the env tag for
+    /// <c>compare_environments</c>. Free text set in the Settings → Map inspector, which suggests
+    /// existing names via a datalist but never auto-assigns one. Not part of any matching or
+    /// lookup path — correlation is opt-in per tool call.</summary>
+    public string? LogicalName { get; set; }
 }
 
 /// <summary>A user-declared relationship between two <see cref="WorkspaceResourceNode"/>s (e.g.

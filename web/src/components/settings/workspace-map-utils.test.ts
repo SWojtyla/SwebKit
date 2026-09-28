@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
     buildGraphElements,
+    collectLogicalNames,
     filterTopology,
     groupCandidates,
     isOrphan,
@@ -9,6 +10,7 @@ import {
 } from "./workspace-map-utils";
 import { oklchToHex } from "@/lib/theme-colors";
 import type {
+    WorkspaceMap,
     WorkspaceResourceCandidate,
     WorkspaceResourceNode,
     WorkspaceTopology,
@@ -150,6 +152,36 @@ describe("groupCandidates", () => {
             "cache-b",
         ]);
         expect(groups.get("Aks")).toHaveLength(1);
+    });
+});
+
+describe("collectLogicalNames", () => {
+    const map = (
+        id: string,
+        nodes: WorkspaceResourceNode[],
+    ): WorkspaceMap => ({ id, name: id, nodes, relationships: [] });
+
+    const named = (id: string, logicalName: string | null): WorkspaceResourceNode => ({
+        ...node(id, "Redis", `key-${id}`),
+        logicalName,
+    });
+
+    it("collects distinct names across every map, sorted", () => {
+        const maps = [
+            map("dev", [named("a", "order-api"), named("b", null), named("c", "order-api")]),
+            map("prd", [named("d", "Order-Api"), named("e", "session-cache")]),
+        ];
+        expect(collectLogicalNames(maps)).toEqual(["order-api", "session-cache"]);
+    });
+
+    it("trims whitespace and skips empty names", () => {
+        const maps = [map("dev", [named("a", "  cache-x  "), named("b", "   ")])];
+        expect(collectLogicalNames(maps)).toEqual(["cache-x"]);
+    });
+
+    it("excludes the node's own current name from its suggestions", () => {
+        const maps = [map("dev", [named("a", "order-api"), named("b", "other")])];
+        expect(collectLogicalNames(maps, "order-api")).toEqual(["other"]);
     });
 });
 

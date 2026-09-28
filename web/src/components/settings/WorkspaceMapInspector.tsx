@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { GitBranch, Trash2 } from "lucide-react";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { useAksContexts } from "@/lib/hooks";
@@ -24,6 +24,12 @@ interface WorkspaceMapInspectorProps {
     /** Session-visible suggestions (dismissed ones already filtered out). */
     suggestions: WorkspaceRelationshipSuggestion[];
     onRenameNode: (id: string, label: string) => void;
+    /** Sets/clears the node's LogicalName — the cross-map correlation key
+     * `compare_environments` uses (map name = env tag). */
+    onSetLogicalName?: (id: string, logicalName: string | null) => void;
+    /** Logical names already in use on any map — datalist suggestions only,
+     * never auto-applied. */
+    logicalNameSuggestions?: string[];
     /** Re-pins an AKS node to a kubeconfig context (null = follows the globally
      * configured one). Only wired for AKS nodes. */
     onSetNodeContext?: (id: string, kubeconfigContext: string | null) => void;
@@ -48,6 +54,8 @@ export function WorkspaceMapInspector({
     node,
     suggestions,
     onRenameNode,
+    onSetLogicalName,
+    logicalNameSuggestions = [],
     onSetNodeContext,
     onRemoveNode,
     onAddRelationship,
@@ -131,6 +139,13 @@ export function WorkspaceMapInspector({
                 >
                     {node.resourceKey}
                 </div>
+                {onSetLogicalName && (
+                    <LogicalNameField
+                        node={node}
+                        suggestions={logicalNameSuggestions}
+                        onSetLogicalName={onSetLogicalName}
+                    />
+                )}
                 {node.area === "Aks" && onSetNodeContext && (
                     <AksContextSelect
                         node={node}
@@ -295,6 +310,48 @@ export function WorkspaceMapInspector({
                     onDismiss={onDismissSuggestion}
                 />
             )}
+        </div>
+    );
+}
+
+/** The node's cross-map logical-service name (agent-colleague item 7 — two maps
+ * carrying the same logical name are the same service in two environments; the
+ * map name is the env tag `compare_environments` takes). Free text with the
+ * existing names as datalist suggestions — suggestions never auto-fill or touch
+ * another node; committing an empty box clears the name. */
+function LogicalNameField({
+    node,
+    suggestions,
+    onSetLogicalName,
+}: {
+    node: WorkspaceResourceNode;
+    suggestions: string[];
+    onSetLogicalName: (id: string, logicalName: string | null) => void;
+}) {
+    const listId = useId();
+    return (
+        <div className="space-y-0.5">
+            <label
+                htmlFor={listId}
+                className="text-xs text-muted-foreground"
+            >
+                Logical name
+            </label>
+            <DraftInput
+                id={listId}
+                value={node.logicalName ?? ""}
+                onCommit={(name) => onSetLogicalName(node.id, name || null)}
+                list={`${listId}-options`}
+                placeholder="e.g. order-api — same name on another map = same service"
+                className="w-full rounded-md border bg-card px-2 py-1 text-xs"
+                data-testid="workspace-inspector-logical-name"
+                aria-label="Logical name"
+            />
+            <datalist id={`${listId}-options`}>
+                {suggestions.map((name) => (
+                    <option key={name} value={name} />
+                ))}
+            </datalist>
         </div>
     );
 }
