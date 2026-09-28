@@ -24,14 +24,18 @@ public sealed class SbOperationService : IDisposable
     public const int DefaultMaxParked = 1000;
     /// <summary>Absolute ceiling even with opt-in — past this the preview refuses.</summary>
     public const int AbsoluteMaxParked = 5000;
-    /// <summary>Only reach-message exists today; kept on the record so other op kinds can join later.</summary>
+    /// <summary>Reach-message: park → act → restore against one entity.</summary>
     public const string ReachMessageKind = "reach-message";
+    /// <summary>Cross-environment replay: source receive → clone → send to another namespace's entity.</summary>
+    public const string ReplayToKind = "replay-to";
 
     private readonly ConcurrentDictionary<Guid, Operation> _ops = new();
     private readonly SbOperationJournalRepository _journal;
     private readonly ILogger<SbOperationService>? _logger;
     /// <summary>Serializes op creation, journal reads and state transitions — ops are rare, so one gate is plenty.</summary>
     private readonly SemaphoreSlim _gate = new(1, 1);
+    /// <summary>Serializes journal writes — the throttled mid-run persist must not overlap the terminal one.</summary>
+    private readonly SemaphoreSlim _persistGate = new(1, 1);
     private bool _initialized;
 
     public SbOperationService(SbOperationJournalRepository journal, ILogger<SbOperationService>? logger = null)
@@ -55,6 +59,27 @@ public sealed class SbOperationService : IDisposable
         public SbOperationPhase? Phase { get; set; } = SbOperationPhase.Parking;
         public int ParkedCount { get; set; }
         public int RestoredCount { get; set; }
+
+        // ── replay-to fields (Kind == ReplayToKind) ─────────────────────────
+        public Guid? TargetNamespaceId { get; init; }
+        public string? TargetEntityPath { get; init; }
+        public bool SourceIsDeadLetter { get; init; }
+        public bool ScrubProperties { get; init; }
+        public bool StripSessionId { get; init; }
+        public bool RemoveSource { get; init; }
+        /// <summary>Provenance value stamped on every copy — "{sourceNamespace}/{entityPath}".</summary>
+        public string? ReplayedFrom { get; init; }
+        public IReadOnlyList<long> RequestedSequences { get; init; } = [];
+        /// <summary>Confirmed-processed sequences — the resume skip-set, journaled periodically.</summary>
+        public HashSet<long> ProcessedSequences { get; } = [];
+        /// <summary>Serializes processed-set reads/writes — progress callbacks arrive off-thread.</summary>
+        public object ProcessedLock { get; } = new();
+        public int ReplayedCount { get; set; }
+        public int ReplayFailedCount { get; set; }
+        public int ReplayMissingCount { get; set; }
+        /// <summary>Throttle guard: prevents overlapping journal writes from per-message progress.</summary>
+        public int PersistInFlight;
+
         public string? Error { get; set; }
         public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
         public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -123,12 +148,27 @@ public sealed class SbOperationService : IDisposable
                     Phase = null,
                     ParkedCount = entry.ParkedCount,
                     RestoredCount = entry.RestoredCount,
+                    TargetNamespaceId = entry.TargetNamespaceId,
+                    TargetEntityPath = entry.TargetEntityPath,
+                    SourceIsDeadLetter = entry.SourceIsDeadLetter,
+                    ScrubProperties = entry.ScrubProperties,
+                    StripSessionId = entry.StripSessionId,
+                    RemoveSource = entry.RemoveSource,
+                    ReplayedFrom = entry.ReplayedFrom,
+                    RequestedSequences = entry.RequestedSequences,
+                    ReplayedCount = entry.ReplayedCount,
+                    ReplayFailedCount = entry.ReplayFailedCount,
+                    ReplayMissingCount = entry.ReplayMissingCount,
                     Error = state == SbOperationState.Interrupted
-                        ? "The sidecar was stopped or restarted mid-operation. Messages parked before the interruption remain in the dead-letter queue, stamped with this operation's id — Resume restores them as copies at the tail, or dismiss to leave them dead-lettered."
+                        ? InterruptedNote(entry.Kind)
                         : entry.Error,
                     CreatedAt = entry.CreatedAt,
                     UpdatedAt = entry.UpdatedAt,
                 };
+                if (entry.ProcessedSequences.Count > 0)
+                {
+                    _ops[entry.Id].ProcessedSequences.UnionWith(entry.ProcessedSequences);
+                }
             }
 
             _initialized = true;
@@ -139,7 +179,16 @@ public sealed class SbOperationService : IDisposable
         }
     }
 
-    /// <summary>True while a reach-message op is still running against this entity — the second one is refused.</summary>
+    /// <summary>
+    /// "The sidecar died mid-op" note — kind-aware: reach-message strands parked copies in the DLQ;
+    /// replay strands nothing but may have partially transferred.
+    /// </summary>
+    private static string InterruptedNote(string kind) =>
+        kind == ReplayToKind
+            ? "The sidecar was stopped or restarted mid-replay. Copies already sent remain on the target; unprocessed source messages are untouched. Resume continues from the confirmed set — a crash between send and source-settle can duplicate a copy on the target."
+            : "The sidecar was stopped or restarted mid-operation. Messages parked before the interruption remain in the dead-letter queue, stamped with this operation's id — Resume restores them as copies at the tail, or dismiss to leave them dead-lettered.";
+
+    /// <summary>True while ANY op is still running against this entity — the second one is refused regardless of kind.</summary>
     public async Task<bool> HasRunningAsync(Guid namespaceId, string entityPath)
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
@@ -200,6 +249,72 @@ public sealed class SbOperationService : IDisposable
     }
 
     /// <summary>
+    /// Starts a cross-environment replay op: journal entry first (the "running" write is the crash
+    /// marker), then the runner task driving receive → clone → send through the source and target
+    /// clients. Returns null when an op is already running on the source entity — two ops racing the
+    /// same receive path could settle each other's messages.
+    /// </summary>
+    public async Task<SbOperationStatus?> TryStartReplayAsync(
+        Guid namespaceId,
+        string entityPath,
+        Guid targetNamespaceId,
+        string targetEntityPath,
+        IReadOnlyList<long> sequenceNumbers,
+        bool deadLetter,
+        bool scrubProperties,
+        bool stripSessionId,
+        bool removeSource,
+        string replayedFrom,
+        IServiceBusClient sourceClient,
+        IServiceBusClient targetClient)
+    {
+        await EnsureInitializedAsync().ConfigureAwait(false);
+        Operation op;
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_ops.Values.Any(o =>
+                    o.State == SbOperationState.Running &&
+                    o.NamespaceId == namespaceId &&
+                    string.Equals(o.EntityPath, entityPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                return null;
+            }
+
+            op = new Operation
+            {
+                Id = Guid.NewGuid(),
+                NamespaceId = namespaceId,
+                EntityPath = entityPath,
+                Kind = ReplayToKind,
+                // Reach-only fields carry inert defaults on a replay op.
+                TargetSequenceNumber = 0,
+                TargetAction = SbReachTargetAction.Complete,
+                RestoreBeforeTarget = false,
+                MaxParked = 0,
+                Phase = SbOperationPhase.Transferring,
+                TargetNamespaceId = targetNamespaceId,
+                TargetEntityPath = targetEntityPath,
+                SourceIsDeadLetter = deadLetter,
+                ScrubProperties = scrubProperties,
+                StripSessionId = stripSessionId,
+                RemoveSource = removeSource,
+                ReplayedFrom = replayedFrom,
+                RequestedSequences = sequenceNumbers,
+            };
+            _ops[op.Id] = op;
+            await PersistAsync(op).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        _ = Task.Run(() => RunReplayAsync(op, sourceClient, targetClient));
+        return Snapshot(op);
+    }
+
+    /// <summary>
     /// Poll — returns a snapshot, or null for an unknown id.
     /// </summary>
     public async Task<SbOperationStatus?> GetAsync(Guid operationId)
@@ -238,12 +353,15 @@ public sealed class SbOperationService : IDisposable
     }
 
     /// <summary>
-    /// Resume = run the restore phase again. Valid for interrupted (post-crash), failed and
-    /// cancelled ops — anything with parked messages still stamped in the DLQ. Returns null when
-    /// the op doesn't exist or is in a state where resume is meaningless (running, completed,
-    /// dismissed).
+    /// Resume = re-run the resumable phase: restore for reach-message, the transfer for replay —
+    /// skipping sequences the journal already confirmed. Valid for interrupted (post-crash),
+    /// failed and cancelled ops. Returns null when the op doesn't exist or is in a state where
+    /// resume is meaningless (running, completed, dismissed).
     /// </summary>
-    public async Task<SbOperationStatus?> ResumeAsync(Guid operationId, IServiceBusClient client)
+    /// <param name="targetClient">Replay ops only — the client for the journaled target namespace.
+    /// The endpoint resolves it; a null here means the target no longer resolves and the op is
+    /// failed honestly instead of silently dropped.</param>
+    public async Task<SbOperationStatus?> ResumeAsync(Guid operationId, IServiceBusClient client, IServiceBusClient? targetClient = null)
     {
         await EnsureInitializedAsync().ConfigureAwait(false);
         await _gate.WaitAsync().ConfigureAwait(false);
@@ -255,8 +373,17 @@ public sealed class SbOperationService : IDisposable
                 return null;
             }
 
+            if (op.Kind == ReplayToKind && targetClient is null)
+            {
+                // Honest failure, not a silent drop: the op stays resumable-shaped in the journal
+                // but reports why resume cannot proceed.
+                Fail(op, "Cannot resume — the target namespace this replay was sending to no longer resolves. The confirmed copies are already on it; unprocessed source messages are untouched.");
+                await PersistAsync(op).ConfigureAwait(false);
+                return Snapshot(op);
+            }
+
             op.State = SbOperationState.Running;
-            op.Phase = SbOperationPhase.Restoring;
+            op.Phase = op.Kind == ReplayToKind ? SbOperationPhase.Transferring : SbOperationPhase.Restoring;
             op.Error = null;
             op.UpdatedAt = DateTimeOffset.UtcNow;
             // A cancelled op's source is already tripped — replace it so the resumed run isn't
@@ -264,7 +391,9 @@ public sealed class SbOperationService : IDisposable
             op.Cancellation.Dispose();
             op.Cancellation = new CancellationTokenSource();
             await PersistAsync(op).ConfigureAwait(false);
-            _ = Task.Run(() => RunRestoreAsync(op, client));
+            _ = Task.Run(() => op.Kind == ReplayToKind
+                ? RunReplayAsync(op, client, targetClient!)
+                : RunRestoreAsync(op, client));
             return Snapshot(op);
         }
         finally
@@ -373,6 +502,131 @@ public sealed class SbOperationService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Replay runner: one pass of receive → clone → send → (optionally) settle through the source
+    /// client. Progress callbacks journal each confirmed sequence — throttled, because the crash
+    /// that matters mid-run is the one that would otherwise force resume to re-send confirmed
+    /// copies (the at-least-once duplicate window stays honest: send-then-crash can still dupe).
+    /// </summary>
+    private async Task RunReplayAsync(Operation op, IServiceBusClient sourceClient, IServiceBusClient targetClient)
+    {
+        try
+        {
+            // Inline (synchronous) progress — Progress<T> would post to the thread pool and lag
+            // behind the loop, so a cancel could persist a stale processed-set and make resume
+            // re-send confirmed copies.
+            var progress = new InlineProgress<SbReplayProgress>(p =>
+            {
+                if (!p.Succeeded)
+                {
+                    return;
+                }
+                var flush = false;
+                lock (op.ProcessedLock)
+                {
+                    op.ProcessedSequences.Add(p.SequenceNumber);
+                    op.ReplayedCount++;
+                    // Persist the skip-set every 25 confirmed sends — bounds how much a crash
+                    // makes resume re-do without turning every send into a file write.
+                    flush = op.ProcessedSequences.Count % 25 == 0;
+                }
+                op.UpdatedAt = DateTimeOffset.UtcNow;
+                if (flush)
+                {
+                    PersistThrottled(op);
+                }
+            });
+
+            HashSet<long> alreadyProcessed;
+            lock (op.ProcessedLock)
+            {
+                alreadyProcessed = [.. op.ProcessedSequences];
+            }
+
+            var result = await sourceClient.ReplayMessagesAsync(
+                op.EntityPath,
+                op.RequestedSequences,
+                op.SourceIsDeadLetter,
+                targetClient,
+                op.TargetEntityPath!,
+                new SbReplayOptions
+                {
+                    ScrubApplicationProperties = op.ScrubProperties,
+                    StripSessionId = op.StripSessionId,
+                    RemoveSource = op.RemoveSource,
+                    ReplayedFrom = op.ReplayedFrom!,
+                    OperationId = op.Id.ToString("N"),
+                },
+                alreadyProcessed,
+                progress,
+                op.Cancellation.Token).ConfigureAwait(false);
+
+            // Merge in case the client confirmed work without reporting progress per message.
+            lock (op.ProcessedLock)
+            {
+                op.ProcessedSequences.UnionWith(result.ProcessedSequenceNumbers);
+            }
+            op.ReplayFailedCount += result.FailedCount;
+            op.ReplayMissingCount = result.MissingSequenceNumbers.Count;
+            op.UpdatedAt = DateTimeOffset.UtcNow;
+
+            if (result.FailedCount > 0)
+            {
+                Fail(op, $"{result.FailedCount} message(s) could not be replayed — they remain in the source. Resume retries them. {MissingNote(op)}");
+            }
+            else
+            {
+                op.State = SbOperationState.Completed;
+                op.Phase = null;
+                op.Error = op.ReplayMissingCount > 0 ? MissingNote(op) : null;
+            }
+            await PersistAsync(op).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (op.Cancellation.IsCancellationRequested)
+        {
+            MarkCancelled(op);
+            await PersistAsync(op).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Replay operation {OperationId} failed during transfer", op.Id);
+            Fail(op, $"{SafeError(ex)} {MissingNote(op)}");
+            await PersistAsync(op).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Invokes <see cref="IProgress{T}.Report"/> on the caller thread — no sync-context posting.</summary>
+    private sealed class InlineProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value) => handler(value);
+    }
+
+    /// <summary>Fire-and-forget journal write guarded against overlap — progress callbacks can stack up.</summary>
+    private void PersistThrottled(Operation op)
+    {
+        if (Interlocked.Exchange(ref op.PersistInFlight, 1) != 0)
+        {
+            return;
+        }
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await PersistAsync(op).ConfigureAwait(false);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref op.PersistInFlight, 0);
+            }
+        });
+    }
+
+    /// <summary>Replay-only tail of failure/completion text — how much of the request never matched.</summary>
+    private static string MissingNote(Operation op) =>
+        op.ReplayMissingCount > 0
+            ? $"{op.ReplayMissingCount} requested message(s) were never found in the source (consumed, expired or already moved)."
+            : "";
+
     private async Task TransitionAsync(Operation op, SbOperationPhase phase)
     {
         op.Phase = phase;
@@ -392,12 +646,18 @@ public sealed class SbOperationService : IDisposable
     {
         op.State = SbOperationState.Cancelled;
         op.Phase = null;
-        op.Error = $"Cancelled — {ParkedRemainderNote(op)}";
+        op.Error = $"Cancelled — {RemainderNote(op)}";
         op.UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     private static string ParkedRemainderNote(Operation op) =>
         $"{op.ParkedCount} message(s) remain parked in the dead-letter queue — Resume restores them as copies, or dismiss to leave them.";
+
+    /// <summary>The "what's left behind" sentence — kind-aware: parking strands DLQ copies; replay just stops mid-set.</summary>
+    private static string RemainderNote(Operation op) =>
+        op.Kind == ReplayToKind
+            ? $"{op.ReplayedCount} of {op.RequestedSequences.Count} message(s) replayed so far; unprocessed source messages are untouched{(op.RemoveSource ? " (unsent copies stay in the source)" : " — nothing was removed from the source")}. Resume continues from the confirmed set."
+            : ParkedRemainderNote(op);
 
     /// <summary>
     /// Our own validation exceptions carry safe text; anything else (SDK, IO) collapses to a
@@ -423,6 +683,12 @@ public sealed class SbOperationService : IDisposable
                 _ => SbOperationJournalStatus.Running,
             };
 
+            // Serialized against the throttled mid-run writes PersistThrottled kicks off — two
+            // overlapping upserts would collide on the repository's shared tmp file, and a
+            // stale snapshot could land AFTER the terminal one.
+            await _persistGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
             await _journal.UpsertAsync(new SbOperationJournalEntry
             {
                 Id = op.Id,
@@ -438,13 +704,38 @@ public sealed class SbOperationService : IDisposable
                 Error = op.Error,
                 CreatedAt = op.CreatedAt,
                 UpdatedAt = op.UpdatedAt,
+                TargetNamespaceId = op.TargetNamespaceId,
+                TargetEntityPath = op.TargetEntityPath,
+                SourceIsDeadLetter = op.SourceIsDeadLetter,
+                ScrubProperties = op.ScrubProperties,
+                StripSessionId = op.StripSessionId,
+                RemoveSource = op.RemoveSource,
+                ReplayedFrom = op.ReplayedFrom,
+                RequestedSequences = [.. op.RequestedSequences],
+                ProcessedSequences = SnapshotProcessed(op),
+                ReplayedCount = op.ReplayedCount,
+                ReplayFailedCount = op.ReplayFailedCount,
+                ReplayMissingCount = op.ReplayMissingCount,
             }).ConfigureAwait(false);
+            }
+            finally
+            {
+                _persistGate.Release();
+            }
         }
         catch (Exception ex)
         {
             // The journal is an accelerator — losing a write must never kill the op itself; the
             // DLQ stamp still marks parked messages for a post-restart scan.
             _logger?.LogWarning(ex, "Could not persist operation journal entry for {OperationId}", op.Id);
+        }
+    }
+
+    private static List<long> SnapshotProcessed(Operation op)
+    {
+        lock (op.ProcessedLock)
+        {
+            return [.. op.ProcessedSequences];
         }
     }
 
@@ -464,5 +755,13 @@ public sealed class SbOperationService : IDisposable
         Error = op.Error,
         CreatedAt = op.CreatedAt,
         UpdatedAt = op.UpdatedAt,
+        TargetNamespaceId = op.TargetNamespaceId,
+        TargetEntityPath = op.TargetEntityPath,
+        SourceIsDeadLetter = op.SourceIsDeadLetter,
+        RemoveSource = op.RemoveSource,
+        RequestedCount = op.RequestedSequences.Count,
+        ReplayedCount = op.ReplayedCount,
+        FailedCount = op.ReplayFailedCount,
+        MissingCount = op.ReplayMissingCount,
     };
 }

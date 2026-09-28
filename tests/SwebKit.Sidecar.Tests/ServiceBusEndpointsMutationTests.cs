@@ -124,11 +124,51 @@ internal sealed class CountingServiceBusClient : IServiceBusClient
     public Task<SbRestoreResult> RestoreParkedCopiesAsync(string entityPath, string operationId, bool targetAfterPrefix, IProgress<int>? progress = null, CancellationToken ct = default) =>
         _inner.RestoreParkedCopiesAsync(entityPath, operationId, targetAfterPrefix, progress, ct);
 
-    public Task<SbParkedScanResult> ScanParkedAsync(string entityPath, string operationId, CancellationToken ct = default) =>
-        _inner.ScanParkedAsync(entityPath, operationId, ct);
+    public Task<SbParkedScanResult> ScanParkedAsync(string entityPath, string operationId, CancellationToken ct = default)
+    {
+        ScanParkedCallCount++;
+        return _inner.ScanParkedAsync(entityPath, operationId, ct);
+    }
 
     public Task<int> ResubmitDeadLetterByFilterAsync(string entityPath, string deadLetterReason, string? deadLetterErrorDescription, int limit, CancellationToken ct = default) =>
         _inner.ResubmitDeadLetterByFilterAsync(entityPath, deadLetterReason, deadLetterErrorDescription, limit, ct);
+
+    // ── Replay / entity-properties primitives ────────────────────────────────
+    public int ScanParkedCallCount { get; private set; }
+    /// <summary>
+    /// Test hook wrapped around the op's progress reports — fires synchronously inside the
+    /// transfer loop, used to inject a cancel mid-replay.
+    /// </summary>
+    public Action<SbReplayProgress>? OnReplayProgress { get; set; }
+
+    public Task<SbReplayResult> ReplayMessagesAsync(
+        string entityPath,
+        IReadOnlyCollection<long> sequenceNumbers,
+        bool deadLetter,
+        IServiceBusClient targetClient,
+        string targetEntityPath,
+        SbReplayOptions options,
+        IReadOnlySet<long>? alreadyProcessed = null,
+        IProgress<SbReplayProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        IProgress<SbReplayProgress>? wrapped = progress is null || OnReplayProgress is null
+            ? progress
+            : new InlineProgress(p =>
+            {
+                progress.Report(p);
+                OnReplayProgress(p);
+            });
+        return _inner.ReplayMessagesAsync(entityPath, sequenceNumbers, deadLetter, targetClient, targetEntityPath, options, alreadyProcessed, wrapped, ct);
+    }
+
+    private sealed class InlineProgress(Action<SbReplayProgress> handler) : IProgress<SbReplayProgress>
+    {
+        public void Report(SbReplayProgress value) => handler(value);
+    }
+
+    public Task<SbEntityProperties> GetEntityPropertiesAsync(string entityPath, CancellationToken ct = default) =>
+        _inner.GetEntityPropertiesAsync(entityPath, ct);
 
     public Task<bool> TestConnectionAsync(CancellationToken ct = default) => _inner.TestConnectionAsync(ct);
 }
@@ -141,10 +181,18 @@ internal sealed class CountingServiceBusClient : IServiceBusClient
 /// </summary>
 internal sealed class FakeServiceBusClientFactory : IServiceBusClientFactory, IServiceBusConnectionPool
 {
+    /// <summary>
+    /// Per-namespace client overrides — cross-environment replay resolves the target through the
+    /// same pool, so a second namespace needs its own client to be an honest two-store test.
+    /// </summary>
+    public Dictionary<Guid, IServiceBusClient> ClientsByNamespace { get; } = [];
+
     public IServiceBusClient GetOrCreate(ServiceBusNamespace ns) =>
-        ns.AuthMode == SbAuthMode.ConnectionString
-            ? Create(ns.CredentialKey, ns.TransportType)
-            : CreateWithEntra(ns.FullyQualifiedNamespace, ns.TransportType);
+        ClientsByNamespace.TryGetValue(ns.Id, out var specific)
+            ? specific
+            : ns.AuthMode == SbAuthMode.ConnectionString
+                ? Create(ns.CredentialKey, ns.TransportType)
+                : CreateWithEntra(ns.FullyQualifiedNamespace, ns.TransportType);
 
     public void Evict(string namespaceId) { }
 

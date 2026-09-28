@@ -121,6 +121,10 @@ public static class ServiceBusEndpoints
             return Results.Ok(stats);
         });
 
+        // Read-only management-plane properties (max size, TTL, lock duration, delivery caps,
+        // partitioning/session flags) — the "entity props" surface.
+        app.MapGet("/api/servicebus/{nsId}/entities/{entityPath}/properties", GetEntityPropertiesAsync);
+
         app.MapGet("/api/servicebus/{nsId}/entities/{entityPath}/peek", PeekMessagesAsync);
 
         app.MapGet("/api/servicebus/{nsId}/entities/{entityPath}/dlq", PeekDeadLetterAsync);
@@ -315,6 +319,22 @@ public static class ServiceBusEndpoints
              ProfileRepository profile, IServiceBusConnectionPool pool, DemoModeService demo,
              CancellationToken ct) =>
                 ListOperationsAsync(nsId, entity, profile, pool, demo, sbOperations, ct));
+
+        // ── Cross-environment replay ─────────────────────────────────────────
+        // Requeue selected messages to a DIFFERENT namespace/entity as new tail copies.
+        // Same preview → confirm → journaled-op flow as reach-message; poll/cancel/resume/
+        // dismiss ride the shared /operations endpoints above.
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/replay-to/preview",
+            (string nsId, string entityPath, ReplayToRequest req,
+             ProfileRepository profile, IServiceBusConnectionPool pool, DemoModeService demo,
+             CancellationToken ct) =>
+                ReplayToPreviewAsync(nsId, entityPath, req, profile, pool, demo, sbOperations, ct));
+
+        app.MapPost("/api/servicebus/{nsId}/entities/{entityPath}/replay-to/start",
+            (string nsId, string entityPath, ReplayToRequest req,
+             ProfileRepository profile, IServiceBusConnectionPool pool, DemoModeService demo,
+             CancellationToken ct) =>
+                ReplayToStartAsync(nsId, entityPath, req, profile, pool, demo, sbOperations, ct));
 
         // ── Message Templates ──────────────────────────────────────────────────
         app.MapGet("/api/servicebus/templates", (ProfileRepository profile) =>
@@ -854,8 +874,24 @@ public static class ServiceBusEndpoints
             return ApiErrors.NotFound("Operation not found");
         }
 
+        // Replay ops need their journaled target client too — a target namespace that no longer
+        // resolves is a refusal, not a silent failure.
+        IServiceBusClient? targetClient = null;
+        if (existing.Kind == SbOperationService.ReplayToKind)
+        {
+            var targetNs = existing.TargetNamespaceId is { } targetId
+                ? ResolveNamespace(targetId.ToString(), profile, demo)
+                : null;
+            if (targetNs is null)
+            {
+                return ApiErrors.Status(StatusCodes.Status409Conflict,
+                    "Cannot resume — the target namespace this replay was sending to no longer resolves.");
+            }
+            targetClient = pool.GetOrCreate(targetNs);
+        }
+
         var client = pool.GetOrCreate(ns);
-        var resumed = await ops.ResumeAsync(opId, client);
+        var resumed = await ops.ResumeAsync(opId, client, targetClient);
         return resumed is null
             ? ApiErrors.Status(StatusCodes.Status409Conflict, $"Operation is {existing.State} — only interrupted, failed or cancelled operations can resume.")
             : Results.Ok(resumed);
@@ -907,6 +943,12 @@ public static class ServiceBusEndpoints
         var client = pool.GetOrCreate(ns);
         foreach (var op in ops_)
         {
+            // The DLQ stamp scan is reach-message-specific — replay ops carry no parked set, so the
+            // journal's processed-set is their recovery record instead.
+            if (op.Kind != SbOperationService.ReachMessageKind)
+            {
+                continue;
+            }
             if (op.State is SbOperationState.Interrupted or SbOperationState.Failed or SbOperationState.Cancelled)
             {
                 try
@@ -966,6 +1008,281 @@ public static class ServiceBusEndpoints
             entityPath, req.Reason, req.Description,
             Math.Clamp(req.Limit, 1, RequeueByFilterLimitCap), ct);
         return Results.Ok(new { resubmitted });
+    }
+
+    /// <summary>
+    /// Read-only entity properties — what the SDK's management plane exposes, grouped as
+    /// name/value rows. A subscription path reads its SubscriptionProperties; a bare path resolves
+    /// queue-then-topic inside the client. Editing is deliberately not surfaced.
+    /// </summary>
+    internal static async Task<IResult> GetEntityPropertiesAsync(
+        string nsId,
+        string entityPath,
+        ProfileRepository profile,
+        IServiceBusConnectionPool pool,
+        DemoModeService demo,
+        CancellationToken ct)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+
+        var client = pool.GetOrCreate(ns);
+        try
+        {
+            return Results.Ok(await client.GetEntityPropertiesAsync(entityPath, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            // The client's "not found" (and the demo store's) arrives as InvalidOperationException.
+            return ApiErrors.NotFound(ex.Message);
+        }
+        catch (NotSupportedException ex)
+        {
+            return ApiErrors.Status(StatusCodes.Status501NotImplemented, ex.Message);
+        }
+    }
+
+    // ── Cross-environment replay ────────────────────────────────────────────
+    //
+    // Same preview → confirm → journaled-op shape as reach-message. The honest contract the
+    // preview renders verbatim: every replayed message is a NEW message on the target (fresh
+    // sequence, tail-appended, delivery count reset, enqueue time lost), stamped
+    // SwebKit.ReplayedFrom — and no transaction spans the two namespaces, so a crash mid-run is
+    // at-least-once.
+
+    /// <summary>Preview peek window — matches the reach preview's window.</summary>
+    private const int ReplayPreviewPeekCount = 1000;
+    /// <summary>Replay selection ceiling — same envelope as the park cap.</summary>
+    private const int ReplayMaxSequences = 5000;
+
+    /// <summary>The provenance stamp value: "{namespace}/{entityPath}" (+ "/$DeadLetterQueue" for DLQ sources).</summary>
+    internal static string ReplaySourceLabel(ServiceBusNamespace ns, string entityPath, bool deadLetter) =>
+        $"{(string.IsNullOrWhiteSpace(ns.FullyQualifiedNamespace) ? ns.Alias : ns.FullyQualifiedNamespace)}/{entityPath}{(deadLetter ? "/$DeadLetterQueue" : "")}";
+
+    /// <summary>Shared request validation for preview + start. Returns a refusal string, or null to proceed.</summary>
+    private static string? ValidateReplayRequest(ReplayToRequest req)
+    {
+        if (req.SequenceNumbers.Length == 0)
+        {
+            return "Select at least one message to replay.";
+        }
+        if (req.SequenceNumbers.Length > ReplayMaxSequences)
+        {
+            return $"{req.SequenceNumbers.Length} messages were selected — the cap is {ReplayMaxSequences} per replay operation.";
+        }
+        if (!Guid.TryParse(req.TargetNsId, out _))
+        {
+            return "A target namespace is required.";
+        }
+        if (string.IsNullOrWhiteSpace(req.TargetEntityPath))
+        {
+            return "A target entity is required.";
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Preview: refuse clearly (session source, subscription/self target, unresolvable namespace,
+    /// already-running op, session-id incompatibility), otherwise count what the peek window
+    /// matches and return the consequences the panel must render verbatim.
+    /// </summary>
+    internal static async Task<IResult> ReplayToPreviewAsync(
+        string nsId,
+        string entityPath,
+        ReplayToRequest req,
+        ProfileRepository profile,
+        IServiceBusConnectionPool pool,
+        DemoModeService demo,
+        SbOperationService ops,
+        CancellationToken ct)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+        if (ValidateReplayRequest(req) is { } invalid)
+        {
+            return ApiErrors.BadRequest(invalid);
+        }
+
+        var client = pool.GetOrCreate(ns);
+
+        // Source entity checks — same receive/settle constraints as every other mutation path.
+        var source = await FindEntityInfoAsync(client, entityPath, ct);
+        if (source is { IsTopic: true, IsSubscription: false })
+        {
+            return Results.Ok(ReplayToPreview.Refused(
+                $"'{entityPath}' is a topic — topics aren't receivable. Select one of its subscriptions instead."));
+        }
+        if (source?.RequiresSession == true)
+        {
+            return Results.Ok(ReplayToPreview.Refused(
+                $"'{entityPath}' requires sessions — replay needs plain peek-lock receivers, which session entities reject. Session entities aren't supported yet."));
+        }
+        if (await ops.HasRunningAsync(ns.Id, entityPath))
+        {
+            return Results.Ok(ReplayToPreview.Refused(
+                "An operation is already running on this entity — wait for it or cancel it first."));
+        }
+
+        var targetNs = ResolveNamespace(req.TargetNsId!, profile, demo);
+        if (targetNs is null)
+        {
+            return Results.Ok(ReplayToPreview.Refused("The target namespace doesn't exist in the profile."));
+        }
+        if (targetNs.Id == ns.Id &&
+            string.Equals(req.TargetEntityPath, entityPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Ok(ReplayToPreview.Refused(
+                "Target equals source — replaying an entity onto itself only makes duplicates. Pick a different entity or namespace."));
+        }
+
+        var targetClient = pool.GetOrCreate(targetNs);
+        var target = await FindEntityInfoAsync(targetClient, req.TargetEntityPath!, ct);
+        var targetRequiresSession = target?.RequiresSession == true;
+        var warnings = new List<string>();
+        if (target is { IsSubscription: true })
+        {
+            return Results.Ok(ReplayToPreview.Refused(
+                $"'{req.TargetEntityPath}' is a subscription — subscriptions are receive-only. Target the parent topic or a queue."));
+        }
+        if (target is null)
+        {
+            warnings.Add($"'{req.TargetEntityPath}' isn't in the target namespace's topology — if it doesn't exist, every send will fail.");
+        }
+
+        // Best-effort match against the peek window — the transfer loop itself is the truth, so
+        // a seq outside the window is a warning, not a refusal.
+        var window = req.DeadLetter
+            ? await client.PeekDeadLetterAsync(entityPath, ReplayPreviewPeekCount, ct)
+            : await client.PeekMessagesAsync(entityPath, ReplayPreviewPeekCount, ct);
+        var wanted = new HashSet<long>(req.SequenceNumbers);
+        var matched = window.Where(m => m.SequenceNumber is { } s && wanted.Contains(s)).ToList();
+        var missingCount = wanted.Count - matched.Count;
+        var sessionBoundCount = matched.Count(m => !string.IsNullOrEmpty(m.SessionId));
+
+        // Session compatibility — the one scrub option that's a refusal, not a choice:
+        if (targetRequiresSession)
+        {
+            if (req.StripSessionId)
+            {
+                return Results.Ok(ReplayToPreview.Refused(
+                    $"'{req.TargetEntityPath}' requires sessions — stripping session ids means the broker rejects every send. Leave session ids enabled or pick a non-session target."));
+            }
+            var sessionless = matched.Count(m => string.IsNullOrEmpty(m.SessionId));
+            if (sessionless > 0)
+            {
+                warnings.Add($"{sessionless} selected message(s) carry no session id — the session-required target will reject them; they'll be counted as failed and left in the source.");
+            }
+        }
+        else if (target is not null && sessionBoundCount > 0 && !req.StripSessionId)
+        {
+            return Results.Ok(ReplayToPreview.Refused(
+                $"{sessionBoundCount} selected message(s) carry a session id, but '{req.TargetEntityPath}' isn't session-enabled — the broker rejects session ids there. Enable \"Strip session ids\" to drop them."));
+        }
+        if (sessionBoundCount > 0 && req.StripSessionId && !targetRequiresSession)
+        {
+            warnings.Add($"Session ids will be stripped from {sessionBoundCount} message(s) — ordering across messages of the same session isn't preserved on the target.");
+        }
+        if (missingCount > 0)
+        {
+            warnings.Add($"{missingCount} of the {wanted.Count} selected message(s) aren't in the current peek window — they may still be found by the transfer loop, or already gone; unfound ones are reported, not failed.");
+        }
+        warnings.Add("Other consumers racing the source can't be detected — a message consumed mid-op is reported as missing, not failed.");
+        warnings.Add("No transaction can span two namespaces: a crash between send and source-settle can duplicate a copy on the target — the journal's processed-set is what resume skips.");
+
+        var consequences = new List<string>
+        {
+            $"Will receive {wanted.Count} message(s) from {(req.DeadLetter ? $"{entityPath}'s dead-letter queue" : entityPath)} under peek-lock.",
+            $"Will send each as a NEW message to {targetNs.Alias ?? req.TargetNsId}/{req.TargetEntityPath} — appended at the tail with a fresh sequence number and a reset delivery count. Every copy is stamped {SbReplayStamp.ReplayedFrom}={ReplaySourceLabel(ns, entityPath, req.DeadLetter)}.",
+            req.RemoveSource
+                ? "Move semantics: each source copy is settled once the target accepts its clone — the source loses them."
+                : "Copy semantics: source copies are left in place — the target gains duplicates by design.",
+            req.ScrubProperties
+                ? "Will drop ALL application properties (framework/routing metadata scrubbed); the SwebKit.* provenance stamps are still applied."
+                : "Application properties carry over (including any prior SwebKit.* stamps) alongside the new provenance stamp.",
+            "Cannot preserve: enqueue time, sequence numbers, queue position, delivery counts, To/ReplyTo/TTL/partition key — the documented losses of a cross-namespace send.",
+        };
+
+        return Results.Ok(new ReplayToPreview
+        {
+            CanStart = true,
+            RequestedCount = wanted.Count,
+            MatchedCount = matched.Count,
+            MissingCount = missingCount,
+            SessionBoundCount = sessionBoundCount,
+            TargetRequiresSession = targetRequiresSession,
+            Consequences = consequences,
+            Warnings = warnings,
+        });
+    }
+
+    /// <summary>
+    /// Start: same validations as preview, then hand both clients to the op service — the journal
+    /// write happens before the first receive so a kill mid-transfer materializes as interrupted.
+    /// </summary>
+    internal static async Task<IResult> ReplayToStartAsync(
+        string nsId,
+        string entityPath,
+        ReplayToRequest req,
+        ProfileRepository profile,
+        IServiceBusConnectionPool pool,
+        DemoModeService demo,
+        SbOperationService ops,
+        CancellationToken ct)
+    {
+        entityPath = DecodeEntityPath(entityPath);
+        var ns = ResolveNamespace(nsId, profile, demo);
+        if (ns is null) return ApiErrors.NotFound("Namespace not found");
+        if (ValidateReplayRequest(req) is { } invalid)
+        {
+            return ApiErrors.BadRequest(invalid);
+        }
+
+        var client = pool.GetOrCreate(ns);
+        var source = await FindEntityInfoAsync(client, entityPath, ct);
+        if (source is { IsTopic: true, IsSubscription: false })
+        {
+            return ApiErrors.Status(StatusCodes.Status409Conflict,
+                $"'{entityPath}' is a topic — topics aren't receivable. Select one of its subscriptions instead.");
+        }
+        if (source?.RequiresSession == true)
+        {
+            return ApiErrors.Status(StatusCodes.Status409Conflict,
+                $"'{entityPath}' requires sessions — replay needs plain peek-lock receivers, which session entities reject.");
+        }
+
+        var targetNs = ResolveNamespace(req.TargetNsId!, profile, demo);
+        if (targetNs is null)
+        {
+            return ApiErrors.BadRequest("The target namespace doesn't exist in the profile.");
+        }
+        var targetClient = pool.GetOrCreate(targetNs);
+        var target = await FindEntityInfoAsync(targetClient, req.TargetEntityPath!, ct);
+        if (target is { IsSubscription: true })
+        {
+            return ApiErrors.Status(StatusCodes.Status409Conflict,
+                $"'{req.TargetEntityPath}' is a subscription — subscriptions are receive-only.");
+        }
+        if (target?.RequiresSession == true && req.StripSessionId)
+        {
+            return ApiErrors.Status(StatusCodes.Status409Conflict,
+                $"'{req.TargetEntityPath}' requires sessions — stripping session ids means the broker rejects every send.");
+        }
+
+        var started = await ops.TryStartReplayAsync(
+            ns.Id, entityPath, targetNs.Id, req.TargetEntityPath!,
+            req.SequenceNumbers.Distinct().ToList(),
+            req.DeadLetter, req.ScrubProperties, req.StripSessionId, req.RemoveSource,
+            ReplaySourceLabel(ns, entityPath, req.DeadLetter),
+            client, targetClient);
+        if (started is null)
+        {
+            return ApiErrors.Status(StatusCodes.Status409Conflict,
+                "An operation is already running on this entity — wait for it or cancel it first.");
+        }
+
+        return Results.Ok(started);
     }
 
     private static string DecodeEntityPath(string entityPath) => Uri.UnescapeDataString(entityPath);
@@ -1082,5 +1399,53 @@ public static class ServiceBusEndpoints
         public string? Description { get; set; }
         /// <summary>Max messages to resubmit — clamped to 5,000.</summary>
         public int Limit { get; set; } = 500;
+    }
+
+    /// <summary>
+    /// Body for <c>replay-to/preview</c> and <c>replay-to/start</c> — the cross-environment
+    /// "send each selected message to another namespace/entity as a new tail-appended copy" op.
+    /// </summary>
+    public sealed class ReplayToRequest
+    {
+        /// <summary>Source sequence numbers to replay — required, capped at 5,000.</summary>
+        public long[] SequenceNumbers { get; set; } = [];
+        /// <summary>When true the source copies come from the entity's dead-letter sub-queue.</summary>
+        public bool DeadLetter { get; set; }
+        /// <summary>Target namespace id — required; resolved against the same profile/demo overlay as the source.</summary>
+        public string? TargetNsId { get; set; }
+        /// <summary>Target entity path in that namespace — queue or topic path (subscriptions are receive-only and refused).</summary>
+        public string? TargetEntityPath { get; set; }
+        /// <summary>Drop every application property on the cloned send; provenance stamps are still applied.</summary>
+        public bool ScrubProperties { get; set; }
+        /// <summary>Drop session ids so a non-session target accepts the copies. Refused when the target requires sessions.</summary>
+        public bool StripSessionId { get; set; }
+        /// <summary>Move semantics: complete the source copy after its clone lands on the target.</summary>
+        public bool RemoveSource { get; set; }
+    }
+
+    /// <summary>The replay preview contract — consequences and warnings are rendered verbatim by the panel.</summary>
+    public sealed class ReplayToPreview
+    {
+        public bool CanStart { get; set; }
+        /// <summary>Why the op is refused when <see cref="CanStart"/> is false.</summary>
+        public string? RefusalReason { get; set; }
+        public int RequestedCount { get; set; }
+        /// <summary>Selected sequences visible inside the peek window — best-effort; the transfer loop is the truth.</summary>
+        public int MatchedCount { get; set; }
+        /// <summary>Selected sequences NOT visible in the peek window — could be gone, could be past the tail of the window.</summary>
+        public int MissingCount { get; set; }
+        /// <summary>Matched messages carrying a session id — drives the strip/refuse decision.</summary>
+        public int SessionBoundCount { get; set; }
+        public bool TargetRequiresSession { get; set; }
+        /// <summary>What the op will do — render verbatim.</summary>
+        public List<string> Consequences { get; set; } = [];
+        /// <summary>Honest failure modes — render verbatim.</summary>
+        public List<string> Warnings { get; set; } = [];
+
+        public static ReplayToPreview Refused(string reason) => new()
+        {
+            CanStart = false,
+            RefusalReason = reason,
+        };
     }
 }

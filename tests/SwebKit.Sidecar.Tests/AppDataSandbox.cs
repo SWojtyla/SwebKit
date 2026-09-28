@@ -47,8 +47,24 @@ internal sealed class AppDataSandbox : IDisposable
         try
         {
             Environment.SetEnvironmentVariable(AppDataRootOverrideVariable, _originalRoot);
+            // Journal writes can still be flushing when a test observes an op's terminal state
+            // (the in-memory state flips before the file write lands) — retry the delete past
+            // the brief window instead of failing on a locked tmp file.
             if (Directory.Exists(_tempRoot))
-                Directory.Delete(_tempRoot, recursive: true);
+            {
+                for (var attempt = 0; attempt < 20; attempt++)
+                {
+                    try
+                    {
+                        Directory.Delete(_tempRoot, recursive: true);
+                        break;
+                    }
+                    catch (IOException) when (attempt < 19)
+                    {
+                        Thread.Sleep(25);
+                    }
+                }
+            }
         }
         finally
         {

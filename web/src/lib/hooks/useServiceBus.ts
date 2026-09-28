@@ -19,6 +19,9 @@ import type {
     SbOperationStatus,
     DlqRequeueByFilterRequest,
     DlqRequeueByFilterResult,
+    ReplayToRequest,
+    ReplayToPreview,
+    SbEntityProperties,
 } from "../types";
 
 // ── Service Bus ──────────────────────────────────────────────────────────────
@@ -748,5 +751,99 @@ export function useSbRequeueDlqByFilter() {
         },
         onError: (error) =>
             notify("error", "Couldn't resubmit DLQ group", String(error)),
+    });
+}
+
+// ── Cross-environment replay + entity properties ───────────────────────────
+//
+// Replay-to is the same background-op contract as reach-message — preview,
+// confirm, start, then poll `GET .../operations/{id}` — but its target can be
+// a different namespace entirely. Every replayed message is a NEW tail-appended
+// copy on the target (fresh sequence, reset delivery count) stamped
+// SwebKit.ReplayedFrom; nothing is parked in the source DLQ.
+
+/**
+ * Read-only management-plane properties for one entity (queue, topic or
+ * subscription): max size, TTL, lock duration, delivery caps, partitioning and
+ * session flags, as grouped name/value rows. Editing is deliberately not
+ * surfaced — this is the "what is this entity configured as" answer.
+ */
+export function useSbEntityProperties(
+    nsId: string | null,
+    entityPath: string | null,
+    options?: { enabled?: boolean },
+) {
+    return useQuery({
+        queryKey: ["sb-entity-properties", nsId, entityPath],
+        queryFn: ({ signal }) =>
+            apiFetch<SbEntityProperties>(
+                `/api/servicebus/${nsId}/entities/${entitySegment(entityPath!)}/properties`,
+                { signal },
+            ),
+        enabled: !!nsId && !!entityPath && (options?.enabled ?? true),
+        // Entity config changes with deployments, not with use — same cadence as topology.
+        staleTime: TOPOLOGY_STALE_TIME,
+        retry: 1,
+    });
+}
+
+/**
+ * The replay preview call — deliberately a mutation, not a query: it peeks the
+ * source window server-side to count matches, and the wizard only wants it on
+ * an explicit click. Consequences and warnings are rendered verbatim — they
+ * are the honesty contract ("new tail-appended copies", never "like nothing
+ * happened").
+ */
+export function useSbReplayToPreview() {
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (vars: {
+            nsId: string;
+            entityPath: string;
+            request: ReplayToRequest;
+        }) =>
+            apiSend<ReplayToPreview>(
+                `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/replay-to/preview`,
+                "POST",
+                vars.request,
+            ),
+        onError: (error) =>
+            notify("error", "Couldn't preview replay", String(error)),
+    });
+}
+
+/**
+ * Starts the journaled replay op — returns the op record to poll. On success
+ * both the SOURCE entity's lists AND the target namespace's are invalidated:
+ * move semantics drain the source, and copies landing on the target change its
+ * counts even when it's another namespace entirely.
+ */
+export function useSbReplayToStart() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (vars: {
+            nsId: string;
+            entityPath: string;
+            request: ReplayToRequest;
+        }) =>
+            apiSend<SbOperationStatus>(
+                `/api/servicebus/${vars.nsId}/entities/${entitySegment(vars.entityPath)}/replay-to/start`,
+                "POST",
+                vars.request,
+            ),
+        onSuccess: (_data, vars) => {
+            qc.invalidateQueries({
+                queryKey: ["sb-operations", vars.nsId, vars.entityPath],
+            });
+            invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
+            invalidateServiceBusQueries(
+                qc,
+                vars.request.targetNsId,
+                vars.request.targetEntityPath,
+            );
+        },
+        onError: (error) =>
+            notify("error", "Couldn't start replay", String(error)),
     });
 }

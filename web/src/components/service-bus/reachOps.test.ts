@@ -4,6 +4,7 @@ import {
     isResumableState,
     isTerminalState,
     opProgressText,
+    parseSequenceList,
     parseTargetSequence,
     REACH_ABSOLUTE_MAX_PARKED,
     REACH_DEFAULT_MAX_PARKED,
@@ -27,6 +28,15 @@ function op(overrides: Partial<SbOperationStatus>): SbOperationStatus {
         error: null,
         createdAt: "",
         updatedAt: "",
+        // replay-to fields — inert on a reach op
+        targetNamespaceId: null,
+        targetEntityPath: null,
+        sourceIsDeadLetter: false,
+        removeSource: false,
+        requestedCount: 0,
+        replayedCount: 0,
+        failedCount: 0,
+        missingCount: 0,
         ...overrides,
     };
 }
@@ -92,5 +102,34 @@ describe("opProgressText", () => {
         expect(
             opProgressText(op({ phase: "Restoring", restoredCount: 9 })),
         ).toContain("9 restored");
+    });
+
+    it("reports replay transfer progress", () => {
+        expect(
+            opProgressText(
+                op({
+                    kind: "replay-to",
+                    phase: "Transferring",
+                    requestedCount: 40,
+                    replayedCount: 12,
+                    targetEntityPath: "payments-dev/order-failed",
+                }),
+            ),
+        ).toContain("12 of 40");
+    });
+});
+
+describe("parseSequenceList", () => {
+    it("accepts comma/space-separated positive integers", () => {
+        expect(parseSequenceList("4501, 4502")).toEqual([4501, 4502]);
+        expect(parseSequenceList("4501 4502\n4503")).toEqual([4501, 4502, 4503]);
+    });
+
+    it("rejects empty input and non-integer parts", () => {
+        expect(parseSequenceList("")).toBeNull();
+        expect(parseSequenceList("  ")).toBeNull();
+        expect(parseSequenceList("4501, abc")).toBeNull();
+        expect(parseSequenceList("4501, 0")).toBeNull();
+        expect(parseSequenceList("-5")).toBeNull();
     });
 });

@@ -182,12 +182,18 @@ export type SbOperationState =
     | "Interrupted"
     | "Dismissed";
 
-export type SbOperationPhase = "Parking" | "Restoring";
+export type SbOperationPhase = "Parking" | "Restoring" | "Transferring";
+
+/** `SbOperationStatus.kind` values — mirrored from SbOperationService's kind constants. */
+export const SB_OP_KIND_REACH = "reach-message";
+export const SB_OP_KIND_REPLAY_TO = "replay-to";
 
 /**
- * API-facing snapshot of a reach-message operation — the wizard polls this.
- * `parkedInDlq` is enriched by a live DLQ stamp scan on the list endpoint:
- * the crash-recovery truth when the journal was lost mid-op.
+ * API-facing snapshot of a journaled background operation — reach-message and
+ * cross-environment replay share this shape; the replay-only fields are null/0
+ * on reach ops and vice versa. `parkedInDlq` is enriched by a live DLQ stamp
+ * scan on the list endpoint (reach ops only — replay ops carry no parked set;
+ * their crash-recovery record is the journaled processed-set instead).
  */
 export interface SbOperationStatus {
     id: string;
@@ -205,6 +211,87 @@ export interface SbOperationStatus {
     error: string | null;
     createdAt: string;
     updatedAt: string;
+    // ── replay-to fields ────────────────────────────────────────────────
+    /** Replay only: destination namespace id. */
+    targetNamespaceId: string | null;
+    /** Replay only: destination entity on the target namespace. */
+    targetEntityPath: string | null;
+    /** Replay only: the source was the entity's dead-letter sub-queue. */
+    sourceIsDeadLetter: boolean;
+    /** Replay only: source copies are settled once their clone lands (move semantics). */
+    removeSource: boolean;
+    /** Replay only: how many source messages were requested. */
+    requestedCount: number;
+    /** Replay only: copies accepted by the target so far. */
+    replayedCount: number;
+    /** Replay only: matched messages whose send/settle failed — retried on resume. */
+    failedCount: number;
+    /** Replay only: requested sequences never found in the source. */
+    missingCount: number;
+}
+
+// ── Cross-environment replay (requeue to ANOTHER namespace/entity) ─────────
+// Same honest contract as reach restore, one hop wider: every replayed message
+// is a NEW message on the target — fresh sequence, tail-appended, delivery
+// count reset — stamped SwebKit.ReplayedFrom. No transaction spans two
+// namespaces, so a crash mid-run is at-least-once.
+
+/** Body for `replay-to/preview` and `replay-to/start`. */
+export interface ReplayToRequest {
+    /** Source sequence numbers to replay — required, capped at 5,000 server-side. */
+    sequenceNumbers: number[];
+    /** When true the source copies come from the entity's dead-letter sub-queue. */
+    deadLetter: boolean;
+    /** Target namespace id — resolved server-side against the same profile/demo overlay. */
+    targetNsId: string;
+    /** Target entity path in that namespace (queue or topic path; subscriptions are receive-only). */
+    targetEntityPath: string;
+    /** Drop every application property on the cloned send; provenance stamps still apply. */
+    scrubProperties: boolean;
+    /** Drop session ids so a non-session target accepts the copies. Refused for session-required targets. */
+    stripSessionId: boolean;
+    /** Move semantics: complete the source copy after its clone lands on the target. */
+    removeSource: boolean;
+}
+
+/** The replay preview contract — consequences and warnings are rendered verbatim. */
+export interface ReplayToPreview {
+    canStart: boolean;
+    /** Why the op is refused when canStart is false. */
+    refusalReason: string | null;
+    requestedCount: number;
+    /** Selected sequences visible inside the peek window — best-effort; the transfer loop is the truth. */
+    matchedCount: number;
+    /** Selected sequences NOT in the peek window — may be gone or past the window tail. */
+    missingCount: number;
+    /** Matched messages carrying a session id — drives the strip/refuse decision. */
+    sessionBoundCount: number;
+    targetRequiresSession: boolean;
+    /** What the op will do — render verbatim. */
+    consequences: string[];
+    /** Honest failure modes — render verbatim. */
+    warnings: string[];
+}
+
+// ── Entity properties surface (read-only) ───────────────────────────────────
+
+/** One displayed entity property — a name, its rendered value, and the section it groups under. */
+export interface SbEntityProperty {
+    name: string;
+    value: string;
+    /** Section label — "General" / "Sizing" / "Delivery" / "Lifecycle". */
+    group: string;
+}
+
+/** The properties view of one entity — read-only by design (editing is not surfaced). */
+export interface SbEntityProperties {
+    entityPath: string;
+    /** "queue" | "topic" | "subscription". */
+    entityKind: string;
+    /** For subscriptions: the parent topic name; null otherwise. */
+    topicName: string | null;
+    requiresSession: boolean;
+    properties: SbEntityProperty[];
 }
 
 /** Body for dlq/requeue-by-filter — resubmit a whole reason/description group server-side. */

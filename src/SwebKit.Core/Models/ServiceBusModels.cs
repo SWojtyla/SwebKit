@@ -248,7 +248,7 @@ public sealed class SbOperationJournalEntry
     public Guid Id { get; set; } = Guid.NewGuid();
     public required Guid NamespaceId { get; set; }
     public required string EntityPath { get; set; }
-    /// <summary>Operation kind — only "reach-message" exists today.</summary>
+    /// <summary>Operation kind — "reach-message" or "replay-to". Reach-only fields stay at their defaults on replay entries.</summary>
     public required string Kind { get; set; }
     public long TargetSequenceNumber { get; set; }
     public SbReachTargetAction TargetAction { get; set; }
@@ -261,6 +261,36 @@ public sealed class SbOperationJournalEntry
     public string? Error { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    // ── replay-to fields ────────────────────────────────────────────────────
+
+    /// <summary>Replay only: the namespace the copies are sent to.</summary>
+    public Guid? TargetNamespaceId { get; set; }
+    /// <summary>Replay only: destination entity on the target namespace.</summary>
+    public string? TargetEntityPath { get; set; }
+    /// <summary>Replay only: the source was the entity's dead-letter sub-queue.</summary>
+    public bool SourceIsDeadLetter { get; set; }
+    /// <summary>Replay only: drop the source's application properties on outgoing copies.</summary>
+    public bool ScrubProperties { get; set; }
+    /// <summary>Replay only: drop session ids on outgoing copies (non-session target).</summary>
+    public bool StripSessionId { get; set; }
+    /// <summary>Replay only: settle each source copy once the target accepts its clone.</summary>
+    public bool RemoveSource { get; set; }
+    /// <summary>Replay only: the "{namespace}/{entity}" provenance label stamped on every copy — journaled so a resumed op stamps identically.</summary>
+    public string? ReplayedFrom { get; set; }
+    /// <summary>Replay only: the requested source sequence numbers.</summary>
+    public List<long> RequestedSequences { get; set; } = [];
+    /// <summary>
+    /// Replay only: sequences confirmed fully processed — the resume skip-set. Written before
+    /// terminal status (and periodically mid-run) so a crashed op doesn't re-send confirmed copies.
+    /// </summary>
+    public List<long> ProcessedSequences { get; set; } = [];
+    /// <summary>Replay only: clones accepted by the target.</summary>
+    public int ReplayedCount { get; set; }
+    /// <summary>Replay only: matched messages whose send/settle failed.</summary>
+    public int ReplayFailedCount { get; set; }
+    /// <summary>Replay only: requested sequences never found in the source.</summary>
+    public int ReplayMissingCount { get; set; }
 }
 
 /// <summary>String constants for <see cref="SbOperationJournalEntry.Status"/>.</summary>
@@ -298,6 +328,8 @@ public enum SbOperationPhase
 {
     Parking,
     Restoring,
+    /// <summary>Replay only: receiving from the source and sending copies to the target.</summary>
+    Transferring,
 }
 
 /// <summary>
@@ -324,6 +356,159 @@ public sealed class SbOperationStatus
     public string? Error { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+
+    // ── replay-to fields ────────────────────────────────────────────────────
+
+    /// <summary>Replay only: the destination namespace.</summary>
+    public Guid? TargetNamespaceId { get; set; }
+    /// <summary>Replay only: the destination entity on the target namespace.</summary>
+    public string? TargetEntityPath { get; set; }
+    /// <summary>Replay only: the source was the entity's dead-letter sub-queue.</summary>
+    public bool SourceIsDeadLetter { get; set; }
+    /// <summary>Replay only: source copies are settled once their clone lands (move semantics).</summary>
+    public bool RemoveSource { get; set; }
+    /// <summary>Replay only: how many source messages were requested.</summary>
+    public int RequestedCount { get; set; }
+    /// <summary>Replay only: copies accepted by the target so far.</summary>
+    public int ReplayedCount { get; set; }
+    /// <summary>Replay only: matched messages whose send/settle failed — retried on resume.</summary>
+    public int FailedCount { get; set; }
+    /// <summary>Replay only: requested sequences never found in the source.</summary>
+    public int MissingCount { get; set; }
+}
+
+// ── Cross-environment replay (requeue to ANOTHER namespace/entity) ──────────
+//
+// Same honest contract as restore, one hop wider: every replayed message is a NEW
+// message on the target — fresh sequence number, tail-appended, delivery count
+// reset — stamped with provenance (<see cref="SbReplayStamp.ReplayedFrom"/>) so a
+// consumer can tell it came from elsewhere. Two namespaces means no transaction can
+// span the transfer (plan risk #7): send → optionally settle source is at-least-once,
+// and the journal's processed-set is what lets resume skip confirmed work.
+
+/// <summary>Application-property keys written onto every replayed copy.</summary>
+public static class SbReplayStamp
+{
+    /// <summary>"{sourceNamespace}/{entityPath}" — plus "/$DeadLetterQueue" when the copy came out of a DLQ.</summary>
+    public const string ReplayedFrom = "SwebKit.ReplayedFrom";
+    /// <summary>The replay operation id — links a copy back to its op record.</summary>
+    public const string OperationId = "SwebKit.ReplayOp";
+}
+
+/// <summary>Replay-time transformation and settle options.</summary>
+public sealed class SbReplayOptions
+{
+    /// <summary>
+    /// Drop every application property the source message carried (kills NServiceBus.*/routing
+    /// headers and prior stamps) — body, subject, correlation id and content type survive.
+    /// The <see cref="SbReplayStamp"/>/<see cref="SbRequeueStamp.OriginalSequence"/> provenance
+    /// stamps are applied AFTER the scrub, so provenance always survives.
+    /// </summary>
+    public bool ScrubApplicationProperties { get; set; }
+    /// <summary>
+    /// Drop the session id from outgoing copies — required when the target isn't session-enabled
+    /// (the broker rejects session ids on non-session entities). Refused upstream when the target
+    /// REQUIRES sessions, since sends would then have nothing to key on.
+    /// </summary>
+    public bool StripSessionId { get; set; }
+    /// <summary>
+    /// Move semantics: settle the source copy after its clone is accepted by the target.
+    /// When false the source copy is left in place — replay is then a deliberate duplicate.
+    /// </summary>
+    public bool RemoveSource { get; set; }
+    /// <summary>Value stamped into <see cref="SbReplayStamp.ReplayedFrom"/> on every copy.</summary>
+    public required string ReplayedFrom { get; set; }
+    /// <summary>The operation id stamped into <see cref="SbReplayStamp.OperationId"/> on every copy.</summary>
+    public required string OperationId { get; set; }
+}
+
+/// <summary>Per-message progress record — lets the op journal which sequences are confirmed done.</summary>
+public sealed class SbReplayProgress
+{
+    public required long SequenceNumber { get; set; }
+    /// <summary>False when the copy could not be sent/settled — the source message is untouched.</summary>
+    public bool Succeeded { get; set; }
+}
+
+/// <summary>Outcome of a cross-environment replay run.</summary>
+public sealed class SbReplayResult
+{
+    /// <summary>Clones accepted by the target this run.</summary>
+    public int SentCount { get; set; }
+    /// <summary>Matched messages whose send or source-settle failed — left in the source for resume.</summary>
+    public int FailedCount { get; set; }
+    /// <summary>Fully processed sequences this run (sent + settled-or-kept) — the resume skip-set.</summary>
+    public List<long> ProcessedSequenceNumbers { get; } = [];
+    /// <summary>Requested sequences never found in the source (consumed, expired, or already moved).</summary>
+    public List<long> MissingSequenceNumbers { get; } = [];
+}
+
+/// <summary>
+/// Builds the outgoing replay copy from a source <see cref="SbMessage"/>: fresh message id, broker
+/// fields cleared (sequence/enqueue/delivery belong to the target, which assigns them), DLQ metadata
+/// stripped, provenance stamped. Shared by the Azure and demo clients so both produce identical
+/// copies. To/ReplyTo/TTL/PartitionKey do not survive the <see cref="SbMessage"/> mapping — the
+/// documented loss of the plan.
+/// </summary>
+public static class SbReplay
+{
+    public static SbMessage BuildClone(SbMessage source, SbReplayOptions options)
+    {
+        var props = options.ScrubApplicationProperties
+            ? new Dictionary<string, object>()
+            : new Dictionary<string, object>(source.ApplicationProperties ?? new Dictionary<string, object>());
+        // Broker DLQ headers ride as app properties on dead-lettered messages — strip them either
+        // way so the copy doesn't look pre-dead-lettered on the target.
+        props.Remove("DeadLetterReason");
+        props.Remove("DeadLetterErrorDescription");
+        props[SbReplayStamp.ReplayedFrom] = options.ReplayedFrom;
+        props[SbReplayStamp.OperationId] = options.OperationId;
+        if (source.SequenceNumber is { } sequenceNumber)
+        {
+            props[SbRequeueStamp.OriginalSequence] = sequenceNumber;
+        }
+        props[SbRequeueStamp.OriginalEnqueuedAt] = source.EnqueuedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+        props[SbRequeueStamp.OriginalDeliveryCount] = source.DeliveryCount;
+
+        return new SbMessage
+        {
+            MessageId = Guid.NewGuid().ToString(),
+            CorrelationId = source.CorrelationId,
+            Subject = source.Subject,
+            ContentType = source.ContentType,
+            Body = source.Body,
+            SessionId = options.StripSessionId ? null : source.SessionId,
+            ApplicationProperties = props,
+        };
+    }
+}
+
+// ── Entity properties surface (read-mostly) ─────────────────────────────────
+//
+// Management-plane entity settings (max size, TTL, lock duration, delivery caps,
+// partitioning/session flags) rendered as grouped name/value rows — a row list
+// rather than typed fields because queue/topic/subscription expose different sets,
+// and "what the SDK returned" is the honest surface.
+
+/// <summary>One displayed entity property — a name, its rendered value, and the section it groups under.</summary>
+public sealed class SbEntityProperty
+{
+    public required string Name { get; set; }
+    public required string Value { get; set; }
+    /// <summary>Section label — "General" / "Sizing" / "Delivery" / "Lifecycle".</summary>
+    public required string Group { get; set; }
+}
+
+/// <summary>The properties view of one entity — read-only by design (editing is not surfaced).</summary>
+public sealed class SbEntityProperties
+{
+    public required string EntityPath { get; set; }
+    /// <summary>"queue" | "topic" | "subscription".</summary>
+    public required string EntityKind { get; set; }
+    /// <summary>For subscriptions: the parent topic name; null otherwise.</summary>
+    public string? TopicName { get; set; }
+    public bool RequiresSession { get; set; }
+    public List<SbEntityProperty> Properties { get; set; } = [];
 }
 
 /// <summary>

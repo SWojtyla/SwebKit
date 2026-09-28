@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
-import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft, ChevronDown, Sparkles, FileText, Crosshair, Layers } from "lucide-react";
+import { Plus, Upload, Clock, Search, RotateCcw, ChevronLeft, ChevronDown, Sparkles, FileText, Crosshair, Layers, ArrowRightToLine } from "lucide-react";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import {
   useProfile,
@@ -31,6 +31,8 @@ import { EntityCommandPalette, type EntityAction } from "./EntityCommandPalette"
 import { BatchReplayPanel } from "./BatchReplayPanel";
 import { ReachMessagePanel } from "./ReachMessagePanel";
 import { DlqTriagePanel } from "./DlqTriagePanel";
+import { ReplayToPanel } from "./ReplayToPanel";
+import { EntityPropertiesPanel } from "./EntityPropertiesPanel";
 import { SbOperationsBanner } from "./SbOperationsBanner";
 import { TemplateManager } from "./TemplateManager";
 import { NamespaceOverview } from "./NamespaceOverview";
@@ -79,6 +81,7 @@ export function ServiceBusPage() {
   const [showBatchReplay, setShowBatchReplay] = useState(false);
   const [showReachPanel, setShowReachPanel] = useState(false);
   const [showDlqTriage, setShowDlqTriage] = useState(false);
+  const [showReplayTo, setShowReplayTo] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showEntityTree, setShowEntityTree] = useState(true);
@@ -344,6 +347,34 @@ export function ServiceBusPage() {
     );
   }, [location, navigate, namespaces, openComposer]);
 
+  // "Replay to…" palette/deep-link action: `state.replayTo` opens the
+  // cross-environment replay wizard for the currently selected entity. Object
+  // form can target a specific namespace/entity, written as canonical
+  // `?ns=&entity=` params — same convention as `state.compose`.
+  useEffect(() => {
+    const state = location.state as {
+      replayTo?:
+        | boolean
+        | { nsId?: string; entityPath?: string; entityName?: string };
+    } | null;
+    if (!state?.replayTo) return;
+    const target = typeof state.replayTo === "object" ? state.replayTo : null;
+    const next = new URLSearchParams(location.search);
+    if (target?.nsId && namespaces.some((ns) => ns.id === target.nsId)) {
+      next.set("ns", target.nsId);
+      if (target.entityPath) {
+        next.set("entity", target.entityPath);
+        next.set("entityName", target.entityName ?? target.entityPath);
+      }
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
+    setShowReplayTo(true);
+    navigate(
+      { pathname: location.pathname, search: next.toString() },
+      { replace: true, state: null },
+    );
+  }, [location, navigate, namespaces]);
+
   const handleEntityAction = useCallback((entity: SbEntityInfo, action: EntityAction) => {
     setSelectedEntity(entity);
     if (action === "peek-active") setViewMode("active");
@@ -516,10 +547,16 @@ export function ServiceBusPage() {
           cancelTestId="purge-confirm-cancel"
         />
       )}
-      {/* Interrupted/running reach-message ops for this entity — the crash-recovery
-          surface. Counts come from a live DLQ stamp scan, not just the journal. */}
+      {/* Interrupted/running ops for this entity — the crash-recovery surface.
+          Reach ops get a live DLQ stamp scan; replay ops carry the journaled
+          processed-set. */}
       {selectedEntity && selectedNsId && (
         <SbOperationsBanner nsId={selectedNsId} entity={selectedEntity} />
+      )}
+      {/* Read-only broker configuration — max size, TTL, lock duration, delivery
+          caps, partitioning/session flags. Collapsed by default; one fetch per open. */}
+      {selectedEntity && selectedNsId && (
+        <EntityPropertiesPanel nsId={selectedNsId} entityPath={selectedEntity.entityPath} />
       )}
       {selectedEntity ? (
         <MessageList
@@ -737,6 +774,30 @@ export function ServiceBusPage() {
                   DLQ Triage
                   <span className="ml-auto text-muted-foreground">this entity</span>
                 </button>
+                {/* Cross-environment replay rides the same plain receivers as
+                    every other mutation path — session sources disable it
+                    identically rather than failing at preview. */}
+                <button
+                  data-testid="sb-replay-to-button"
+                  role="menuitem"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    setShowReplayTo(true);
+                  }}
+                  disabled={!selectedEntity || requiresSessions(selectedEntity)}
+                  title={
+                    !selectedEntity
+                      ? "Select a queue or topic first"
+                      : requiresSessions(selectedEntity)
+                        ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                        : "Send selected messages to another namespace or entity as new copies"
+                  }
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-50"
+                >
+                  <ArrowRightToLine className="h-3.5 w-3.5" />
+                  Replay To…
+                  <span className="ml-auto text-muted-foreground">cross-env</span>
+                </button>
               </div>
             </>
           )}
@@ -886,6 +947,24 @@ export function ServiceBusPage() {
           nsId={selectedNsId}
           entity={selectedEntity}
           onClose={() => setShowDlqTriage(false)}
+        />
+      )}
+
+      {/* Cross-environment replay wizard — sends the selected sequences to
+          another namespace/entity as new stamped copies. Prefills the selected
+          message's sequence and the current active/DLQ view. */}
+      {showReplayTo && selectedNsId && selectedEntity && (
+        <ReplayToPanel
+          nsId={selectedNsId}
+          entity={selectedEntity}
+          namespaces={namespaces}
+          defaultDeadLetter={viewMode === "dlq"}
+          defaultSequences={
+            selectedMessage?.sequenceNumber != null
+              ? [selectedMessage.sequenceNumber]
+              : []
+          }
+          onClose={() => setShowReplayTo(false)}
         />
       )}
 

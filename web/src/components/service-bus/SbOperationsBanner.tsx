@@ -5,7 +5,7 @@ import {
     useSbEntityOperations,
     useSbResumeOperation,
 } from "@/lib/hooks";
-import type { SbEntityInfo, SbOperationStatus } from "@/lib/types";
+import { SB_OP_KIND_REPLAY_TO, type SbEntityInfo, type SbOperationStatus } from "@/lib/types";
 import { isResumableState, opProgressText, opStateLabel } from "./reachOps";
 
 interface Props {
@@ -79,7 +79,9 @@ function OperationRow({
                 <span className="font-medium">{opStateLabel(op)}</span>
                 <span className="text-muted-foreground">
                     {" "}
-                    — reach-message on seq {op.targetSequenceNumber}
+                    {op.kind === SB_OP_KIND_REPLAY_TO
+                        ? `— replay to ${op.targetEntityPath ?? "another namespace"}`
+                        : `— reach-message on seq ${op.targetSequenceNumber}`}
                 </span>
                 {op.state === "Running" && (
                     <span className="block text-muted-foreground">
@@ -91,8 +93,9 @@ function OperationRow({
                         className="block text-muted-foreground"
                         data-testid={`sb-operation-parked-${op.id}`}
                     >
-                        {parked} parked copy(s) stamped in the DLQ — restore them as tail copies or
-                        leave them parked.
+                        {op.kind === SB_OP_KIND_REPLAY_TO
+                            ? `${op.requestedCount - op.replayedCount} requested message(s) still unprocessed — resume continues from the confirmed set, or dismiss to leave them.`
+                            : `${parked} parked copy(s) stamped in the DLQ — restore them as tail copies or leave them parked.`}
                     </span>
                 )}
             </div>
@@ -114,7 +117,7 @@ function OperationRow({
                         className="shrink-0 rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
                         data-testid={`sb-operation-resume-${op.id}`}
                     >
-                        Resume restore
+                        {op.kind === SB_OP_KIND_REPLAY_TO ? "Resume replay" : "Resume restore"}
                     </button>
                     <button
                         onClick={onDismiss}
@@ -122,7 +125,7 @@ function OperationRow({
                         className="shrink-0 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                         data-testid={`sb-operation-dismiss-${op.id}`}
                     >
-                        Leave in DLQ
+                        {op.kind === SB_OP_KIND_REPLAY_TO ? "Dismiss" : "Leave in DLQ"}
                     </button>
                 </>
             )}

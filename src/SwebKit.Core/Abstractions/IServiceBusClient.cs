@@ -140,6 +140,43 @@ public interface IServiceBusClient
     /// </remarks>
     Task<int> ResubmitDeadLetterByFilterAsync(string entityPath, string deadLetterReason, string? deadLetterErrorDescription, int limit, CancellationToken ct = default) =>
         throw new NotSupportedException("DLQ resubmit-by-filter is not supported by this Service Bus client.");
+    /// <summary>
+    /// Cross-environment replay: peek-lock receives the source messages identified by
+    /// <paramref name="sequenceNumbers"/> from <paramref name="entityPath"/> (or its dead-letter
+    /// sub-queue when <paramref name="deadLetter"/>), clones each via <see cref="SbReplay.BuildClone"/>
+    /// — fresh message id, provenance stamp, broker fields cleared — and sends the clone through
+    /// <paramref name="targetClient"/> to <paramref name="targetEntityPath"/>. The source copy is
+    /// completed when <see cref="SbReplayOptions.RemoveSource"/> is set, abandoned otherwise.
+    /// Two namespaces means no transaction can span send+settle — the transfer is at-least-once
+    /// and a crash between send and source-settle can duplicate a copy on the target.
+    /// <paramref name="alreadyProcessed"/> skips sequences a previous run confirmed — the resume
+    /// path. Per-message failures are tolerated and counted, never fatal to the rest of the run.
+    /// </summary>
+    /// <remarks>
+    /// The default throws so pre-existing <see cref="IServiceBusClient"/> implementations (test
+    /// fakes, legacy shells) keep compiling; real clients must override.
+    /// </remarks>
+    Task<SbReplayResult> ReplayMessagesAsync(
+        string entityPath,
+        IReadOnlyCollection<long> sequenceNumbers,
+        bool deadLetter,
+        IServiceBusClient targetClient,
+        string targetEntityPath,
+        SbReplayOptions options,
+        IReadOnlySet<long>? alreadyProcessed = null,
+        IProgress<SbReplayProgress>? progress = null,
+        CancellationToken ct = default) =>
+        throw new NotSupportedException("Cross-environment replay is not supported by this Service Bus client.");
+    /// <summary>
+    /// Management-plane entity settings (sizing, TTL, lock duration, delivery caps, partitioning
+    /// and session flags) as grouped display rows — the read-only properties surface.
+    /// </summary>
+    /// <remarks>
+    /// The default throws so pre-existing <see cref="IServiceBusClient"/> implementations (test
+    /// fakes, legacy shells) keep compiling; real clients must override.
+    /// </remarks>
+    Task<SbEntityProperties> GetEntityPropertiesAsync(string entityPath, CancellationToken ct = default) =>
+        throw new NotSupportedException("Entity properties are not supported by this Service Bus client.");
     Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default);
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
 }

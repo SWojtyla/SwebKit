@@ -1,3 +1,4 @@
+using Azure;
 using Azure.Core;
 using Azure.Messaging.ServiceBus;
 using Azure.Messaging.ServiceBus.Administration;
@@ -1108,6 +1109,237 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
             (message, token) => receiver.AbandonMessageAsync(message, cancellationToken: token),
             ct).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Cross-environment replay: peek-lock receives the requested sequences from the entity (or its
+    /// DLQ), clones each through <see cref="SbReplay.BuildClone"/> — fresh message id, provenance
+    /// stamp, broker fields cleared — and sends it through <paramref name="targetClient"/>, which may
+    /// be backed by a different namespace entirely. Source copies are completed only when
+    /// <see cref="SbReplayOptions.RemoveSource"/> is set; otherwise they are abandoned back to the
+    /// source. At-least-once across two namespaces: a crash between send and settle can duplicate.
+    /// Per-message failures are counted, never fatal — the failed copy stays in the source for resume.
+    /// </summary>
+    public async Task<SbReplayResult> ReplayMessagesAsync(
+        string entityPath,
+        IReadOnlyCollection<long> sequenceNumbers,
+        bool deadLetter,
+        IServiceBusClient targetClient,
+        string targetEntityPath,
+        SbReplayOptions options,
+        IReadOnlySet<long>? alreadyProcessed = null,
+        IProgress<SbReplayProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(targetClient);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var result = new SbReplayResult();
+        var wanted = new HashSet<long>(sequenceNumbers);
+        if (alreadyProcessed is not null)
+        {
+            wanted.ExceptWith(alreadyProcessed);
+        }
+        if (wanted.Count == 0)
+        {
+            return result;
+        }
+
+        var sourcePath = deadLetter ? $"{entityPath}/$DeadLetterQueue" : entityPath;
+        await using var receiver = _client.CreateReceiver(sourcePath, new ServiceBusReceiverOptions
+        {
+            ReceiveMode = ServiceBusReceiveMode.PeekLock,
+            PrefetchCount = 0
+        });
+
+        while (wanted.Count > 0)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var received = await receiver.ReceiveMessagesAsync(MaxReceiveBatchSize, ReceiveWaitTime, ct).ConfigureAwait(false);
+            if (received.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var message in received)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!wanted.Remove(message.SequenceNumber))
+                {
+                    await receiver.AbandonMessageAsync(message, cancellationToken: ct).ConfigureAwait(false);
+                    continue;
+                }
+
+                try
+                {
+                    var clone = SbReplay.BuildClone(MapMessage(message), options);
+                    await targetClient.SendMessageAsync(targetEntityPath, clone, ct).ConfigureAwait(false);
+                    if (options.RemoveSource)
+                    {
+                        await receiver.CompleteMessageAsync(message, ct).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await receiver.AbandonMessageAsync(message, cancellationToken: ct).ConfigureAwait(false);
+                    }
+                    result.SentCount++;
+                    result.ProcessedSequenceNumbers.Add(message.SequenceNumber);
+                    progress?.Report(new SbReplayProgress { SequenceNumber = message.SequenceNumber, Succeeded = true });
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // Per-message tolerance — a send rejection or an expired lock must not strand
+                    // the rest of the run; the failed copy stays in the source for resume.
+                    result.FailedCount++;
+                    progress?.Report(new SbReplayProgress { SequenceNumber = message.SequenceNumber, Succeeded = false });
+                    _logger.LogWarning(ex, "Replay could not transfer message {SequenceNumber} from {EntityPath} to {TargetEntityPath}", message.SequenceNumber, entityPath, targetEntityPath);
+                }
+            }
+        }
+
+        // Whatever the receive loop never matched was consumed, expired or already moved — report it
+        // honestly rather than failing the whole op.
+        result.MissingSequenceNumbers.AddRange(wanted.Order());
+        return result;
+    }
+
+    /// <summary>
+    /// Management-plane entity properties as grouped display rows. A subscription path reads its
+    /// <see cref="SubscriptionProperties"/>; a bare path tries queue first, then topic — an entity
+    /// that is neither surfaces as "not found" via <see cref="InvalidOperationException"/> instead
+    /// of an SDK error carrying connection details.
+    /// </summary>
+    public async Task<SbEntityProperties> GetEntityPropertiesAsync(string entityPath, CancellationToken ct = default)
+    {
+        if (TryParseSubscriptionPath(entityPath, out var topicName, out var subscriptionName))
+        {
+            var subscription = await _adminClient.GetSubscriptionAsync(topicName, subscriptionName, ct).ConfigureAwait(false);
+            return MapSubscriptionProperties(entityPath, topicName, subscription.Value);
+        }
+
+        try
+        {
+            var queue = await _adminClient.GetQueueAsync(entityPath, ct).ConfigureAwait(false);
+            return MapQueueProperties(entityPath, queue.Value);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            // Not a queue — try topic before declaring the entity absent.
+        }
+
+        try
+        {
+            var topic = await _adminClient.GetTopicAsync(entityPath, ct).ConfigureAwait(false);
+            return MapTopicProperties(entityPath, topic.Value);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            throw new InvalidOperationException($"'{entityPath}' was not found as a queue, topic or subscription in this namespace.");
+        }
+    }
+
+    internal static SbEntityProperties MapQueueProperties(string entityPath, QueueProperties props)
+    {
+        var rows = new List<SbEntityProperty>();
+        Row(rows, "General", "Status", props.Status.ToString());
+        Row(rows, "General", "Requires session", props.RequiresSession);
+        Row(rows, "General", "Requires duplicate detection", props.RequiresDuplicateDetection);
+        Row(rows, "General", "Batched operations", props.EnableBatchedOperations);
+        Row(rows, "General", "Partitioned", props.EnablePartitioning);
+        Row(rows, "Sizing", "Max size", $"{props.MaxSizeInMegabytes} MB");
+        if (props.MaxMessageSizeInKilobytes is { } maxMessage)
+        {
+            Row(rows, "Sizing", "Max message size", $"{maxMessage} KB");
+        }
+        Row(rows, "Delivery", "Max delivery count", props.MaxDeliveryCount.ToString(CultureInfo.InvariantCulture));
+        Row(rows, "Delivery", "Lock duration", props.LockDuration);
+        Row(rows, "Delivery", "Duplicate detection window", props.DuplicateDetectionHistoryTimeWindow);
+        Row(rows, "Delivery", "Dead-letter on expiration", props.DeadLetteringOnMessageExpiration);
+        Row(rows, "Delivery", "Forward to", string.IsNullOrEmpty(props.ForwardTo) ? "—" : props.ForwardTo);
+        Row(rows, "Delivery", "Forward dead-letters to", string.IsNullOrEmpty(props.ForwardDeadLetteredMessagesTo) ? "—" : props.ForwardDeadLetteredMessagesTo);
+        Row(rows, "Lifecycle", "Default TTL", props.DefaultMessageTimeToLive);
+        Row(rows, "Lifecycle", "Auto-delete when idle", props.AutoDeleteOnIdle);
+        if (!string.IsNullOrEmpty(props.UserMetadata))
+        {
+            Row(rows, "General", "Notes", props.UserMetadata);
+        }
+        return new SbEntityProperties
+        {
+            EntityPath = entityPath,
+            EntityKind = "queue",
+            RequiresSession = props.RequiresSession,
+            Properties = rows,
+        };
+    }
+
+    internal static SbEntityProperties MapSubscriptionProperties(string entityPath, string topicName, SubscriptionProperties props)
+    {
+        var rows = new List<SbEntityProperty>();
+        Row(rows, "General", "Status", props.Status.ToString());
+        Row(rows, "General", "Requires session", props.RequiresSession);
+        Row(rows, "General", "Batched operations", props.EnableBatchedOperations);
+        Row(rows, "Delivery", "Max delivery count", props.MaxDeliveryCount.ToString(CultureInfo.InvariantCulture));
+        Row(rows, "Delivery", "Lock duration", props.LockDuration);
+        Row(rows, "Delivery", "Dead-letter on expiration", props.DeadLetteringOnMessageExpiration);
+        Row(rows, "Delivery", "Forward to", string.IsNullOrEmpty(props.ForwardTo) ? "—" : props.ForwardTo);
+        Row(rows, "Delivery", "Forward dead-letters to", string.IsNullOrEmpty(props.ForwardDeadLetteredMessagesTo) ? "—" : props.ForwardDeadLetteredMessagesTo);
+        Row(rows, "Lifecycle", "Default TTL", props.DefaultMessageTimeToLive);
+        Row(rows, "Lifecycle", "Auto-delete when idle", props.AutoDeleteOnIdle);
+        if (!string.IsNullOrEmpty(props.UserMetadata))
+        {
+            Row(rows, "General", "Notes", props.UserMetadata);
+        }
+        return new SbEntityProperties
+        {
+            EntityPath = entityPath,
+            EntityKind = "subscription",
+            TopicName = topicName,
+            RequiresSession = props.RequiresSession,
+            Properties = rows,
+        };
+    }
+
+    internal static SbEntityProperties MapTopicProperties(string entityPath, TopicProperties props)
+    {
+        var rows = new List<SbEntityProperty>();
+        Row(rows, "General", "Status", props.Status.ToString());
+        Row(rows, "General", "Requires duplicate detection", props.RequiresDuplicateDetection);
+        Row(rows, "General", "Batched operations", props.EnableBatchedOperations);
+        Row(rows, "General", "Partitioned", props.EnablePartitioning);
+        Row(rows, "General", "Support ordering", props.SupportOrdering);
+        Row(rows, "Sizing", "Max size", $"{props.MaxSizeInMegabytes} MB");
+        if (props.MaxMessageSizeInKilobytes is { } maxMessage)
+        {
+            Row(rows, "Sizing", "Max message size", $"{maxMessage} KB");
+        }
+        Row(rows, "Delivery", "Duplicate detection window", props.DuplicateDetectionHistoryTimeWindow);
+        Row(rows, "Lifecycle", "Default TTL", props.DefaultMessageTimeToLive);
+        Row(rows, "Lifecycle", "Auto-delete when idle", props.AutoDeleteOnIdle);
+        if (!string.IsNullOrEmpty(props.UserMetadata))
+        {
+            Row(rows, "General", "Notes", props.UserMetadata);
+        }
+        return new SbEntityProperties
+        {
+            EntityPath = entityPath,
+            EntityKind = "topic",
+            RequiresSession = false,
+            Properties = rows,
+        };
+    }
+
+    private static void Row(List<SbEntityProperty> rows, string group, string name, string value) =>
+        rows.Add(new SbEntityProperty { Group = group, Name = name, Value = value });
+
+    private static void Row(List<SbEntityProperty> rows, string group, string name, bool value) =>
+        Row(rows, group, name, value ? "Yes" : "No");
+
+    private static void Row(List<SbEntityProperty> rows, string group, string name, TimeSpan value) =>
+        Row(rows, group, name, value == TimeSpan.MaxValue ? "Never" : value.ToString("c", CultureInfo.InvariantCulture));
 
     public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
     {

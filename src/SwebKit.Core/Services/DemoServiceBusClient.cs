@@ -242,11 +242,43 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         return Task.FromResult(activeRemoved);
     }
 
-    public Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default) =>
-        Task.CompletedTask;
+    /// <summary>
+    /// Honest demo send: the message lands in the entity's active list with a fresh sequence number,
+    /// enqueue time and delivery count — the broker assigns those, never the sender (the caller's
+    /// <see cref="SbMessage.SequenceNumber"/>/<see cref="SbMessage.EnqueuedAt"/> are ignored, matching
+    /// the real send path). Cross-env replay targets a demo namespace through this very method.
+    /// </summary>
+    public Task SendMessageAsync(string entityPath, SbMessage message, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        AppendMessage(entityPath, BrokerCopy(message));
+        return Task.CompletedTask;
+    }
 
-    public Task SendBatchAsync(string entityPath, IReadOnlyList<SbMessage> messages, CancellationToken ct = default) =>
-        Task.CompletedTask;
+    public async Task SendBatchAsync(string entityPath, IReadOnlyList<SbMessage> messages, CancellationToken ct = default)
+    {
+        foreach (var message in messages)
+        {
+            await SendMessageAsync(entityPath, message, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The store copy of an incoming send — the "broker-assigned" fields are overwritten.</summary>
+    private SbMessage BrokerCopy(SbMessage message) => new()
+    {
+        MessageId = string.IsNullOrWhiteSpace(message.MessageId) ? Guid.NewGuid().ToString() : message.MessageId,
+        CorrelationId = message.CorrelationId,
+        Subject = message.Subject,
+        ContentType = message.ContentType,
+        Body = message.Body,
+        ApplicationProperties = message.ApplicationProperties is null
+            ? new Dictionary<string, object>()
+            : new Dictionary<string, object>(message.ApplicationProperties),
+        EnqueuedAt = DateTimeOffset.UtcNow,
+        DeliveryCount = 0,
+        SequenceNumber = Interlocked.Increment(ref _nextSequence),
+        SessionId = message.SessionId,
+    };
 
     public Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime, CancellationToken ct = default) =>
         Task.FromResult(Interlocked.Increment(ref _nextSequence));
@@ -761,6 +793,179 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         }
         return Task.FromResult(moved.Count);
     }
+
+    /// <summary>
+    /// Honest demo cross-environment replay: clones the requested source messages (fresh message
+    /// id, provenance stamp, broker fields cleared by <see cref="SbReplay.BuildClone"/>) and sends
+    /// each through <paramref name="targetClient"/> — a different <see cref="DemoServiceBusClient"/>
+    /// instance when the target is the other demo namespace, so cross-client replay actually lands.
+    /// Source copies leave the store only under move semantics
+    /// (<see cref="SbReplayOptions.RemoveSource"/>); per-message send failures are counted, not fatal.
+    /// </summary>
+    public async Task<SbReplayResult> ReplayMessagesAsync(
+        string entityPath,
+        IReadOnlyCollection<long> sequenceNumbers,
+        bool deadLetter,
+        IServiceBusClient targetClient,
+        string targetEntityPath,
+        SbReplayOptions options,
+        IReadOnlySet<long>? alreadyProcessed = null,
+        IProgress<SbReplayProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(targetClient);
+        ArgumentNullException.ThrowIfNull(options);
+        ct.ThrowIfCancellationRequested();
+
+        var result = new SbReplayResult();
+        var wanted = new HashSet<long>(sequenceNumbers);
+        if (alreadyProcessed is not null)
+        {
+            wanted.ExceptWith(alreadyProcessed);
+        }
+        if (wanted.Count == 0)
+        {
+            return result;
+        }
+
+        if (!_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            result.MissingSequenceNumbers.AddRange(wanted.Order());
+            return result;
+        }
+
+        var source = deadLetter ? entityData.DeadLetterMessages : entityData.ActiveMessages;
+        var removed = new HashSet<long>();
+        foreach (var message in source)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (message.SequenceNumber is not { } sequenceNumber || !wanted.Remove(sequenceNumber))
+            {
+                continue;
+            }
+
+            try
+            {
+                // The clone intentionally carries no sequence/enqueue fields — the TARGET client
+                // assigns them, exactly like a real send to another namespace.
+                await targetClient.SendMessageAsync(targetEntityPath, SbReplay.BuildClone(message, options), ct).ConfigureAwait(false);
+                result.SentCount++;
+                result.ProcessedSequenceNumbers.Add(sequenceNumber);
+                if (options.RemoveSource)
+                {
+                    removed.Add(sequenceNumber);
+                }
+                progress?.Report(new SbReplayProgress { SequenceNumber = sequenceNumber, Succeeded = true });
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                result.FailedCount++;
+                progress?.Report(new SbReplayProgress { SequenceNumber = sequenceNumber, Succeeded = false });
+            }
+        }
+
+        if (removed.Count > 0)
+        {
+            _entityData[entityPath] = deadLetter
+                ? entityData with { DeadLetterMessages = source.Where(m => m.SequenceNumber is not { } s || !removed.Contains(s)).ToList() }
+                : entityData with { ActiveMessages = source.Where(m => m.SequenceNumber is not { } s || !removed.Contains(s)).ToList() };
+        }
+
+        result.MissingSequenceNumbers.AddRange(wanted.Order());
+        return result;
+    }
+
+    /// <summary>
+    /// Demo entity properties — the same row surface as the Azure client, populated with plausible
+    /// demo constants plus the entity's real session flag. Unknown paths throw rather than invent
+    /// properties for an entity the store doesn't know.
+    /// </summary>
+    public Task<SbEntityProperties> GetEntityPropertiesAsync(string entityPath, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        const string marker = "/subscriptions/";
+        var markerIndex = entityPath.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex > 0)
+        {
+            var topicName = entityPath[..markerIndex];
+            if (!_entityData.TryGetValue(entityPath, out var subData))
+            {
+                throw new InvalidOperationException($"'{entityPath}' was not found as a queue, topic or subscription in this namespace.");
+            }
+            return Task.FromResult(new SbEntityProperties
+            {
+                EntityPath = entityPath,
+                EntityKind = "subscription",
+                TopicName = topicName,
+                RequiresSession = subData.RequiresSession,
+                Properties =
+                [
+                    Prop("General", "Status", "Active"),
+                    Prop("General", "Requires session", subData.RequiresSession),
+                    Prop("Delivery", "Max delivery count", "10"),
+                    Prop("Delivery", "Lock duration", "00:00:30"),
+                    Prop("Delivery", "Dead-letter on expiration", false),
+                    Prop("Lifecycle", "Default TTL", "14.00:00:00"),
+                    Prop("Lifecycle", "Auto-delete when idle", "Never"),
+                ],
+            });
+        }
+
+        if (entityPath is "user-events" or "audit-log")
+        {
+            return Task.FromResult(new SbEntityProperties
+            {
+                EntityPath = entityPath,
+                EntityKind = "topic",
+                RequiresSession = false,
+                Properties =
+                [
+                    Prop("General", "Status", "Active"),
+                    Prop("General", "Requires duplicate detection", false),
+                    Prop("General", "Partitioned", false),
+                    Prop("Sizing", "Max size", "1024 MB"),
+                    Prop("Lifecycle", "Default TTL", "14.00:00:00"),
+                    Prop("Lifecycle", "Auto-delete when idle", "Never"),
+                ],
+            });
+        }
+
+        if (!_entityData.TryGetValue(entityPath, out var queueData))
+        {
+            throw new InvalidOperationException($"'{entityPath}' was not found as a queue, topic or subscription in this namespace.");
+        }
+
+        return Task.FromResult(new SbEntityProperties
+        {
+            EntityPath = entityPath,
+            EntityKind = "queue",
+            RequiresSession = queueData.RequiresSession,
+            Properties =
+            [
+                Prop("General", "Status", IsDisabled(entityPath) ? "Disabled" : "Active"),
+                Prop("General", "Requires session", queueData.RequiresSession),
+                Prop("General", "Requires duplicate detection", false),
+                Prop("General", "Partitioned", false),
+                Prop("Sizing", "Max size", "1024 MB"),
+                Prop("Delivery", "Max delivery count", queueData.RequiresSession ? "5" : "10"),
+                Prop("Delivery", "Lock duration", queueData.RequiresSession ? "00:05:00" : "00:00:30"),
+                Prop("Delivery", "Dead-letter on expiration", true),
+                Prop("Lifecycle", "Default TTL", "14.00:00:00"),
+                Prop("Lifecycle", "Auto-delete when idle", "Never"),
+            ],
+        });
+    }
+
+    private static SbEntityProperty Prop(string group, string name, string value) =>
+        new() { Group = group, Name = name, Value = value };
+
+    private static SbEntityProperty Prop(string group, string name, bool value) =>
+        Prop(group, name, value ? "Yes" : "No");
 
     /// <summary>Broker-settle honesty: requested DLQ messages actually leave the store's DLQ.</summary>
     public Task CompleteDeadLetterAsync(string entityPath, IReadOnlyList<string> sequenceNumbers, CancellationToken ct = default)
