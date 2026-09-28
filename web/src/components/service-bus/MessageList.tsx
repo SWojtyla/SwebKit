@@ -51,6 +51,7 @@ import {
     MessageListFooter,
     type MessageGridContext,
 } from "./MessageListTable";
+import { useGridKeyboardNav } from "@/lib/hooks/useGridKeyboardNav";
 
 interface Props {
     nsId: string | null;
@@ -104,6 +105,9 @@ export function MessageList({
     const { notify } = useNotification();
     const listRef = useRef<HTMLDivElement>(null);
     const sentinelRef = useRef<HTMLDivElement>(null);
+    // Root container of toolbar + list — lets the `/` grid shortcut reach the
+    // toolbar's filter input without threading a ref prop through it.
+    const panelRef = useRef<HTMLDivElement | null>(null);
     const [textFilter, setTextFilter] = useState("");
     const [advancedRules, setAdvancedRules] = useState<AdvancedFilterRule[]>(
         [],
@@ -524,6 +528,29 @@ export function MessageList({
             ROW_HEIGHT_ESTIMATE[prefs.rowDensity],
     });
 
+    // Keyboard nav (ux-power-pack §4): j/k + arrows move a focused row through
+    // the virtualized list (scrollToIndex mounts it before focus lands), e/Enter
+    // opens the detail panel, Space toggles the row's bulk-selection checkbox,
+    // / jumps to the text filter, g/G jump first/last.
+    const gridNav = useGridKeyboardNav({
+        containerRef: listRef,
+        itemCount: filteredMessages.length,
+        resetKey: `${nsId}|${entityPath ?? ""}|${viewMode}`,
+        getFilterInput: () =>
+            panelRef.current?.querySelector<HTMLElement>(
+                '[data-testid="message-text-filter"]',
+            ) ?? null,
+        scrollToIndex: (index) => rowVirtualizer.scrollToIndex(index),
+        onInspect: (index) => {
+            const msg = filteredMessages[index];
+            if (msg) onSelectMessage(msg);
+        },
+        onToggleSelect: (index) => {
+            const msg = filteredMessages[index];
+            if (msg) toggleSelect(msg);
+        },
+    });
+
     if (!entity) {
         return (
             <div
@@ -575,6 +602,7 @@ export function MessageList({
 
     return (
         <div
+            ref={panelRef}
             className="flex h-full flex-col"
             data-testid="message-list-container"
         >
@@ -731,12 +759,21 @@ export function MessageList({
                         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                             const msg = filteredMessages[virtualRow.index];
                             const msgKey = sbMessageKey(msg);
+                            const isFocused =
+                                gridNav.focusedIndex === virtualRow.index;
                             return (
                                 <div
                                     key={virtualRow.key}
                                     data-index={virtualRow.index}
+                                    data-grid-nav-row={virtualRow.index}
                                     ref={rowVirtualizer.measureElement}
-                                    role="presentation"
+                                    tabIndex={isFocused ? 0 : -1}
+                                    onFocus={() =>
+                                        gridNav.setFocusedIndex(
+                                            virtualRow.index,
+                                        )
+                                    }
+                                    className={`outline-none ${isFocused ? "bg-accent/40" : ""}`}
                                     style={{
                                         position: "absolute",
                                         top: 0,

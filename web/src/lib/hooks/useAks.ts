@@ -120,13 +120,14 @@ export function useAksSetContext() {
     });
 }
 
-export function useAksContexts() {
+export function useAksContexts(options?: { enabled?: boolean }) {
     return useQuery({
         queryKey: ["aks-contexts"],
         queryFn: ({ signal }) =>
             apiFetch<KubeContextInfo[]>("/api/aks/contexts", { signal }),
         // Contexts come from the kubeconfig file — cheap to read, slow to change.
         staleTime: 5 * 60_000,
+        enabled: options?.enabled ?? true,
     });
 }
 

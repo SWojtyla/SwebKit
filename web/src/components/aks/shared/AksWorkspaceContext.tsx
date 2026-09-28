@@ -493,6 +493,22 @@ export function AksWorkspaceProvider({
         ],
     );
 
+    // Apply a kube context switch requested via the command palette
+    // (`state.context`). Waits for the context list so an unknown name can't
+    // fire a mutation, then goes through the same path the header's context
+    // picker takes — including the kubeconfig's default-namespace hint.
+    // Declared after `handleContextChange` (block-scoped const ordering).
+    useEffect(() => {
+        const state = location.state as { context?: string } | null;
+        if (!state?.context || !contexts) return;
+        const target = contexts.find((c) => c.name === state.context);
+        if (target && !target.isCurrent) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
+            handleContextChange(target.name, target.namespace ?? undefined);
+        }
+        navigate(location.pathname, { replace: true, state: null });
+    }, [location, navigate, contexts, handleContextChange]);
+
     const setAutoRefresh = useCallback((value: boolean) => {
         setAutoRefreshState(value);
         saveViewPreference(AUTO_REFRESH_PREF, value);

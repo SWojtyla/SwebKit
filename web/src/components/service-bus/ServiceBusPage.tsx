@@ -16,6 +16,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useNotification } from "@/components/layout/notification-context";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { PinResourceButton } from "@/components/shared/PinResourceButton";
+import { pinServiceBusEntity } from "@/lib/pinned-resources";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { ResizablePanels } from "@/components/ui/ResizablePanels";
 import { EntityTree } from "./EntityTree";
@@ -314,6 +316,34 @@ export function ServiceBusPage() {
     }
   }, [location, navigate, namespaces]);
 
+  // "New Service Bus message" palette action: `state.compose` opens the
+  // composer. An object form can target a specific namespace/entity
+  // (`{ nsId, entityPath, entityName }`), written as canonical `?ns=&entity=`
+  // params so the landing URL is shareable.
+  useEffect(() => {
+    const state = location.state as {
+      compose?:
+        | boolean
+        | { nsId?: string; entityPath?: string; entityName?: string };
+    } | null;
+    if (!state?.compose) return;
+    const target = typeof state.compose === "object" ? state.compose : null;
+    const next = new URLSearchParams(location.search);
+    if (target?.nsId && namespaces.some((ns) => ns.id === target.nsId)) {
+      next.set("ns", target.nsId);
+      if (target.entityPath) {
+        next.set("entity", target.entityPath);
+        next.set("entityName", target.entityName ?? target.entityPath);
+      }
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
+    openComposer("compose");
+    navigate(
+      { pathname: location.pathname, search: next.toString() },
+      { replace: true, state: null },
+    );
+  }, [location, navigate, namespaces, openComposer]);
+
   const handleEntityAction = useCallback((entity: SbEntityInfo, action: EntityAction) => {
     setSelectedEntity(entity);
     if (action === "peek-active") setViewMode("active");
@@ -392,6 +422,16 @@ export function ServiceBusPage() {
           <span className="truncate font-medium" title={selectedEntity.name}>
             {selectedEntity.name}
           </span>
+          {selectedNsId && (
+            <PinResourceButton
+              resource={pinServiceBusEntity(
+                selectedNsId,
+                selectedNs?.alias ?? selectedNsId,
+                selectedEntity,
+              )}
+              testId="sb-pin-entity"
+            />
+          )}
           <button
             type="button"
             onClick={() => setAskAiOpen(true)}

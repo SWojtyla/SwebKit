@@ -47,6 +47,8 @@ import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { NamespaceSelector } from "./NamespaceSelector";
 import { ContextSelector } from "./ContextSelector";
+import { PinResourceButton } from "@/components/shared/PinResourceButton";
+import { pinAksNamespaces } from "@/lib/pinned-resources";
 import { RefreshCw, Loader2, Ship } from "lucide-react";
 import { useNavigate } from "react-router";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -145,6 +147,15 @@ function AksPageContent() {
                             : undefined
                     }
                 />
+                {ws.selectedNamespaces.length > 0 && (
+                    <PinResourceButton
+                        resource={pinAksNamespaces(
+                            ws.currentContext,
+                            ws.selectedNamespaces,
+                        )}
+                        testId="aks-pin-namespaces"
+                    />
+                )}
 
                 {ws.contextLoading ? (
                     <div

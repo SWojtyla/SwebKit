@@ -1,15 +1,22 @@
 import { create } from "zustand";
 
-export type Theme = "light" | "dark" | "fancy" | "fathom-dark" | "fathom-light";
+export type Theme =
+    | "light"
+    | "dark"
+    | "fancy"
+    | "fathom-dark"
+    | "fathom-light"
+    | "letterpress-light"
+    | "letterpress-dark";
 
 // Fathom is unlockable (Settings → Appearance gates it on usage) and deliberately left out of the
 // quick-cycle button/shortcut — that control has no way to know the unlock state from here, so it
-// only ever cycles the three themes everyone always has.
-const THEME_CYCLE: Theme[] = ["dark", "light", "fancy"];
+// only ever cycles the themes everyone always has.
+const THEME_CYCLE: Theme[] = ["dark", "light", "letterpress-light", "letterpress-dark", "fancy"];
 
-const THEME_CLASSES: Theme[] = ["dark", "fancy", "fathom-dark", "fathom-light"];
+const THEME_CLASSES: Theme[] = ["dark", "fancy", "fathom-dark", "fathom-light", "letterpress-light", "letterpress-dark"];
 
-const ALL_THEMES: Theme[] = ["light", "dark", "fancy", "fathom-dark", "fathom-light"];
+const ALL_THEMES: Theme[] = ["light", "dark", "fancy", "fathom-dark", "fathom-light", "letterpress-light", "letterpress-dark"];
 
 // Guards the value coming back from user-settings.json — it's a free-form string on that side,
 // and could be empty (never saved before) or stale (a theme id that no longer exists).

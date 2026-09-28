@@ -8,6 +8,8 @@ const THEMES: { id: Theme; label: string; desc: string }[] = [
   { id: "fancy", label: "✨ Fancy ✨", desc: "Maximum vibes. Zero professionalism." },
   { id: "fathom-dark", label: "Fathom Abyss", desc: "Gold light sinking into dark water" },
   { id: "fathom-light", label: "Fathom Shallows", desc: "Sunlit surface, a hint of gold" },
+  { id: "letterpress-light", label: "Letterpress Day", desc: "Warm paper, ink, and a vermilion stamp" },
+  { id: "letterpress-dark", label: "Letterpress Night", desc: "Candlelit pages, ember accents" },
 ];
 
 export function AppearanceSettings() {
@@ -43,6 +45,7 @@ export function AppearanceSettings() {
         <div className="mt-3 grid grid-cols-3 gap-3">
           {THEMES.map((t) => {
             const isFathom = t.id === "fathom-dark" || t.id === "fathom-light";
+            const isLetterpress = t.id === "letterpress-light" || t.id === "letterpress-dark";
             const locked = isFathom && !fathomAvailable;
 
             return (
@@ -71,7 +74,11 @@ export function AppearanceSettings() {
                           ? "bg-[linear-gradient(180deg,#16321f_0%,#0a1a22_40%,#050b12_100%)]"
                           : t.id === "fathom-light"
                             ? "bg-[linear-gradient(180deg,#fdf6e3_0%,#eaf5ee_40%,#cfe9e6_100%)]"
-                            : "bg-[oklch(0.98_0.008_250)]"
+                            : t.id === "letterpress-light"
+                              ? "bg-[linear-gradient(180deg,#fdfaf2_0%,#f4efe3_55%,#e9e0cb_100%)]"
+                              : t.id === "letterpress-dark"
+                                ? "bg-[linear-gradient(180deg,#2a211a_0%,#161210_55%,#0e0b08_100%)]"
+                                : "bg-[oklch(0.98_0.008_250)]"
                   }`}
                 >
                   {t.id === "fancy" ? (
@@ -82,6 +89,13 @@ export function AppearanceSettings() {
                     ) : (
                       <div className="h-6 w-6 rounded-full bg-[#e0a940] shadow-[0_0_10px_rgba(224,169,64,0.6)]" />
                     )
+                  ) : isLetterpress ? (
+                    <span
+                      className="font-serif text-2xl"
+                      style={{ color: t.id === "letterpress-light" ? "#26211a" : "#e8e0cf" }}
+                    >
+                      Aa<span style={{ color: t.id === "letterpress-light" ? "#bc3f1e" : "#e06535" }}>.</span>
+                    </span>
                   ) : (
                     <div className="flex gap-1.5">
                       <div className="h-6 w-6 rounded-full bg-[oklch(0.65_0.24_265)]" />

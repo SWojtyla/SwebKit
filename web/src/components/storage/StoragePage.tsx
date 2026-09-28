@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import { RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
+import { PinResourceButton } from "@/components/shared/PinResourceButton";
+import { pinStorageAccount } from "@/lib/pinned-resources";
 import { QueryState } from "@/components/shared/QueryState";
 import { StoragePageProvider } from "./StoragePageContext";
 import {
@@ -182,6 +184,16 @@ function StoragePageContent() {
                                 nativeSelectTestId="storage-account-select"
                                 listAriaLabel="Storage accounts"
                                 buttonClassName="min-w-[10rem]"
+                            />
+                        )}
+                        {ctx.resolvedAccountId && (
+                            <PinResourceButton
+                                resource={pinStorageAccount(
+                                    ctx.accounts.find(
+                                        (a) => a.id === ctx.resolvedAccountId,
+                                    ) ?? { id: ctx.resolvedAccountId },
+                                )}
+                                testId="storage-pin-account"
                             />
                         )}
                     </div>

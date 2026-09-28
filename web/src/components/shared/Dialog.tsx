@@ -47,7 +47,7 @@ export function Dialog({ children, onClose, label, testId = "dialog", widthClass
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        className={`${widthClassName} rounded-lg border bg-card shadow-lg outline-none`}
+        className={`${widthClassName} max-h-[90vh] overflow-y-auto rounded-lg border bg-card shadow-lg outline-none`}
         data-testid={testId}
       >
         {children}

@@ -1,5 +1,7 @@
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { LastRefreshed } from "@/components/shared/LastRefreshed";
+import { PinResourceButton } from "@/components/shared/PinResourceButton";
+import { pinRedisCache } from "@/lib/pinned-resources";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useNavigate } from "react-router";
 import { Bell, Clock, RefreshCw } from "lucide-react";
@@ -79,6 +81,16 @@ function RedisPageContent() {
             nativeSelectTestId="redis-cache-select"
             listAriaLabel="Redis caches"
             buttonClassName="min-w-[10rem]"
+          />
+        )}
+        {resolvedCacheId && (
+          <PinResourceButton
+            resource={pinRedisCache(
+              caches.find((c) => c.id === resolvedCacheId) ?? {
+                id: resolvedCacheId,
+              },
+            )}
+            testId="redis-pin-cache"
           />
         )}
         {serverInfo.isLoading && (

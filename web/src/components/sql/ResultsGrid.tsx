@@ -1,7 +1,10 @@
+import { useRef } from "react";
 import { Download } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { downloadText } from "@/lib/download";
 import { cellText, toCsv } from "@/lib/sql-csv";
+import { useGridKeyboardNav } from "@/lib/hooks/useGridKeyboardNav";
+import { useNotification } from "@/components/layout/notification-context";
 import type { SqlQueryResult } from "@/lib/types";
 
 interface ResultsGridProps {
@@ -11,12 +14,32 @@ interface ResultsGridProps {
 }
 
 /** Shared result grid for query output and table browsing — bounded by the server's
- * maxRows cap, so a plain table render (no virtualization needed at ≤5000 rows). */
+ * maxRows cap, so a plain table render (no virtualization needed at ≤5000 rows).
+ *
+ * Keyboard nav (ux-power-pack §4): j/k + arrows move a focused row (highlighted),
+ * e/Enter copies the focused row's JSON to the clipboard, g/G jump first/last.
+ * Rows carry `data-grid-nav-row` + roving `tabIndex`; keys are ignored while
+ * typing in inputs or the CodeMirror editor. */
 export function ResultsGrid({
     result,
     isRunning,
     testId = "sql-results",
 }: ResultsGridProps) {
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const { notify } = useNotification();
+    const rowCount = result?.rows.length ?? 0;
+    const gridNav = useGridKeyboardNav({
+        containerRef,
+        itemCount: rowCount,
+        resetKey: result,
+        onInspect: (index) => {
+            const row = result?.rows[index];
+            if (row === undefined) return;
+            void navigator.clipboard.writeText(JSON.stringify(row, null, 2));
+            notify("info", "Row copied", `Row ${index + 1} copied as JSON.`);
+        },
+    });
+
     if (isRunning) {
         return (
             <div
@@ -92,7 +115,7 @@ export function ResultsGrid({
                     </button>
                 </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto">
+            <div ref={containerRef} className="min-h-0 flex-1 overflow-auto">
                 <table className="w-full border-collapse text-xs">
                     <thead className="sticky top-0 bg-card">
                         <tr>
@@ -109,7 +132,17 @@ export function ResultsGrid({
                     </thead>
                     <tbody>
                         {result.rows.map((row, i) => (
-                            <tr key={i} className="odd:bg-muted/30">
+                            <tr
+                                key={i}
+                                tabIndex={gridNav.focusedIndex === i ? 0 : -1}
+                                data-grid-nav-row={i}
+                                onFocus={() => gridNav.setFocusedIndex(i)}
+                                className={`outline-none odd:bg-muted/30 ${
+                                    gridNav.focusedIndex === i
+                                        ? "bg-accent/70"
+                                        : ""
+                                }`}
+                            >
                                 {result.columns.map((col) => (
                                     <td
                                         key={col.name}
@@ -134,4 +167,3 @@ export function ResultsGrid({
         </div>
     );
 }
-
