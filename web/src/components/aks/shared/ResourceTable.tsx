@@ -1,6 +1,7 @@
 import {
     memo,
     useMemo,
+    useRef,
     useState,
     type ReactNode,
     type MouseEvent,
@@ -14,6 +15,7 @@ import {
     Search,
 } from "lucide-react";
 import { SkeletonTableRows } from "@/components/shared/Skeleton";
+import { useGridKeyboardNav } from "@/lib/hooks/useGridKeyboardNav";
 
 export interface Column<T> {
     header: ReactNode;
@@ -151,6 +153,28 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
         );
     };
 
+    // Grid keyboard nav (ux-power-pack §4): j/k/arrows move a focused row,
+    // e/Enter (and Space, kept for parity with the old row handler) run the
+    // row's click action, `/` focuses the name filter, g/G jump first/last.
+    // Rows carry `data-grid-nav-row` + a roving tabIndex; editable targets and
+    // focused buttons/links are guarded inside the hook.
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const filterInputRef = useRef<HTMLInputElement | null>(null);
+    const gridNav = useGridKeyboardNav({
+        containerRef,
+        itemCount: visibleRows.length,
+        resetKey: data,
+        onInspect: (index) => {
+            const row = visibleRows[index];
+            if (row !== undefined) onRowClick?.(row);
+        },
+        onToggleSelect: (index) => {
+            const row = visibleRows[index];
+            if (row !== undefined) onRowClick?.(row);
+        },
+        getFilterInput: () => filterInputRef.current,
+    });
+
     if (error) {
         return (
             <div
@@ -213,6 +237,7 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
         <div className="mb-2 flex items-center gap-1.5 px-1">
             <Search className="h-3.5 w-3.5 text-muted-foreground" />
             <input
+                ref={filterInputRef}
                 type="text"
                 value={nameFilter}
                 onChange={(e) => setNameFilter(e.target.value)}
@@ -248,7 +273,7 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
     }
 
     return (
-        <div className="p-4">
+        <div className="p-4" ref={containerRef}>
             {filterBar}
             {visibleRows.length === 0 ? (
                 <div
@@ -279,36 +304,28 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
                                 tableBodyTestId ?? `${testIdPrefix}s-table-body`
                             }
                         >
-                            {visibleRows.map((row) => {
+                            {visibleRows.map((row, rowIndex) => {
                                 const rowKey = getKey(row);
                                 const isSelected = selectedKey === rowKey;
+                                const isFocused = gridNav.focusedIndex === rowIndex;
                                 return (
                                     <tr
                                         key={rowKey}
                                         data-testid={`${testIdPrefix}-row-${row.name}`}
-                                        className={`border-b last:border-0 ${
+                                        data-grid-nav-row={rowIndex}
+                                        className={`border-b last:border-0 outline-none ${
                                             clickable
                                                 ? "cursor-pointer hover:bg-accent/50"
                                                 : "hover:bg-accent/30"
-                                        } ${isSelected ? "bg-accent" : ""} ${getRowClassName?.(row) ?? ""}`}
-                                        tabIndex={clickable ? 0 : undefined}
+                                        } ${isSelected ? "bg-accent" : ""} ${isFocused ? "bg-accent/70" : ""} ${getRowClassName?.(row) ?? ""}`}
+                                        tabIndex={isFocused ? 0 : -1}
+                                        onFocus={() =>
+                                            gridNav.setFocusedIndex(rowIndex)
+                                        }
                                         aria-selected={
                                             clickable ? isSelected : undefined
                                         }
                                         onClick={() => onRowClick?.(row)}
-                                        onKeyDown={
-                                            onRowClick
-                                                ? (e) => {
-                                                      if (
-                                                          e.key === "Enter" ||
-                                                          e.key === " "
-                                                      ) {
-                                                          e.preventDefault();
-                                                          onRowClick(row);
-                                                      }
-                                                  }
-                                                : undefined
-                                        }
                                         onContextMenu={(e) => {
                                             if (onRowContextMenu) {
                                                 e.preventDefault();
