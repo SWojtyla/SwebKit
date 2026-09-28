@@ -1,3 +1,5 @@
+using SwebKit.Core.Security;
+
 namespace SwebKit.Core.Models;
 
 public enum AlertRuleSource
@@ -194,7 +196,20 @@ public sealed class ProactiveInsightReport
     /// <summary>Model-assessed severity ("low" | "medium" | "high"), distinct from the rule's own
     /// <see cref="AlertSeverity"/>. Null only when the model didn't assess one (non-JSON output).</summary>
     public string? Severity { get; set; }
+    /// <summary>Legacy evidence as plain strings — kept populated for back-compat (older
+    /// frontends, the seeded chat transcript). Reports persisted before
+    /// <see cref="EvidenceItems"/> existed are coerced into items on read by
+    /// <c>ProactiveInsightReportRepository</c>, so consumers can rely on
+    /// <see cref="EvidenceItems"/> alone.</summary>
     public List<string> Evidence { get; set; } = [];
+    /// <summary>Structured evidence (agent-colleague item 1): each entry keeps the finding
+    /// text plus the producing tool, a server-stamped capture time, and optional navigable
+    /// <see cref="EvidenceItem.View"/>/"watch this" <see cref="EvidenceItem.Watch"/> hints.</summary>
+    public List<EvidenceItem> EvidenceItems { get; set; } = [];
+    /// <summary>Access denials the investigation's tool loop hit (agent-colleague item 2) —
+    /// the parsed form of every <c>{"status":"access_denied"}</c> tool result, so the report
+    /// can render an actionable "grant X on Y" card instead of burying 403s in prose.</summary>
+    public List<AccessGap> AccessGaps { get; set; } = [];
     public List<string> SuggestedNextSteps { get; set; } = [];
     public ProposedFix? ProposedFix { get; set; }
     /// <summary>Audit trail of which tools the investigation loop actually called.</summary>

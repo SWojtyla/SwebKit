@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiSend, streamAgentChat } from "../api";
+import { apiFetch, apiSend, postAgentFeedback, streamAgentChat } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
 import type {
   AcpPermission,
@@ -9,6 +9,7 @@ import type {
   AgentChatContext,
   AgentChatMode,
   AgentChatScope,
+  AgentFeedbackEntry,
   AgentProfile,
   AgentReply,
   AgentStatus,
@@ -291,7 +292,10 @@ export function useAgentChatStream(sessionId?: string) {
               case "done":
                 if (event.result) {
                   settled = true;
-                  resolve(event.result);
+                  // agent-colleague item 5: the done event's exchangeId is the handle a
+                  // thumbs-down posts to /api/agent/feedback — carry it onto the resolved
+                  // reply so callers can store it on the assistant message.
+                  resolve({ ...event.result, exchangeId: event.exchangeId });
                 }
                 break;
               case "error":
@@ -324,6 +328,33 @@ export function useAgentChatStream(sessionId?: string) {
   useEffect(() => () => abortRef.current?.abort(), []);
 
   return { send, isStreaming, cancel };
+}
+
+/**
+ * Persisted thumbs-down feedback entries (agent-colleague item 5) for Settings → AI Agent.
+ * The same payload the "Export JSON" button downloads — what's listed is what exports.
+ */
+export function useAgentFeedbackList() {
+  return useQuery({
+    queryKey: ["agent-feedback"],
+    queryFn: ({ signal }) => apiFetch<AgentFeedbackEntry[]>("/api/agent/feedback", { signal }),
+  });
+}
+
+/**
+ * POSTs a thumbs-down for one exchange (agent-colleague item 5). The body carries only the
+ * exchangeId — the sidecar's exchange ring buffer supplies the retained context, so the client
+ * never echoes the transcript back.
+ */
+export function useSubmitAgentFeedback() {
+  const qc = useQueryClient();
+  const { notify } = useNotification();
+  return useMutation({
+    mutationFn: (vars: { exchangeId: string; comment?: string; tags?: string[] }) =>
+      postAgentFeedback({ exchangeId: vars.exchangeId, sentiment: "down", comment: vars.comment, tags: vars.tags }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["agent-feedback"] }),
+    onError: (error) => notify("error", "Couldn't record feedback", String(error)),
+  });
 }
 
 export function useAgentClear(sessionId?: string) {

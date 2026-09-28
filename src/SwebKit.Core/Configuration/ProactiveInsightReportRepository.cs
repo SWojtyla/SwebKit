@@ -95,8 +95,36 @@ public sealed class ProactiveInsightReportRepository(ILogger<ProactiveInsightRep
         }
     }
 
-    private static List<ProactiveInsightReport> Deserialize(string json) =>
-        JsonSerializer.Deserialize<List<ProactiveInsightReport>>(json, Options) ?? [];
+    private static List<ProactiveInsightReport> Deserialize(string json)
+    {
+        var reports = JsonSerializer.Deserialize<List<ProactiveInsightReport>>(json, Options) ?? [];
+        foreach (var report in reports)
+            CoerceLegacyFields(report);
+        return reports;
+    }
+
+    /// <summary>Back-compat upgrade for reports persisted before
+    /// <see cref="ProactiveInsightReport.EvidenceItems"/> existed (agent-colleague item 1):
+    /// the legacy string list becomes text-only items (no tool, the report's own
+    /// <see cref="ProactiveInsightReport.CreatedAt"/> as the capture time). Runs on every load
+    /// — including the write path — so an upgraded report persists its coerced form on the
+    /// next save rather than being re-coerced forever.</summary>
+    internal static void CoerceLegacyFields(ProactiveInsightReport report)
+    {
+        if (report.EvidenceItems.Count == 0 && report.Evidence.Count > 0)
+        {
+            report.EvidenceItems = report.Evidence
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Select(e => new EvidenceItem { Text = e, CapturedAt = report.CreatedAt })
+                .ToList();
+        }
+        else if (report.Evidence.Count == 0 && report.EvidenceItems.Count > 0)
+        {
+            // Reverse direction: an items-only report (e.g. written by a newer build, edited
+            // by hand) still fills the legacy string list so old readers see something.
+            report.Evidence = report.EvidenceItems.Select(i => i.Text).Where(t => t.Length > 0).ToList();
+        }
+    }
 
     private async Task SaveAllAsync(IReadOnlyList<ProactiveInsightReport> reports)
     {

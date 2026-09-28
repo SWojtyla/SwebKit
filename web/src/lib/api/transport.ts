@@ -121,12 +121,39 @@ export interface ScreenStatePublishBody {
     featureArea?: string;
     capturedAt: string;
     snapshot: unknown;
+    /** agent-colleague item 4: `<area>.<kind>.<id>` → bounded per-entity detail. */
+    entities?: Record<string, unknown>;
 }
 
 export async function postScreenState(
     body: ScreenStatePublishBody,
 ): Promise<void> {
     return apiSend<void>("/api/agent/screen-state", "POST", body);
+}
+
+/** Publish payload for POST /api/agent/screen-state — `entities` (agent-colleague item 4)
+ * holds `<area>.<kind>.<id>` → bounded detail maps; see lib/stores/screen-state.ts. */
+export interface AgentFeedbackBody {
+    /** The `exchangeId` from the terminal "done" stream event of the turn being rated. */
+    exchangeId: string;
+    sentiment?: "down" | string;
+    comment?: string;
+    tags?: string[];
+}
+
+export interface AgentFeedbackResult {
+    recorded: boolean;
+    /** False when the server-side exchange buffer had already evicted the id. */
+    exchangeFound: boolean;
+    feedbackId: string;
+}
+
+/** POST /api/agent/feedback (agent-colleague item 5) — flushes the retained exchange for
+ * `exchangeId` into agent-feedback.json. */
+export async function postAgentFeedback(
+    body: AgentFeedbackBody,
+): Promise<AgentFeedbackResult> {
+    return apiSend<AgentFeedbackResult>("/api/agent/feedback", "POST", body);
 }
 
 /**

@@ -160,4 +160,104 @@ public class ProactiveInsightReportRepositoryTests
         await Assert.ThrowsAnyAsync<JsonException>(() => repo.DeleteAsync("any"));
         Assert.Equal("{ not valid json", await File.ReadAllTextAsync(AppDataPaths.MonitoringInsightsJson));
     }
+
+    // ── agent-colleague items 1+2 — legacy field coercion ────────────────────
+
+    [Fact]
+    public async Task GetAllAsync_LegacyReportWithOnlyStringEvidence_CoercesEvidenceItems()
+    {
+        using var _ = new AppDataSandbox();
+        AppDataPaths.EnsureDirectoryExists();
+        // A report persisted by a build that predates EvidenceItems/AccessGaps.
+        await File.WriteAllTextAsync(AppDataPaths.MonitoringInsightsJson, """
+            [{
+                "id": "legacy-1", "sessionId": "legacy-1", "ruleId": "r1",
+                "ruleName": "old rule", "firedAt": "2025-01-01T00:00:00+00:00",
+                "hypothesis": "old finding", "severity": "low",
+                "evidence": ["string one", "string two"],
+                "suggestedNextSteps": [], "toolsUsed": [], "createdAt": "2025-01-01T00:00:00+00:00"
+            }]
+            """);
+
+        var repo = new ProactiveInsightReportRepository();
+        var loaded = Assert.Single(await repo.GetAllAsync());
+
+        Assert.Equal(["string one", "string two"], loaded.Evidence);
+        Assert.Equal(2, loaded.EvidenceItems.Count);
+        Assert.Equal("string one", loaded.EvidenceItems[0].Text);
+        Assert.Null(loaded.EvidenceItems[0].View);
+        Assert.Null(loaded.EvidenceItems[0].Watch);
+        Assert.Empty(loaded.AccessGaps);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_StructuredReport_RoundTrips_EvidenceItemsAndAccessGaps()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new ProactiveInsightReportRepository();
+        var report = Report("structured-1");
+        report.EvidenceItems =
+        [
+            new EvidenceItem
+            {
+                Text = "queue depth 420",
+                Tool = "get_queue",
+                CapturedAt = DateTimeOffset.UtcNow,
+                View = new EvidenceView
+                {
+                    Kind = "serviceBus",
+                    Params = new() { ["ns"] = "prod", ["entity"] = "orders", ["view"] = "dlq" },
+                },
+                Watch = new EvidenceWatch
+                {
+                    Source = "ServiceBusDlqDepth",
+                    Params = new() { ["namespaceConnectionAlias"] = JsonDocument.Parse("\"prod-sb\"").RootElement.Clone() },
+                },
+            },
+        ];
+        report.AccessGaps =
+        [
+            new SwebKit.Core.Security.AccessGap(
+                "ServiceBus", "service-bus.data", "Azure Service Bus Data Receiver",
+                "Ask a resource owner.", "403 on prod-sb.servicebus.windows.net",
+                Resource: "prod-sb/orders", Tool: "get_queue"),
+        ];
+
+        await repo.UpsertAsync(report);
+        var loaded = await repo.GetByIdAsync("structured-1");
+
+        Assert.NotNull(loaded);
+        var item = Assert.Single(loaded!.EvidenceItems);
+        Assert.Equal("queue depth 420", item.Text);
+        Assert.Equal("get_queue", item.Tool);
+        Assert.Equal("serviceBus", item.View!.Kind);
+        Assert.Equal("dlq", item.View.Params["view"]);
+        Assert.Equal("ServiceBusDlqDepth", item.Watch!.Source);
+        Assert.Equal("prod-sb", item.Watch.Params["namespaceConnectionAlias"].GetString());
+        var gap = Assert.Single(loaded.AccessGaps);
+        Assert.Equal("Azure Service Bus Data Receiver", gap.RequiredAccess);
+        Assert.Equal("prod-sb/orders", gap.Resource);
+        Assert.Equal("get_queue", gap.Tool);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_ItemsOnlyReport_BackFillsLegacyEvidenceStrings()
+    {
+        using var _ = new AppDataSandbox();
+        AppDataPaths.EnsureDirectoryExists();
+        await File.WriteAllTextAsync(AppDataPaths.MonitoringInsightsJson, """
+            [{
+                "id": "items-only", "sessionId": "items-only", "ruleId": "r1",
+                "ruleName": "new rule", "firedAt": "2025-01-01T00:00:00+00:00",
+                "hypothesis": "h", "evidenceItems": [{"text": "finding one"}],
+                "suggestedNextSteps": [], "toolsUsed": [], "createdAt": "2025-01-01T00:00:00+00:00"
+            }]
+            """);
+
+        var loaded = Assert.Single(await new ProactiveInsightReportRepository().GetAllAsync());
+
+        // Old readers still get something to show even though the file carried no
+        // legacy "evidence" list.
+        Assert.Equal(["finding one"], loaded.Evidence);
+    }
 }

@@ -5,8 +5,13 @@ import {
     useUserSettings,
     useUpdateUserSettings,
 } from "@/lib/hooks";
-import { useTestAgentProfile } from "@/lib/hooks/useAgent";
+import { useAgentFeedbackList, useTestAgentProfile } from "@/lib/hooks/useAgent";
 import { useObservabilityResources } from "@/lib/hooks/useProfile";
+import { useNotification } from "@/components/layout/notification-context";
+import {
+    AGENT_FEEDBACK_EXPORT_FILENAME,
+    feedbackEntrySummary,
+} from "@/components/agent/agent-feedback";
 import { DraftInput } from "./DraftInput";
 import { parseEnvVars, serializeEnvVars } from "./env-vars";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
@@ -446,6 +451,8 @@ export function AgentSettings() {
                 </button>
             </section>
 
+            <AgentFeedbackSection />
+
             {profile && (
                 <ObservabilitySettings
                     profile={profile}
@@ -475,6 +482,98 @@ export function AgentSettings() {
                 />
             )}
         </div>
+    );
+}
+
+/** Thumbs-down regression cases (agent-colleague item 5): the newest-first list of what
+ * `POST /api/agent/feedback` persisted to agent-feedback.json, plus a JSON export of exactly
+ * this payload for prompt tuning. Entries hold the redacted exchange context the sidecar
+ * retained — fields are absent when the exchange ring buffer had already evicted the id. */
+function AgentFeedbackSection() {
+    const feedback = useAgentFeedbackList();
+    const { notify } = useNotification();
+
+    const exportJson = () => {
+        if (!feedback.data) return;
+        const blob = new Blob([JSON.stringify(feedback.data, null, 2)], {
+            type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = AGENT_FEEDBACK_EXPORT_FILENAME;
+        a.click();
+        URL.revokeObjectURL(url);
+        notify("success", `Exported ${feedback.data.length} feedback entries`);
+    };
+
+    return (
+        <section>
+            <div className="mb-3 flex items-center justify-between">
+                <div>
+                    <h3 className="text-base font-semibold">Agent feedback</h3>
+                    <p className="text-xs text-muted-foreground">
+                        Answers you marked unhelpful (👎 in chat), with the exchange context needed
+                        to reproduce them — kept to the last 200. Export them as JSON for prompt
+                        tuning.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={exportJson}
+                    disabled={!feedback.data?.length}
+                    title={
+                        feedback.data?.length
+                            ? undefined
+                            : "No feedback recorded yet"
+                    }
+                    className="rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                    data-testid="agent-feedback-export"
+                >
+                    Export JSON
+                </button>
+            </div>
+            {feedback.isLoading ? (
+                <p className="text-xs text-muted-foreground">Loading…</p>
+            ) : !feedback.data?.length ? (
+                <p
+                    className="text-xs text-muted-foreground"
+                    data-testid="agent-feedback-empty"
+                >
+                    Nothing recorded yet — thumbs-down an assistant answer in chat to capture it
+                    here.
+                </p>
+            ) : (
+                <ul
+                    className="space-y-1.5"
+                    data-testid="agent-feedback-list"
+                >
+                    {feedback.data.map((entry) => (
+                        <li
+                            key={entry.id}
+                            className="rounded-md border px-3 py-2 text-xs"
+                            data-testid={`agent-feedback-entry-${entry.id}`}
+                        >
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium">
+                                    {new Date(entry.createdAt).toLocaleString()}
+                                </span>
+                                <span className="text-muted-foreground">
+                                    {entry.sentiment === "down" ? "👎" : entry.sentiment}
+                                    {entry.featureArea ? ` · ${entry.featureArea}` : ""}
+                                    {entry.toolsUsed.length > 0 &&
+                                        ` · ${entry.toolsUsed.length} tool${entry.toolsUsed.length === 1 ? "" : "s"}`}
+                                    {!entry.exchangeFound && " · context expired"}
+                                </span>
+                            </div>
+                            <p className="mt-0.5 text-muted-foreground">
+                                {feedbackEntrySummary(entry)}
+                            </p>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </section>
     );
 }
 

@@ -12,6 +12,7 @@ import {
 } from "@/lib/hooks";
 import type { SqlQueryResult } from "@/lib/types";
 import { quoteSqlIdent } from "@/lib/sql-declared";
+import { screenEntityId, useScreenStateProvider } from "@/lib/stores/screen-state";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { PinResourceButton } from "@/components/shared/PinResourceButton";
 import { pinSqlConnection } from "@/lib/pinned-resources";
@@ -133,6 +134,109 @@ export function SqlPage() {
             updateParams({ connection: resolvedConnectionId }, { replace: true });
         }
     }, [resolvedConnectionId, searchParams, updateParams]);
+
+    // Screen-state provider (agent-colleague item 4 — SQL had none). Whitelisted fields only:
+    // identifiers, schema metadata, and bounded previews — never row values, credentials
+    // (SQL auth is Entra-only, so there are none on the connection anyway), or full editor text.
+    // `entities` exposes the connection and selected table as individually addressable details
+    // for `get_screen_detail` (`sql.connection.<id>`, `sql.table.<schema>.<name>`).
+    useScreenStateProvider(
+        "sql-page",
+        "Sql",
+        () => ({
+            connection: connection
+                ? {
+                      id: connection.id,
+                      displayName: connection.displayName,
+                      server: connection.server,
+                      database: effectiveDatabase,
+                      allowWrites: connection.allowWrites,
+                  }
+                : null,
+            database: effectiveDatabase,
+            activeTab,
+            selectedTable,
+            running: runQuery.isPending,
+            editorPreview: editorSql.trim() ? editorSql.slice(0, 200) : null,
+            schemaSummary: schema.data
+                ? {
+                      schemas: schema.data.schemas.length,
+                      objects: schema.data.schemas.reduce(
+                          (n, g) => n + g.objects.length,
+                          0,
+                      ),
+                      metadataHidden: schema.data.metadataHidden ?? false,
+                  }
+                : null,
+            lastResult: result
+                ? {
+                      columns: result.columns.map((c) => c.name),
+                      rowCount: result.rows.length,
+                      truncated: result.truncated,
+                      elapsedMs: result.elapsedMs,
+                      rowsAffected: result.rowsAffected,
+                  }
+                : null,
+        }),
+        [
+            connection,
+            effectiveDatabase,
+            activeTab,
+            selectedTable,
+            runQuery.isPending,
+            editorSql,
+            schema.data,
+            result,
+        ],
+        () => {
+            const entities: Record<string, unknown> = {};
+            if (connection) {
+                entities[screenEntityId("sql", "connection", connection.id)] = {
+                    displayName: connection.displayName,
+                    server: connection.server,
+                    database: effectiveDatabase,
+                    allowWrites: connection.allowWrites,
+                };
+            }
+            if (selectedTable) {
+                const obj = schema.data?.schemas
+                    .find((g) => g.name === selectedTable.schema)
+                    ?.objects.find((o) => o.name === selectedTable.name);
+                entities[
+                    screenEntityId(
+                        "sql",
+                        "table",
+                        `${selectedTable.schema}.${selectedTable.name}`,
+                    )
+                ] = {
+                    schema: selectedTable.schema,
+                    name: selectedTable.name,
+                    kind: obj?.kind ?? "table",
+                    isDeclared: obj?.isDeclared ?? false,
+                    columns:
+                        obj?.columns.slice(0, 200).map((c) => ({
+                            name: c.name,
+                            dataType: c.dataType,
+                            nullable: c.isNullable,
+                            primaryKey: c.isPrimaryKey,
+                        })) ?? null,
+                    indexes:
+                        obj?.indexes.map((i) => ({
+                            name: i.name,
+                            unique: i.isUnique,
+                            primaryKey: i.isPrimaryKey,
+                            columns: i.columns,
+                        })) ?? null,
+                    foreignKeys:
+                        obj?.foreignKeys.map((f) => ({
+                            name: f.name,
+                            referencedObject: f.referencedObject,
+                        })) ?? null,
+                };
+            }
+            return entities;
+        },
+    );
 
     const handleConnectionChange = (id: string) => {
         updateParams({ connection: id });

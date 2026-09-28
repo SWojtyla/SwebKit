@@ -35,6 +35,10 @@ public static class AppDataPaths
     public static string MonitoringInsightsJson => Path.Combine(Root, "monitoring-insights.json");
     public static string MonitoringSilencesJson => Path.Combine(Root, "monitoring-silences.json");
     public static string MonitoringHistoryJson => Path.Combine(Root, "monitoring-history.json");
+    /// <summary>Persisted thumbs-down regression cases (agent-colleague item 5) — redacted
+    /// exchange context flushed by <c>POST /api/agent/feedback</c>, exported from Settings → AI
+    /// Agent for prompt tuning.</summary>
+    public static string AgentFeedbackJson => Path.Combine(Root, "agent-feedback.json");
     public static string CollectionsJson => Path.Combine(Root, "collections.json");
     public static string EnvironmentsJson => Path.Combine(Root, "environments.json");
     public static string ApiLinkedRootsJson => Path.Combine(Root, "api-linked-roots.json");

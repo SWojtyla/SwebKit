@@ -6,6 +6,7 @@ using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Security;
 
 namespace SwebKit.Sidecar.Services;
 
@@ -21,7 +22,11 @@ public sealed record ProactiveInsightReadyEvent(
     string RuleName,
     string Summary,
     string SessionId,
-    IReadOnlyList<string>? Evidence = null);
+    IReadOnlyList<string>? Evidence = null,
+    /// <summary>How many access denials the investigation's tool loop collected
+    /// (agent-colleague item 2) — lets the insight card badge "N access gaps" without
+    /// fetching the persisted report.</summary>
+    int AccessGapCount = 0);
 
 public enum ProactiveInsightStage { Started, Skipped, Failed }
 
@@ -337,23 +342,31 @@ public sealed class ProactiveInsightService
                 evidence = result.Evidence;
                 report.Severity = result.Severity;
                 report.Evidence = [.. result.Evidence];
+                report.EvidenceItems = [.. result.EvidenceItems];
                 report.SuggestedNextSteps = [.. result.SuggestedNextSteps];
                 report.ProposedFix = result.ProposedFix;
                 report.ToolsUsed = [.. result.ToolsUsed];
                 report.HitMaxRounds = result.HitMaxRounds;
+                report.AccessGaps = [.. result.AccessGaps];
             }
             else
             {
+                var probeArgs = BuildArgs(new
+                {
+                    area = start.Value.Area.ToString(),
+                    resource_hint = start.Value.Hint,
+                    context = effectiveContext,
+                    map_id = match?.Map.Id,
+                });
                 reportJson = await _toolRegistry.ExecuteAsync(
                     "investigate_workspace_issue",
-                    BuildArgs(new
-                    {
-                        area = start.Value.Area.ToString(),
-                        resource_hint = start.Value.Hint,
-                        context = effectiveContext,
-                        map_id = match?.Map.Id,
-                    }),
+                    probeArgs,
                     CancellationToken.None);
+
+                // The fallback probe is a tool call like any other — if it was denied, the
+                // report still gets its access gap even though no model loop collected it.
+                if (AccessGapParser.TryParse("investigate_workspace_issue", probeArgs, reportJson, out var probeGap))
+                    report.AccessGaps = [probeGap];
 
                 // Same structured contract the runner emits — the model drafts it from the
                 // precomputed probe JSON instead of a live tool loop, so a fallback report fills
@@ -370,6 +383,7 @@ public sealed class ProactiveInsightService
                 evidence = fallback.Evidence;
                 report.Severity = fallback.Severity;
                 report.Evidence = [.. fallback.Evidence];
+                report.EvidenceItems = [.. fallback.EvidenceItems];
                 report.SuggestedNextSteps = [.. fallback.SuggestedNextSteps];
                 report.ProposedFix = fallback.ProposedFix;
                 report.ToolsUsed = [.. fallback.ToolsUsed];
@@ -394,7 +408,7 @@ public sealed class ProactiveInsightService
                 _logger.LogWarning(ex, "Failed to persist proactive insight report for rule {RuleId} ({RuleName})", evt.RuleId, evt.RuleName);
             }
 
-            InsightReady?.Invoke(new ProactiveInsightReadyEvent(evt.RuleId, evt.FiredAt, evt.RuleName, summary, sessionId, evidence));
+            InsightReady?.Invoke(new ProactiveInsightReadyEvent(evt.RuleId, evt.FiredAt, evt.RuleName, summary, sessionId, evidence, report.AccessGaps.Count));
         }
         catch (Exception ex)
         {
@@ -435,7 +449,7 @@ public sealed class ProactiveInsightService
         For each related resource in the probe, include an evidence entry saying whether it is
         implicated in or ruled out of the root cause.
         No prose, no markdown fences — the JSON object only.
-        """;
+        """ + ProactiveInvestigationRunner.EvidenceLinkContract;
 
     /// <summary>Drafts the structured report from the single-shot probe output. Returns null when
     /// the model call fails or yields nothing usable — the caller treats that as a Failed
@@ -527,6 +541,18 @@ public sealed class ProactiveInsightService
             sb.Append("\n\n### Evidence");
             foreach (var item in report.Evidence)
                 sb.Append($"\n- {item}");
+        }
+
+        if (report.AccessGaps.Count > 0)
+        {
+            sb.Append("\n\n### Access gaps");
+            foreach (var gap in report.AccessGaps)
+            {
+                var target = gap.Resource ?? gap.FeatureArea;
+                sb.Append($"\n- {gap.RequiredAccess} on {target} ({gap.Capability})");
+                if (!string.IsNullOrWhiteSpace(gap.Guidance))
+                    sb.Append($" — {gap.Guidance}");
+            }
         }
 
         if (report.SuggestedNextSteps.Count > 0)

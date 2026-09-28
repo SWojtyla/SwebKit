@@ -3,6 +3,7 @@ using System.Text.Json;
 using SwebKit.Agents;
 using SwebKit.Agents.Tools;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Security;
 
 namespace SwebKit.Sidecar.Services;
 
@@ -72,11 +73,13 @@ public sealed class AgentToolCallOrchestrator
             // (nonexistent) "Observability" area happens to be the active one.
             // get_screen_state is exempt for the same reason (agent-workspace-awareness D4): it
             // reads UI state, not area data — a feature-scoped panel must still be able to ask
-            // what's on its own screen.
+            // what's on its own screen. get_screen_detail is its entity-detail companion
+            // (agent-colleague item 4), exempt for the identical reason.
             tools = tools.Where(t =>
                 t.FeatureArea == area
                 || t.FeatureArea == FeatureArea.Observability
-                || t.Name == GetScreenStateTool.ToolName);
+                || t.Name == GetScreenStateTool.ToolName
+                || t.Name == GetScreenDetailTool.ToolName);
         }
 
         return tools.ToList();
@@ -92,10 +95,16 @@ public sealed class AgentToolCallOrchestrator
     /// <param name="externalExecutors">name → executor for tools not in the registry — proxied
     /// external-MCP tools for non-ACP profiles (agent-mcp-evolution Phase 2b). Their names carry
     /// the <c>mcp_</c> prefix, so they can never collide with a registry tool.</param>
+    /// <param name="accessDenials">agent-colleague item 2 — when provided, every
+    /// <c>{"status":"access_denied"}</c> tool result is parsed into an <see cref="AccessGap"/>
+    /// and appended (deduped — a memoized repeat of a denied call must not list the gap twice).
+    /// The caller owns attaching the collection to <c>AgentChatResult.AccessDenials</c> once the
+    /// model loop returns — the result object doesn't exist yet when this executor is built.</param>
     public Func<string, JsonElement, CancellationToken, Task<string>>? BuildStepTrackingToolExecutor(
         IReadOnlyList<ToolDefinition> tools, List<AgentChatStep> steps,
         IReadOnlyDictionary<string, string>? selection = null,
-        IReadOnlyDictionary<string, Func<JsonElement, CancellationToken, Task<string>>>? externalExecutors = null)
+        IReadOnlyDictionary<string, Func<JsonElement, CancellationToken, Task<string>>>? externalExecutors = null,
+        List<AccessGap>? accessDenials = null)
     {
         if (tools.Count == 0)
             return null;
@@ -136,6 +145,16 @@ public sealed class AgentToolCallOrchestrator
                 ? await external(args, toolCt)
                 : await _toolRegistry.ExecuteAsync(toolName, args, toolCt);
             toolSw.Stop();
+
+            // Denials land in the caller's per-turn collection, deduped — the same (capability,
+            // resource) denied twice in one turn (model retry, different tool hitting the same
+            // connection) shouldn't list the gap twice on the report.
+            if (accessDenials is not null &&
+                AccessGapParser.TryParse(toolName, args, result, out var gap) &&
+                !accessDenials.Contains(gap))
+            {
+                accessDenials.Add(gap);
+            }
 
             steps.Add(new AgentChatStep
             {

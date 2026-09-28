@@ -10,6 +10,7 @@ import { PendingActionCard, PendingActionExpiredNotice } from "./PendingActionCa
 import { AcpPermissionCard } from "./AcpPermissionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentThoughtBlock } from "./AgentThoughtBlock";
+import { AgentFeedbackButton } from "./AgentFeedbackButton";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { BarChart3 } from "lucide-react";
@@ -251,6 +252,11 @@ export function GlobalAgentPanel({ open, onClose }: GlobalAgentPanelProps) {
               {msg.role === "assistant" && msg.stopped && (
                 <div className="mt-1 text-xs italic text-muted-foreground" data-testid="global-agent-panel-stopped-notice">
                   Stopped by user.
+                </div>
+              )}
+              {msg.role === "assistant" && (
+                <div className="flex justify-end">
+                  <AgentFeedbackButton message={msg} testId="global-agent-panel-thumbs-down" />
                 </div>
               )}
             </div>

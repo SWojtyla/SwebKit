@@ -4,6 +4,7 @@ using SwebKit.Agents.Tools;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Models;
+using SwebKit.Core.Security;
 using SwebKit.Sidecar.Endpoints;
 
 namespace SwebKit.Sidecar.Services;
@@ -20,7 +21,16 @@ public sealed record ProactiveInvestigationResult(
     ProposedFix? ProposedFix,
     string RawText,
     IReadOnlyList<string> ToolsUsed,
-    bool HitMaxRounds);
+    bool HitMaxRounds,
+    /// <summary>The structured form of <see cref="Evidence"/> (agent-colleague item 1) — same
+    /// findings, plus tool/link/watch hints when the model emitted them. Plain-string output
+    /// degrades to text-only items.</summary>
+    IReadOnlyList<EvidenceItem> EvidenceItems,
+    /// <summary>Access denials the run's tool loop hit (agent-colleague item 2) — collected by
+    /// the step-tracking executor from <c>{"status":"access_denied"}</c> results, not parsed
+    /// out of the model's prose, so they're complete even when the model forgets to report
+    /// them.</summary>
+    IReadOnlyList<AccessGap> AccessGaps);
 
 /// <summary>
 /// Runs one bounded, model-driven investigation for a fired alert — the Module 2 replacement for
@@ -52,6 +62,32 @@ public sealed class ProactiveInvestigationRunner
     /// <summary>Same cap the chat clients use internally (AgentModelRequest.MaxToolRounds default).</summary>
     private const int MaxToolRounds = 5;
 
+    /// <summary>Shared evidence-object contract (agent-colleague items 1+3) appended to every
+    /// prompt that drafts the structured report: entries may stay plain strings, or carry a
+    /// finding plus navigable "view"/"watch" hints. Views are (kind, params) — never URLs —
+    /// and only whitelisted kinds/params survive; watches only cover sources the alert-rule
+    /// dialog supports (no arbitrary query rules — a non-goal per the plan).</summary>
+    internal const string EvidenceLinkContract = """
+
+        Each evidence entry may be a plain string, or an object that adds optional navigation
+        hints the report UI can resolve for the reader:
+          {"text": "the finding", "tool": "tool_name",
+           "view": {"kind": "<kind>", "params": { ... }},
+           "watch": {"source": "<AlertRuleSource name>", "params": { ... }}}
+        "view" rules — emit kind + params, never a URL:
+          serviceBus: ns (required); optional entity, entityName, view ("active"|"dlq"), msg, seq
+          sql:        connection (required); optional database, table ("schema.name")
+          aks:        ns, tab, pod, yaml, helm, container, logs, logsNs (at least one)
+          monitoring: tab ("rules"|"history"|"ops"|"reports"), report
+          redis:      cache (required); optional tab
+        "watch" rules — only when a continuing alert rule would catch a recurrence, and only
+        for these sources: AksPodHealth, AksPodRestartRate, AksNamespaceHealthScore,
+        ServiceBusDlqDepth, ServiceBusActiveDepth, ServiceBusDeadSubscription,
+        RedisMemoryUsage, RedisConnectedClients. Params use that source's rule param names
+        (e.g. namespace/kubeconfigContext for AKS, namespaceConnectionAlias/entityPath for
+        Service Bus, connectionAlias for Redis). Omit "watch" for anything else.
+        """;
+
     private const string InvestigationInstructions = """
 
         ## Background investigation mode
@@ -81,7 +117,7 @@ public sealed class ProactiveInvestigationRunner
         For every workspace resource you inspected beyond the alerting one, include an evidence
         entry saying whether it is implicated in or ruled out of the root cause.
         No prose, no markdown fences — the JSON object only.
-        """;
+        """ + EvidenceLinkContract;
 
     /// <summary>The map-less instructions variant: no declared map covers the fired resource, so
     /// there are no relationships to follow — the model has to find likely neighbors from live
@@ -117,7 +153,7 @@ public sealed class ProactiveInvestigationRunner
         For every workspace resource you inspected beyond the alerting one, include an evidence
         entry saying whether it is implicated in or ruled out of the root cause.
         No prose, no markdown fences — the JSON object only.
-        """;
+        """ + EvidenceLinkContract;
 
     /// <summary>Appended to the investigation instructions only when the fired rule opted into
     /// autofix proposals — "prefer proposing over describing" (monitoring-closed-loop 1b). The
@@ -245,7 +281,12 @@ public sealed class ProactiveInvestigationRunner
                 [PendingActionProvenance.OriginKey] = PendingActionProvenance.InvestigationOrigin,
                 [PendingActionProvenance.SessionIdKey] = sessionId,
             };
-        var toolExecutor = _toolOrchestrator.BuildStepTrackingToolExecutor(tools, steps, selection);
+        // Per-turn denial collector (agent-colleague item 2): every access_denied tool result —
+        // thrown or known-denial short-circuit — lands here, then rides AgentChatResult.
+        // AccessDenials into the result record. Collection is executor-side (not prompt-side)
+        // so gaps are complete even when the model's summary forgets one.
+        var accessDenials = new List<AccessGap>();
+        var toolExecutor = _toolOrchestrator.BuildStepTrackingToolExecutor(tools, steps, selection, accessDenials: accessDenials);
 
         var request = new AgentModelRequest
         {
@@ -262,6 +303,7 @@ public sealed class ProactiveInvestigationRunner
         try
         {
             result = await _modelClient.ChatAsync(request, toolExecutor, budget.Token);
+            result.AccessDenials = accessDenials;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -294,7 +336,7 @@ public sealed class ProactiveInvestigationRunner
             ? result.ToolsUsed
             : steps.Where(s => s.Type == "tool_call" && s.ToolName is not null).Select(s => s.ToolName!).Distinct().ToList();
 
-        return ParseStructuredOutput(result.Text, toolsUsed, result.HitMaxRounds);
+        return ParseStructuredOutput(result.Text, toolsUsed, result.HitMaxRounds, result.AccessDenials);
     }
 
     /// <summary>Parses the model's JSON-object output into a <see cref="ProactiveInvestigationResult"/>.
@@ -303,8 +345,11 @@ public sealed class ProactiveInvestigationRunner
     /// of a live tool loop, so the parsed fields flow into the same report shape either way.
     /// A model that returns non-JSON prose still yields a usable result: the raw text becomes the
     /// hypothesis (truncated) with empty structured fields.</summary>
+    /// <param name="accessGaps">Denials the tool loop collected — empty for the fallback path,
+    /// which runs no tool loop of its own.</param>
     internal ProactiveInvestigationResult ParseStructuredOutput(
-        string text, IReadOnlyList<string> toolsUsed, bool hitMaxRounds)
+        string text, IReadOnlyList<string> toolsUsed, bool hitMaxRounds,
+        IReadOnlyList<AccessGap>? accessGaps = null)
     {
         text = text.Trim();
         var json = ExtractFirstJsonObject(text);
@@ -318,18 +363,29 @@ public sealed class ProactiveInvestigationRunner
                 ProposedFix: null,
                 RawText: text,
                 ToolsUsed: toolsUsed,
-                HitMaxRounds: hitMaxRounds);
+                HitMaxRounds: hitMaxRounds,
+                EvidenceItems: [],
+                AccessGaps: accessGaps ?? []);
         }
 
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+
+            // agent-colleague item 1: evidence entries may be plain strings or objects with
+            // text/tool/view/watch hints — parsed permissively (invalid links drop, findings
+            // never do). The legacy string list stays filled with just the texts.
+            var evidenceItems = root.TryGetProperty("evidence", out var ev)
+                ? EvidenceItemParser.Parse(ev, DateTimeOffset.UtcNow)
+                : [];
+            var evidenceTexts = evidenceItems.Select(i => i.Text).ToList();
+
             return new ProactiveInvestigationResult(
                 Hypothesis: root.TryGetProperty("hypothesis", out var h) && h.ValueKind == JsonValueKind.String
                     ? h.GetString() ?? text
                     : text,
-                Evidence: ReadStringArray(root, "evidence"),
+                Evidence: evidenceTexts,
                 Severity: root.TryGetProperty("severity", out var s) && s.ValueKind == JsonValueKind.String
                     ? s.GetString()
                     : null,
@@ -337,7 +393,9 @@ public sealed class ProactiveInvestigationRunner
                 ProposedFix: ReadProposedFix(root),
                 RawText: text,
                 ToolsUsed: toolsUsed,
-                HitMaxRounds: hitMaxRounds);
+                HitMaxRounds: hitMaxRounds,
+                EvidenceItems: evidenceItems,
+                AccessGaps: accessGaps ?? []);
         }
         catch (JsonException ex)
         {
@@ -350,7 +408,9 @@ public sealed class ProactiveInvestigationRunner
                 ProposedFix: null,
                 RawText: text,
                 ToolsUsed: toolsUsed,
-                HitMaxRounds: hitMaxRounds);
+                HitMaxRounds: hitMaxRounds,
+                EvidenceItems: [],
+                AccessGaps: accessGaps ?? []);
         }
     }
 

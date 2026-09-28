@@ -20,6 +20,7 @@ import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { AgentThoughtBlock } from "./AgentThoughtBlock";
+import { AgentFeedbackButton } from "./AgentFeedbackButton";
 import { profileSupportsTools } from "@/lib/agent-capability";
 import type { AgentChatScope, ChatMessage } from "@/lib/types";
 import { BarChart3 } from "lucide-react";
@@ -167,6 +168,7 @@ export function ContextualAssistant({
                                   error: reply.error,
                                   steps: reply.steps,
                                   summarized: reply.summarized,
+                                  exchangeId: reply.exchangeId,
                               }
                             : m,
                     ),
@@ -434,6 +436,14 @@ export function ContextualAssistant({
                                                 Stopped by user.
                                             </div>
                                         )}
+                                    {msg.role === "assistant" && (
+                                        <div className="flex justify-end">
+                                            <AgentFeedbackButton
+                                                message={msg}
+                                                testId="contextual-assistant-thumbs-down"
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}

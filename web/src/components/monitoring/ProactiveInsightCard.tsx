@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { ShieldAlert, X } from "lucide-react";
 import type { ProactiveInsightReadyEvent } from "../../lib/api";
 import { usePendingApprovals } from "@/lib/hooks/useAgent";
 import { PendingActionCard } from "../agent/PendingActionCard";
@@ -36,8 +36,19 @@ export function ProactiveInsightCard({
         >
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <div className="text-sm font-semibold">
-                        {insight.ruleName} — possibly related
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                        <span>{insight.ruleName} — possibly related</span>
+                        {(insight.accessGapCount ?? 0) > 0 && (
+                            <span
+                                className="flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-[11px] font-normal text-warning"
+                                title="The investigation hit permission denials — evidence may be partial"
+                                data-testid={`proactive-insight-access-gaps-${insight.ruleId}-${insight.firedAt}`}
+                            >
+                                <ShieldAlert className="h-3 w-3" />
+                                {insight.accessGapCount} access gap
+                                {insight.accessGapCount === 1 ? "" : "s"}
+                            </span>
+                        )}
                     </div>
                     <p className="mt-0.5 text-sm text-muted-foreground">
                         {insight.summary}

@@ -103,6 +103,10 @@ export interface AgentReply {
     /** agent-correlation Module 3 — "workspace" when the agent reached for a tool this turn's
      * scope fence hid (ACP only). Render as a "retry with workspace scope" affordance. */
     suggestedScope?: string;
+    /** agent-colleague item 5 — the correlation id stamped on the terminal "done" stream event
+     * (forwarded onto the resolved reply by useAgentChatStream). This is the handle a
+     * thumbs-down posts to /api/agent/feedback; absent on non-streaming replies. */
+    exchangeId?: string;
 }
 
 /** One incremental event from POST /api/agent/chat/stream — see streamAgentChat in lib/api.ts and
@@ -126,6 +130,41 @@ export interface AgentStreamEvent {
     toolName?: string;
     result?: AgentReply;
     errorMessage?: string;
+    /** agent-colleague item 5 — present only on the terminal "done" event; the id a
+     * thumbs-down sends back to POST /api/agent/feedback. */
+    exchangeId?: string;
+}
+
+/** One persisted thumbs-down record (agent-colleague item 5) — mirrors
+ * `SwebKit.Core.Models.AgentFeedbackEntry` in agent-feedback.json. All fields are already
+ * redacted/truncated server-side. */
+export interface AgentFeedbackStep {
+    type?: string;
+    toolName?: string;
+    summary?: string;
+    isFailure?: boolean;
+}
+
+export interface AgentFeedbackEntry {
+    id: string;
+    exchangeId: string;
+    sentiment: string;
+    comment?: string | null;
+    tags: string[];
+    createdAt: string;
+    /** False when the exchange ring buffer had already evicted the id — the rating is still
+     * recorded, just without the exchange context fields below. */
+    exchangeFound: boolean;
+    sessionId?: string | null;
+    featureArea?: string | null;
+    mode?: string | null;
+    scope?: string | null;
+    userMessage?: string | null;
+    assistantText?: string | null;
+    steps: AgentFeedbackStep[];
+    toolsUsed: string[];
+    /** Redacted screen-state digest ({route, featureArea, capturedAt, entityIds, snapshot}). */
+    screenStateDigest?: unknown;
 }
 
 /** A parked ACP session/request_permission call awaiting a user decision — only populated when
@@ -218,4 +257,7 @@ export interface ChatMessage {
     /** Accumulated ACP agent_thought_chunk reasoning for this reply (agent-correlation Module 4) —
      * rendered collapsed + muted: it's raw model reasoning, not authoritative output. */
     thoughts?: string;
+    /** agent-colleague item 5 — the Done event's exchange id; present on assistant messages that
+     * completed a streaming turn, and the handle the thumbs-down button posts back. */
+    exchangeId?: string;
 }

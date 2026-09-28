@@ -62,6 +62,7 @@ export function useGlobalAgentConversation() {
             error: reply.error,
             steps: reply.steps,
             summarized: reply.summarized,
+            exchangeId: reply.exchangeId,
           });
         })
         .catch((err: Error) => {

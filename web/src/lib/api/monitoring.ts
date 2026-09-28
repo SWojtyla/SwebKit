@@ -164,6 +164,9 @@ export interface ProactiveInsightReadyEvent {
     /** Factual findings from the multi-step investigation (agent-workspace-awareness Module 2).
      * Absent/empty on the legacy single-shot fallback path. */
     evidence?: string[];
+    /** Access denials the investigation's tool loop collected (agent-colleague item 2) —
+     * badges the insight card without fetching the persisted report. */
+    accessGapCount?: number;
 }
 
 /** Pushed the moment an opted-in investigation parks a remediation proposal
@@ -335,6 +338,48 @@ interface ProposedFix {
     snippet: string;
 }
 
+// ── Structured evidence + access gaps (agent-colleague items 1–3) ─────────────
+
+/** A navigable view hint on an evidence item — kind + params, never a URL. Resolved
+ * to a route by `web/src/lib/evidence-links.ts`; anything outside the whitelist
+ * renders as plain text. */
+export interface EvidenceView {
+    kind: string;
+    params?: Record<string, string>;
+}
+
+/** "Watch this" hint on an evidence item: a MonitoringAlertRule source name plus the
+ * params a prefilled rule draft should carry. Only dialog-supported sources are
+ * meaningful — arbitrary KQL rules are a non-goal. */
+export interface EvidenceWatch {
+    source: string;
+    params?: Record<string, unknown>;
+}
+
+/** Structured evidence entry. `text` is the finding; `tool` names the producing tool
+ * when known; `capturedAt` is server-stamped. Old reports' plain `evidence` strings
+ * are coerced into text-only items on read. */
+export interface EvidenceItem {
+    text: string;
+    tool?: string;
+    capturedAt?: string;
+    view?: EvidenceView | null;
+    watch?: EvidenceWatch | null;
+}
+
+/** An access denial observed during the investigation's tool loop — the parsed form
+ * of a `{"status":"access_denied"}` tool result. `resource` is best-effort from the
+ * denied call's args; `detail` is sanitized server-side (URIs reduced to hosts). */
+export interface AccessGap {
+    featureArea: string;
+    capability: string;
+    requiredAccess: string;
+    guidance: string;
+    detail: string;
+    resource?: string | null;
+    tool?: string | null;
+}
+
 /** Persisted record of one completed background proactive investigation — the
  * permanent record behind the Monitoring "AI Reports" tab. `id` equals `sessionId`
  * (`proactive-{ruleId}-{firedAt ms}`) so a live `ProactiveInsightReadyEvent` can
@@ -347,7 +392,14 @@ export interface ProactiveInsightReport {
     alertMessage?: string | null;
     hypothesis: string;
     severity?: string | null;
+    /** Legacy plain-string evidence — always populated alongside `evidenceItems`. */
     evidence: string[];
+    /** Structured evidence (agent-colleague item 1) — findings with tool/link/watch
+     * hints. Missing on reports persisted by older builds. */
+    evidenceItems?: EvidenceItem[];
+    /** Access denials the investigation's tool loop collected (agent-colleague
+     * item 2). Missing/empty when nothing was denied. */
+    accessGaps?: AccessGap[];
     suggestedNextSteps: string[];
     proposedFix?: ProposedFix | null;
     toolsUsed: string[];
