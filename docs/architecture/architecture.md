@@ -21,8 +21,9 @@ port-forwarding, file dialogs, git, OS keychain) that a browser sandbox cannot.
 - API composition root: `src-sidecar/Program.cs` (DI + per-feature `Map*Endpoints`)
 - Local persisted state: `%APPDATA%/SwebKit` (`profiles.json`, `ui-state.json`,
   `user-settings.json`, `releases.json`, `scheduled-messages.json`, `collections.json`,
-  `environments.json`, `api-linked-roots.json`, plus sibling `.bak` recovery copies) and a `logs/`
-  subfolder with per-feature-per-day structured log files
+  `environments.json`, `api-linked-roots.json`, plus sibling `.bak` recovery copies);
+  per-feature-per-day structured log files live in `%LOCALAPPDATA%/SwebKit/logs` —
+  logs are machine-local diagnostics and do not belong to the roaming profile
 - External runtime integrations:
     - Azure Service Bus and Azure Blob/Files Storage
     - AKS Kubernetes API (incl. exec/shell and port-forward via `kubectl`/`kubelogin` processes)
@@ -50,7 +51,8 @@ flowchart LR
     Sidecar --> Agents[SwebKit.Agents\ntool registry + tools]
     Sidecar --> Obs[SwebKit.Observability\nApp Insights provider + discovery]
 
-    Core --> LocalState[(%APPDATA%/SwebKit\nJSON state + logs)]
+    Core --> LocalState[(%APPDATA%/SwebKit\nJSON state)]
+    Core --> LocalLogs[(%LOCALAPPDATA%/SwebKit/logs\nstructured logs)]
 
     Azure --> SB[(Azure Service Bus)]
     Azure --> Blob[(Azure Storage)]
@@ -128,14 +130,14 @@ Key folders: `Abstractions/` (`I*Client`, `I*ConnectionPool`, `IAgentTool` infra
 
 ### Integration libraries (`src/SwebKit.*`)
 
-| Project                 | Responsibility                                                                                  |
-| ----------------------- | ----------------------------------------------------------------------------------------------- |
-| `SwebKit.Azure`         | `AzureServiceBusClient`, `AzureStorageClient` (Service Bus SDK, Azure.Storage.*)                 |
-| `SwebKit.Kubernetes`    | `KubernetesAksClient` (contexts, workloads, logs, YAML, Helm, apply) + alert signal sources      |
-| `SwebKit.Redis`         | `RedisClient` (StackExchange.Redis) + signal sources                                             |
-| `SwebKit.Sql`           | `SqlDatabaseClient` (Entra token, ADO.NET), `SqlStatementGuard` (read-only), ARM discovery       |
-| `SwebKit.Agents`        | `IAgentTool`, `AgentToolRegistry`, per-feature tool implementations, `ScreenStateStore`          |
-| `SwebKit.Observability` | `AzureAppInsightsProvider`, `AppInsightsDiscoveryService`, KQL presets                            |
+| Project                 | Responsibility                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
+| `SwebKit.Azure`         | `AzureServiceBusClient`, `AzureStorageClient` (Service Bus SDK, Azure.Storage.\*)           |
+| `SwebKit.Kubernetes`    | `KubernetesAksClient` (contexts, workloads, logs, YAML, Helm, apply) + alert signal sources |
+| `SwebKit.Redis`         | `RedisClient` (StackExchange.Redis) + signal sources                                        |
+| `SwebKit.Sql`           | `SqlDatabaseClient` (Entra token, ADO.NET), `SqlStatementGuard` (read-only), ARM discovery  |
+| `SwebKit.Agents`        | `IAgentTool`, `AgentToolRegistry`, per-feature tool implementations, `ScreenStateStore`     |
+| `SwebKit.Observability` | `AzureAppInsightsProvider`, `AppInsightsDiscoveryService`, KQL presets                      |
 
 ## Functional Deep Dives
 
@@ -157,32 +159,32 @@ the retired MAUI UI — they are being rewritten per feature during the codebase
 
 ## Cross-Cutting Concerns
 
-| Concern                        | Where it lives                                                                                                                  | Notes                                                                                                                                               |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dependency injection           | `src-sidecar/Program.cs`                                                                                                        | Everything is a singleton; per-feature grouped `AddSingleton` blocks.                                                                                |
-| Credentials and secrets        | `src-tauri/src/secrets.rs` (OS keychain) + `src-sidecar/Services/SidecarCredentialStore.cs`                                     | Config files reference secrets by logical key only; raw secret material never lands in JSON.                                                         |
-| App-data persistence           | `src/SwebKit.Core/Configuration/*Repository.cs` via `ConfigEndpoints.cs`                                                        | `%APPDATA%/SwebKit`, atomic temp-file writes + `.bak` recovery.                                                                                      |
-| API Client persistence         | `CollectionRepository`, `EnvironmentRepository`, `LinkedCollectionRootRepository`, `LinkedCollectionFileService`                | Local JSON plus optional `.swebkit-api/` folders inside user git repos.                                                                              |
-| Demo mode                      | `src-sidecar/Endpoints/DemoModeService.cs` + `SwebKit.Core/Services/Demo*`                                                      | `AppStateService.UseDemoData` swaps every client for a synthetic one; the whole e2e suite runs on it.                                                |
-| Connection pooling             | `src-sidecar/Services/Sidecar*ConnectionPool.cs`                                                                                | One SDK client per configured resource, reused across requests — see `docs/pitfalls/azure-sdk.md`.                                                   |
-| Monitoring engine              | `src-sidecar/Services/MonitoringAlertEvaluationService.cs` (hosted service) + `IAlertSignalSource` implementations in each lib | Singleton shared between hosted lifetime and endpoints; SSE stream in `Endpoints/MonitoringEventStream.cs`.                                          |
-| Agent                          | `src-sidecar/Services/SidecarAgentChatService.cs`, `SwebKit.Agents/Tools/`, ACP host in `Services/Acp/`                          | `AgentModelClientRouter` picks built-in OpenAI-compatible client vs. external ACP agent per profile. Confirm-before-execute via `IAgentActionCoordinator`. |
-| Structured file logging        | `src/SwebKit.Core/Diagnostics/` registered in `Program.cs`                                                                      | Redacted NDJSON to `%APPDATA%/SwebKit/logs/<feature>-yyyy-MM-dd.log`; crash-safe emergency path.                                                     |
-| Frontend server state          | `web/src/lib/hooks/use*.ts` (TanStack Query)                                                                                    | `staleTime` 30 s, `refetchOnWindowFocus` off — volatile queries carry their own staleTime.                                                           |
-| Frontend client state          | `web/src/lib/stores/` (zustand) + per-page `*PageContext.tsx`                                                                   | URL params (`useSearchParams`) carry deep-linkable selection state.                                                                                  |
-| High-volume streaming          | `useLogBuffer` / `log-window.ts`, `MonitoringEventStream` (SSE)                                                                  | Buffer-and-flush, never render per line — see `docs/pitfalls/react-frontend.md`.                                                                      |
+| Concern                 | Where it lives                                                                                                                 | Notes                                                                                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dependency injection    | `src-sidecar/Program.cs`                                                                                                       | Everything is a singleton; per-feature grouped `AddSingleton` blocks.                                                                                      |
+| Credentials and secrets | `src-tauri/src/secrets.rs` (OS keychain) + `src-sidecar/Services/SidecarCredentialStore.cs`                                    | Config files reference secrets by logical key only; raw secret material never lands in JSON.                                                               |
+| App-data persistence    | `src/SwebKit.Core/Configuration/*Repository.cs` via `ConfigEndpoints.cs`                                                       | `%APPDATA%/SwebKit`, atomic temp-file writes + `.bak` recovery.                                                                                            |
+| API Client persistence  | `CollectionRepository`, `EnvironmentRepository`, `LinkedCollectionRootRepository`, `LinkedCollectionFileService`               | Local JSON plus optional `.swebkit-api/` folders inside user git repos.                                                                                    |
+| Demo mode               | `src-sidecar/Endpoints/DemoModeService.cs` + `SwebKit.Core/Services/Demo*`                                                     | `AppStateService.UseDemoData` swaps every client for a synthetic one; the whole e2e suite runs on it.                                                      |
+| Connection pooling      | `src-sidecar/Services/Sidecar*ConnectionPool.cs`                                                                               | One SDK client per configured resource, reused across requests — see `docs/pitfalls/azure-sdk.md`.                                                         |
+| Monitoring engine       | `src-sidecar/Services/MonitoringAlertEvaluationService.cs` (hosted service) + `IAlertSignalSource` implementations in each lib | Singleton shared between hosted lifetime and endpoints; SSE stream in `Endpoints/MonitoringEventStream.cs`.                                                |
+| Agent                   | `src-sidecar/Services/SidecarAgentChatService.cs`, `SwebKit.Agents/Tools/`, ACP host in `Services/Acp/`                        | `AgentModelClientRouter` picks built-in OpenAI-compatible client vs. external ACP agent per profile. Confirm-before-execute via `IAgentActionCoordinator`. |
+| Structured file logging | `src/SwebKit.Core/Diagnostics/` registered in `Program.cs`                                                                     | Redacted NDJSON to `%LOCALAPPDATA%/SwebKit/logs/<feature>-yyyy-MM-dd.log`; crash-safe emergency path.                                                      |
+| Frontend server state   | `web/src/lib/hooks/use*.ts` (TanStack Query)                                                                                   | `staleTime` 30 s, `refetchOnWindowFocus` off — volatile queries carry their own staleTime.                                                                 |
+| Frontend client state   | `web/src/lib/stores/` (zustand) + per-page `*PageContext.tsx`                                                                  | URL params (`useSearchParams`) carry deep-linkable selection state.                                                                                        |
+| High-volume streaming   | `useLogBuffer` / `log-window.ts`, `MonitoringEventStream` (SSE)                                                                | Buffer-and-flush, never render per line — see `docs/pitfalls/react-frontend.md`.                                                                           |
 
 ## Where To Start For Common Tasks
 
-| Task                                                     | Start here                                                                                                              |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Add/change a sidecar service or DI registration          | `src-sidecar/Program.cs`                                                                                                |
-| Add an endpoint                                          | The matching `src-sidecar/Endpoints/*Endpoints.cs` (or a new one mirroring them)                                        |
-| Add a page/route                                         | `web/src/App.tsx`, `web/src/components/<feature>/`, sidebar nav in `web/src/components/layout/`                         |
-| New persisted config field                               | `src/SwebKit.Core/Domain/AppConfig.cs` + mirror in `web/src/lib/types.ts`                                               |
-| New Service Bus / Storage / AKS / Redis / SQL operation  | `I*Client` in `Core/Abstractions` → `SwebKit.<lib>` impl → `Sidecar*ConnectionPool` if needed → endpoint + `api.ts`     |
-| Add an agent tool                                        | `src/SwebKit.Agents/IAgentTool.cs`, `src/SwebKit.Agents/Tools/`, register in `Program.cs`                               |
-| Agent chat / streaming                                   | `src-sidecar/Services/SidecarAgentChatService.cs`, `web/src/lib/hooks/useAgent.ts`                                      |
-| Monitoring alert rule / signal source                    | `IAlertSignalSource` impl in the feature lib + `MonitoringAlertEvaluationService`                                        |
-| Native capability (files, shell, git, secrets)           | `src-tauri/src/` command + `web/src/lib/tauri-bridge.ts`                                                                |
-| Demo-mode behavior                                       | `DemoModeService` + the matching `Demo*Client` in `SwebKit.Core/Services/`                                              |
+| Task                                                    | Start here                                                                                                          |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Add/change a sidecar service or DI registration         | `src-sidecar/Program.cs`                                                                                            |
+| Add an endpoint                                         | The matching `src-sidecar/Endpoints/*Endpoints.cs` (or a new one mirroring them)                                    |
+| Add a page/route                                        | `web/src/App.tsx`, `web/src/components/<feature>/`, sidebar nav in `web/src/components/layout/`                     |
+| New persisted config field                              | `src/SwebKit.Core/Domain/AppConfig.cs` + mirror in `web/src/lib/types.ts`                                           |
+| New Service Bus / Storage / AKS / Redis / SQL operation | `I*Client` in `Core/Abstractions` → `SwebKit.<lib>` impl → `Sidecar*ConnectionPool` if needed → endpoint + `api.ts` |
+| Add an agent tool                                       | `src/SwebKit.Agents/IAgentTool.cs`, `src/SwebKit.Agents/Tools/`, register in `Program.cs`                           |
+| Agent chat / streaming                                  | `src-sidecar/Services/SidecarAgentChatService.cs`, `web/src/lib/hooks/useAgent.ts`                                  |
+| Monitoring alert rule / signal source                   | `IAlertSignalSource` impl in the feature lib + `MonitoringAlertEvaluationService`                                   |
+| Native capability (files, shell, git, secrets)          | `src-tauri/src/` command + `web/src/lib/tauri-bridge.ts`                                                            |
+| Demo-mode behavior                                      | `DemoModeService` + the matching `Demo*Client` in `SwebKit.Core/Services/`                                          |

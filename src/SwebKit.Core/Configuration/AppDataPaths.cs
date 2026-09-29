@@ -16,6 +16,21 @@ public static class AppDataPaths
         }
     }
 
+    // Logs, journals and other machine-local diagnostics live under LocalApplicationData:
+    // Roaming is synced with the user profile on domain setups, which is wrong for
+    // per-machine artifacts. The override still applies so test sandboxes capture logs too.
+    private static string LocalRoot
+    {
+        get
+        {
+            var overrideRoot = Environment.GetEnvironmentVariable(AppDataRootOverrideVariable);
+            if (!string.IsNullOrWhiteSpace(overrideRoot))
+                return overrideRoot;
+
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SwebKit");
+        }
+    }
+
     private static string LegacyRoot =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SwebKit");
 
@@ -43,8 +58,8 @@ public static class AppDataPaths
     public static string EnvironmentsJson => Path.Combine(Root, "environments.json");
     public static string ApiLinkedRootsJson => Path.Combine(Root, "api-linked-roots.json");
     public static string SqlQueriesJson => Path.Combine(Root, "sql-queries.json");
-    public static string PerformanceBaselineLog => Path.Combine(Root, "logs", "performance-baseline.log");
-    public static string LogsDirectory => Path.Combine(Root, "logs");
+    public static string PerformanceBaselineLog => Path.Combine(LocalRoot, "logs", "performance-baseline.log");
+    public static string LogsDirectory => Path.Combine(LocalRoot, "logs");
 
     public static string FeatureLogFile(string feature, DateOnly date) =>
         Path.Combine(LogsDirectory, $"{feature}-{date:yyyy-MM-dd}.log");
@@ -68,10 +83,11 @@ public static class AppDataPaths
                 return;
 
             var cutoff = DateTime.Now.AddHours(-1);
+            var canonicalRoot = Path.GetFullPath(Root);
 
-            foreach (var file in Directory.EnumerateFiles(Root, "*.tmp", SearchOption.TopDirectoryOnly))
+            foreach (var file in Directory.EnumerateFiles(canonicalRoot, "*.tmp", SearchOption.TopDirectoryOnly))
             {
-                TryDeleteIfOlderThan(file, cutoff);
+                TryDeleteIfOlderThan(file, cutoff, canonicalRoot);
             }
         }
         catch
@@ -80,12 +96,27 @@ public static class AppDataPaths
         }
     }
 
-    private static void TryDeleteIfOlderThan(string file, DateTime cutoff)
+    private static void TryDeleteIfOlderThan(string file, DateTime cutoff, string canonicalRoot)
     {
         try
         {
-            if (File.GetLastWriteTime(file) < cutoff)
-                File.Delete(file);
+            // Same containment discipline as LogRetentionCleanupService: validate the leaf
+            // filename and re-derive the delete target from the known-safe root rather than
+            // trusting the enumerated path string, even though enumeration over a fixed
+            // directory should never produce a traversal-shaped name.
+            var fileName = Path.GetFileName(file);
+            if (string.IsNullOrEmpty(fileName) ||
+                fileName.Contains("..", StringComparison.Ordinal) ||
+                fileName.Contains('/') ||
+                fileName.Contains('\\'))
+                return;
+
+            var safePath = Path.GetFullPath(Path.Combine(canonicalRoot, fileName));
+            if (!safePath.StartsWith(canonicalRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (File.GetLastWriteTime(safePath) < cutoff)
+                File.Delete(safePath);
         }
         catch
         {

@@ -123,4 +123,14 @@ services.AddHttpClient("MyClient")
 
 ---
 
+## CS-12 — Logs and machine-local diagnostics do not belong in `ApplicationData` (Roaming)
+
+**Symptom:** App logs accumulate under `%APPDATA%\SwebKit\logs`, silently roaming/syncing with the user profile on domain setups.
+
+**Cause:** `AppDataPaths` pointed every path — persisted JSON state _and_ the `logs/` folder — at `Environment.SpecialFolder.ApplicationData`. Roaming is meant for user data that follows the user (profiles, settings); logs, journals and crash dumps are per-machine artifacts and must not roam. Tauri follows the same convention: `app_log_dir` resolves under `%LOCALAPPDATA%`.
+
+**Fix:** Keep state files on `Root` (Roaming) but route `LogsDirectory` / `FeatureLogFile` / `PerformanceBaselineLog` through `LocalRoot` (`LocalApplicationData`); the panic crumb in `src-tauri/src/lib.rs` writes to `%LOCALAPPDATA%` too. `LocalRoot` still honors `SWEBKIT_APPDATA_ROOT` so test sandboxes capture logs. When adding a new persisted path, decide _user data vs. machine-local_ first — don't just append it next to the nearest sibling.
+
+---
+
 _See also: [azure-sdk.md](azure-sdk.md)_

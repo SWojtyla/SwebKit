@@ -40,6 +40,7 @@ artifacts/coverage*/
 # Script output (scripts/logs/*.log is already covered by *.log above; the
 # throwaway AppData root used by scripts/tauri/test-frontend.ps1 is not)
 scripts/.test-appdata/
+scripts/logs/*.pid
 
 # Playwright
 **/test-results/
