@@ -195,7 +195,8 @@ test.describe("Settings", () => {
         await page.getByRole("button", { name: "Add Namespace" }).click();
         // Only the selected namespace's editor is mounted — select the new row
         // explicitly so the FQDN input below is guaranteed to be its editor's.
-        await page.locator('[data-testid^="sb-item-"]').last().click();
+        const nsId = await lastItemId(page, "sb");
+        await page.getByTestId(`sb-item-${nsId}`).click();
 
         let saves = 0;
         await page.route("**/api/config/profiles", async (route) => {
@@ -204,9 +205,7 @@ test.describe("Settings", () => {
         });
 
         const fqdn = page
-            .getByPlaceholder(
-                "e.g. sb-dev-shared-sb-weu.servicebus.windows.net",
-            )
+            .getByPlaceholder("Namespace, e.g. sb-dev-shared-sb-weu")
             .last();
         await fqdn.click();
         await fqdn.pressSequentially("sb-demo.servicebus.windows.net");
@@ -219,9 +218,7 @@ test.describe("Settings", () => {
         await page.getByTestId("settings-tab-service-bus").click();
         await expect(
             page
-                .getByPlaceholder(
-                    "e.g. sb-dev-shared-sb-weu.servicebus.windows.net",
-                )
+                .getByPlaceholder("Namespace, e.g. sb-dev-shared-sb-weu")
                 .last(),
         ).toHaveValue("sb-demo.servicebus.windows.net");
     });
@@ -230,7 +227,8 @@ test.describe("Settings", () => {
         await page.goto("/settings");
         await page.getByTestId("settings-tab-service-bus").click();
         await page.getByRole("button", { name: "Add Namespace" }).click();
-        await page.locator('[data-testid^="sb-item-"]').last().click();
+        const escapeNsId = await lastItemId(page, "sb");
+        await page.getByTestId(`sb-item-${escapeNsId}`).click();
 
         let saves = 0;
         await page.route("**/api/config/profiles", async (route) => {
@@ -239,9 +237,7 @@ test.describe("Settings", () => {
         });
 
         const fqdn = page
-            .getByPlaceholder(
-                "e.g. sb-dev-shared-sb-weu.servicebus.windows.net",
-            )
+            .getByPlaceholder("Namespace, e.g. sb-dev-shared-sb-weu")
             .last();
         await fqdn.fill("should-not-save.servicebus.windows.net");
         await fqdn.press("Escape");
@@ -259,12 +255,11 @@ test.describe("Settings", () => {
         await page.goto("/settings");
         await page.getByTestId("settings-tab-service-bus").click();
         await page.getByRole("button", { name: "Add Namespace" }).click();
-        await page.locator('[data-testid^="sb-item-"]').last().click();
+        const trimNsId = await lastItemId(page, "sb");
+        await page.getByTestId(`sb-item-${trimNsId}`).click();
 
         const fqdn = page
-            .getByPlaceholder(
-                "e.g. sb-dev-shared-sb-weu.servicebus.windows.net",
-            )
+            .getByPlaceholder("Namespace, e.g. sb-dev-shared-sb-weu")
             .last();
         await fqdn.click();
         await fqdn.pressSequentially(" sb-trimmed.servicebus.windows.net  ");
@@ -277,9 +272,7 @@ test.describe("Settings", () => {
         await page.getByTestId("settings-tab-service-bus").click();
         await expect(
             page
-                .getByPlaceholder(
-                    "e.g. sb-dev-shared-sb-weu.servicebus.windows.net",
-                )
+                .getByPlaceholder("Namespace, e.g. sb-dev-shared-sb-weu")
                 .last(),
         ).toHaveValue("sb-trimmed.servicebus.windows.net");
     });

@@ -56,8 +56,12 @@ export function PortForwardDialog({
         pod?.namespace ?? null,
         pod?.name ?? null,
     );
+    // `?? []` on ports too — a stale dev sidecar predating the ports field would
+    // otherwise crash the dialog on `.map`.
     const declaredPorts = (details.data ?? [])
-        .flatMap((c) => c.ports.map((p) => ({ ...p, container: c.name })))
+        .flatMap((c) =>
+            (c.ports ?? []).map((p) => ({ ...p, container: c.name })),
+        )
         .filter((p) => p.protocol.toUpperCase() === "TCP");
 
     // Adjust-state-during-render for the two prop-driven resets: a pod change clears the

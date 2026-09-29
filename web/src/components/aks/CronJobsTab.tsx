@@ -177,6 +177,12 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
                         </span>
                     );
                 },
+                sortValue: (cj) =>
+                    cj.suspend || !cj.schedule
+                        ? ""
+                        : (nextCronRun(cj.schedule, {
+                              timeZone: cj.timeZone,
+                          })?.toISOString() ?? ""),
             },
             {
                 header: "Last Schedule",
@@ -185,6 +191,7 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
                         {formatLocalDateTime(cj.lastScheduleTime) || "—"}
                     </span>
                 ),
+                sortValue: (cj) => cj.lastScheduleTime ?? "",
             },
             {
                 header: "Last Success",
@@ -193,6 +200,7 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
                         {formatLocalDateTime(cj.lastSuccessfulTime) || "—"}
                     </span>
                 ),
+                sortValue: (cj) => cj.lastSuccessfulTime ?? "",
             },
             {
                 header: "Actions",

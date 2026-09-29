@@ -66,3 +66,7 @@ tauri_build_err.txt
 # `npm install`, don't commit it.
 /node_modules/
 
+
+# Literal file created when a Git Bash redirect uses `> nul` (Windows null device
+# name is not special under Git Bash) — never a real artifact.
+nul

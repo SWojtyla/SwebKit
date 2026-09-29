@@ -485,12 +485,7 @@ export function AksWorkspaceProvider({
                 },
             );
         },
-        [
-            currentContextName,
-            setContextMutate,
-            updateParams,
-            notify,
-        ],
+        [currentContextName, setContextMutate, updateParams, notify],
     );
 
     // Apply a kube context switch requested via the command palette
@@ -722,6 +717,14 @@ export function AksWorkspaceProvider({
             updateParams({
                 tab: "portforward",
                 pod: makeKey(pod.namespace, pod.name),
+                // Same overlay cleanup as openYaml/openContainerDetails — without it a
+                // YAML viewer or log panel opened from the pod detail stays docked over
+                // the Port Forwards tab.
+                yaml: null,
+                helm: null,
+                container: null,
+                logs: null,
+                logsNs: null,
             });
             setSelectedSecret(null);
             setSelectedConfigMap(null);

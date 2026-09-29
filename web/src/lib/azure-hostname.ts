@@ -1,5 +1,4 @@
 const SERVICE_BUS_SUFFIX = ".servicebus.windows.net";
-const REDIS_SUFFIX = ".redis.cache.windows.net";
 
 /** Strips a URI scheme, trailing path/slash and a port so a pasted endpoint reduces to
  * its host part. `sb://x.servicebus.windows.net/` and `rediss://x:6380` both collapse to
@@ -25,15 +24,11 @@ export function normalizeServiceBusNamespace(input: string): string {
 }
 
 /**
- * Redis cache names are stored bare (the backend derives `<name>.redis.cache.windows.net`),
- * but users shouldn't have to know that either — a pasted FQDN has the suffix stripped so
- * the stored value stays a name.
+ * Redis accepts the cache name or its full hostname — the stored value is used verbatim
+ * when it contains a dot (see `RedisClient.ResolveAadHost`), and a bare name gets the
+ * `<name>.redis.cache.windows.net` suffix server-side. Keeping the FQDN intact is what
+ * makes private-link and custom-DNS endpoints connectable.
  */
-export function normalizeRedisCacheName(input: string): string {
-    const host = stripToHost(input);
-    if (host.toLowerCase().endsWith(REDIS_SUFFIX)) {
-        return host.slice(0, host.length - REDIS_SUFFIX.length);
-    }
-    return host;
+export function normalizeRedisCacheHost(input: string): string {
+    return stripToHost(input);
 }
-

@@ -56,6 +56,8 @@ const columns: Column<HelmReleaseInfo>[] = [
                 {rel.updated ? formatLocalDateTime(rel.updated) : "—"}
             </span>
         ),
+        // "Mar 21, 2026, …" sorts by month name — the raw timestamp is the real sort key.
+        sortValue: (rel) => rel.updated ?? "",
     },
 ];
 

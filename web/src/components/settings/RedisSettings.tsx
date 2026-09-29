@@ -4,7 +4,7 @@ import { saveCredential } from "@/lib/api";
 import { useRedisTestConnection } from "@/lib/hooks/useRedis";
 import { useNotification } from "@/components/layout/notification-context";
 import { clampInt } from "@/lib/clamp-int";
-import { normalizeRedisCacheName } from "@/lib/azure-hostname";
+import { normalizeRedisCacheHost } from "@/lib/azure-hostname";
 import type { RedisCacheEntry } from "@/lib/types";
 import { DraftInput } from "./DraftInput";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
@@ -136,7 +136,9 @@ export function RedisSettings() {
                 getSubtitle={(c) =>
                     c.useAad
                         ? c.cacheName
-                            ? `${c.cacheName}.redis.cache.windows.net`
+                            ? c.cacheName.includes(".")
+                                ? c.cacheName
+                                : `${c.cacheName}.redis.cache.windows.net`
                             : ""
                         : c.connectionString ||
                           (c.credentialKey ? "Credential store" : "")
@@ -281,16 +283,17 @@ function CacheRow({
                         type="text"
                         value={cache.cacheName}
                         onCommit={(v) =>
-                            onUpdate({ cacheName: normalizeRedisCacheName(v) })
+                            onUpdate({ cacheName: normalizeRedisCacheHost(v) })
                         }
                         className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
                         placeholder="Cache name, e.g. my-cache"
                     />
                     <p className="mt-1 text-xs text-muted-foreground">
-                        Just the cache name — connects to{" "}
-                        <code>&lt;name&gt;.redis.cache.windows.net</code> using
-                        your signed-in Azure identity. A pasted hostname has the
-                        suffix removed automatically.
+                        The cache name or its hostname —{" "}
+                        <code>&lt;name&gt;.redis.cache.windows.net</code> is
+                        assumed for bare names, and a pasted FQDN (including
+                        private-link) is used as-is. Connects with your
+                        signed-in Azure identity.
                     </p>
                     <DraftInput
                         type="text"

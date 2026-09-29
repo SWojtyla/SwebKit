@@ -111,6 +111,19 @@ public class RedisClientTests
     // The Entra ID (AAD) path requires CacheName instead of ConnectionString. These cover
     // the guard that runs before any token acquisition or network attempt.
 
+    [Theory]
+    [InlineData("my-cache", "my-cache.redis.cache.windows.net")]
+    [InlineData("my-cache.redis.cache.windows.net", "my-cache.redis.cache.windows.net")]
+    [InlineData("cache.privatelink.redis.cache.windows.net", "cache.privatelink.redis.cache.windows.net")]
+    [InlineData("redis.internal.contoso.local", "redis.internal.contoso.local")]
+    public void ResolveAadHost_DottedValuesAreVerbatim_BareNamesGetSuffix(string input, string expected)
+    {
+        // A pasted FQDN must not have the Azure suffix glued on a second time — the
+        // double-suffixed endpoint resolves to nothing and the failure looked like an
+        // auth problem instead of a bad hostname.
+        Assert.Equal(expected, RedisClient.ResolveAadHost(input));
+    }
+
     [Fact]
     public async Task BuildAadConnectionOptionsAsync_NullCacheName_Throws()
     {

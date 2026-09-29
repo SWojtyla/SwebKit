@@ -400,6 +400,9 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
                         {formatAge(pod.startTime)}
                     </span>
                 ),
+                // "5m"/"2h"/"3d" text would sort by leading number only — the raw
+                // timestamp is the real sort key.
+                sortValue: (pod) => pod.startTime ?? "",
             },
             {
                 header: "Actions",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-    normalizeRedisCacheName,
+    normalizeRedisCacheHost,
     normalizeServiceBusNamespace,
 } from "./azure-hostname";
 
@@ -13,7 +13,9 @@ describe("normalizeServiceBusNamespace", () => {
 
     it("passes a full hostname through untouched", () => {
         expect(
-            normalizeServiceBusNamespace("sb-dev-shared-sb-weu.servicebus.windows.net"),
+            normalizeServiceBusNamespace(
+                "sb-dev-shared-sb-weu.servicebus.windows.net",
+            ),
         ).toBe("sb-dev-shared-sb-weu.servicebus.windows.net");
     });
 
@@ -25,11 +27,13 @@ describe("normalizeServiceBusNamespace", () => {
 
     it("strips scheme, trailing slash and whitespace", () => {
         expect(
-            normalizeServiceBusNamespace("  sb://sb-dev-shared-sb-weu.servicebus.windows.net/  "),
+            normalizeServiceBusNamespace(
+                "  sb://sb-dev-shared-sb-weu.servicebus.windows.net/  ",
+            ),
         ).toBe("sb-dev-shared-sb-weu.servicebus.windows.net");
-        expect(normalizeServiceBusNamespace("https://myns.servicebus.windows.net")).toBe(
-            "myns.servicebus.windows.net",
-        );
+        expect(
+            normalizeServiceBusNamespace("https://myns.servicebus.windows.net"),
+        ).toBe("myns.servicebus.windows.net");
     });
 
     it("strips a pasted port", () => {
@@ -43,31 +47,39 @@ describe("normalizeServiceBusNamespace", () => {
     });
 });
 
-describe("normalizeRedisCacheName", () => {
-    it("passes a bare name through", () => {
-        expect(normalizeRedisCacheName("my-cache")).toBe("my-cache");
+describe("normalizeRedisCacheHost", () => {
+    it("passes a bare name through — the backend appends the suffix", () => {
+        expect(normalizeRedisCacheHost("my-cache")).toBe("my-cache");
     });
 
-    it("strips the suffix from a pasted hostname", () => {
+    it("keeps a pasted hostname intact — used verbatim server-side", () => {
         expect(
-            normalizeRedisCacheName("my-cache.redis.cache.windows.net"),
-        ).toBe("my-cache");
+            normalizeRedisCacheHost("my-cache.redis.cache.windows.net"),
+        ).toBe("my-cache.redis.cache.windows.net");
     });
 
-    it("handles scheme, port and whitespace", () => {
+    it("keeps private-link and custom hostnames intact", () => {
         expect(
-            normalizeRedisCacheName("  rediss://my-cache.redis.cache.windows.net:6380  "),
-        ).toBe("my-cache");
-        expect(normalizeRedisCacheName("my-cache:6380")).toBe("my-cache");
-    });
-
-    it("leaves non-standard hostnames as typed", () => {
-        expect(normalizeRedisCacheName("redis.internal.contoso.local")).toBe(
+            normalizeRedisCacheHost(
+                "cache.privatelink.redis.cache.windows.net",
+            ),
+        ).toBe("cache.privatelink.redis.cache.windows.net");
+        expect(normalizeRedisCacheHost("redis.internal.contoso.local")).toBe(
             "redis.internal.contoso.local",
         );
     });
 
+    it("strips scheme, port and whitespace", () => {
+        expect(
+            normalizeRedisCacheHost(
+                "  rediss://my-cache.redis.cache.windows.net:6380  ",
+            ),
+        ).toBe("my-cache.redis.cache.windows.net");
+        expect(normalizeRedisCacheHost("my-cache:6380")).toBe("my-cache");
+    });
+
     it("returns empty for empty input", () => {
-        expect(normalizeRedisCacheName("")).toBe("");
+        expect(normalizeRedisCacheHost("")).toBe("");
     });
 });
+
