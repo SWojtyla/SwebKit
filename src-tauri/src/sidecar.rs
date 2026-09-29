@@ -45,7 +45,12 @@ pub fn spawn_sidecar(app: &AppHandle) -> Result<(u16, Option<Child>), String> {
     #[cfg(debug_assertions)]
     {
         let _ = app; // unused in dev mode: the sidecar is started externally
-        let port = 5199u16;
+        // The dev launcher may relocate the sidecar off the default 5199 when that
+        // port is already taken by another app — it reports the chosen port via env.
+        let port = std::env::var("SWEBKIT_DEV_SIDECAR_PORT")
+            .ok()
+            .and_then(|v| v.parse::<u16>().ok())
+            .unwrap_or(5199);
         eprintln!("[swebkit] Dev mode: assuming sidecar at http://127.0.0.1:{port}");
         Ok((port, None))
     }

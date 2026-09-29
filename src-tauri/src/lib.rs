@@ -45,7 +45,7 @@ pub fn run() {
     std::panic::set_hook(Box::new(|info| {
         let message = format!("swebkit panicked: {info}\n");
         eprintln!("{message}");
-        if let Ok(appdata) = std::env::var("APPDATA") {
+        if let Ok(appdata) = std::env::var("LOCALAPPDATA") {
             let dir = std::path::Path::new(&appdata).join("com.companyname.swebkit");
             if std::fs::create_dir_all(&dir).is_ok() {
                 let _ = std::fs::write(dir.join("last-panic.log"), message);

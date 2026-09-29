@@ -11,6 +11,8 @@ scripts/
 │   ├── test-frontend.ps1  fresh production frontend + published sidecar, in the browser
 │   ├── run-dev.ps1        3-tier dev launcher with hot reload
 │   ├── run-dev.cmd        same, double-clickable from Explorer
+│   ├── stop-dev.ps1       stops the tiers run-dev started
+│   ├── stop-dev.cmd       same, double-clickable from Explorer
 │   └── _common.ps1        shared helpers (dot-sourced; not run directly)
 └── logs/                  script output, gitignored
 ```
@@ -36,13 +38,13 @@ found".
 Output: `src-tauri/target/release/bundle/msi/SwebKit_<version>_x64_en-US.msi`.
 Transcript: `scripts/logs/build-msi.log`.
 
-| Flag                    | Effect                                                          |
-| ----------------------- | --------------------------------------------------------------- |
-| `-Bundles msi\|nsis\|all` | Installer formats to produce (default `msi`)                     |
-| `-SkipNpmInstall`       | Build with `node_modules` as-is                                  |
-| `-NoClean`              | Incremental: keep the previous `dist`/sidecar/bundle output      |
-| `-FullClean`            | Also `cargo clean` for a true from-scratch build (much slower)   |
-| `-Install`              | Launch the produced MSI with `msiexec` on success               |
+| Flag                      | Effect                                                         |
+| ------------------------- | -------------------------------------------------------------- |
+| `-Bundles msi\|nsis\|all` | Installer formats to produce (default `msi`)                   |
+| `-SkipNpmInstall`         | Build with `node_modules` as-is                                |
+| `-NoClean`                | Incremental: keep the previous `dist`/sidecar/bundle output    |
+| `-FullClean`              | Also `cargo clean` for a true from-scratch build (much slower) |
+| `-Install`                | Launch the produced MSI with `msiexec` on success              |
 
 Mirrors [.github/workflows/release.yml](../.github/workflows/release.yml) — keep the two
 in sync.
@@ -63,14 +65,14 @@ by default, so a test run cannot damage your saved profiles, templates or monito
 rules. Tauri-native features (secret storage, native dialogs, shell) don't exist in a
 plain browser; everything that talks to the sidecar over HTTP behaves identically.
 
-| Flag                     | Effect                                                        |
-| ------------------------ | ------------------------------------------------------------- |
-| `-Port <n>`              | Preview port (default 1421, clear of the dev server's 1420)   |
-| `-SidecarPort <n>`       | Sidecar port (default 5199)                                   |
-| `-UseRealAppData`        | Use your real config instead of a throwaway folder            |
-| `-FrameworkDependent`    | Faster sidecar publish; no longer what the installer ships    |
-| `-SkipNpmInstall`        | Build with `node_modules` as-is                               |
-| `-NoBrowser`             | Print the URL instead of opening a browser                    |
+| Flag                  | Effect                                                      |
+| --------------------- | ----------------------------------------------------------- |
+| `-Port <n>`           | Preview port (default 1421, clear of the dev server's 1420) |
+| `-SidecarPort <n>`    | Sidecar port (default 5199)                                 |
+| `-UseRealAppData`     | Use your real config instead of a throwaway folder          |
+| `-FrameworkDependent` | Faster sidecar publish; no longer what the installer ships  |
+| `-SkipNpmInstall`     | Build with `node_modules` as-is                             |
+| `-NoBrowser`          | Print the URL instead of opening a browser                  |
 
 ### Dev loop (hot reload)
 
@@ -79,8 +81,25 @@ pwsh -File scripts/tauri/run-dev.ps1     # or double-click run-dev.cmd
 ```
 
 Starts the sidecar (`dotnet run`, port 5199), the Vite dev server (port 1420) and the
-Tauri window, each in its own console, skipping any tier that is already up. Logs:
-`scripts/logs/{sidecar,vite,tauri}.log`.
+Tauri window as hidden background processes, skipping any tier that is already up —
+identity-checked, so another app answering on the port doesn't count. When the
+default port is held by something else, a free port is picked automatically and
+wired through all three tiers (the Tauri window's sidecar port included).
+
+The launcher window streams each tier's startup output live (dotnet build, vite
+warmup, cargo compile) and exits once the app is up — no extra consoles stay open.
+Logs: `scripts/logs/{sidecar,vite,tauri}.log` (+ `.err.log`); PIDs:
+`scripts/logs/<tier>.pid`; chosen ports: `scripts/logs/dev-ports.json`.
+
+Stop the whole stack with `scripts/tauri/stop-dev.cmd` (kills the recorded PID
+trees, falling back to port lookup for tiers started by hand).
+
+| Flag               | Effect                                                        |
+| ------------------ | ------------------------------------------------------------- |
+| `-SidecarPort <n>` | Preferred sidecar port (default 5199; auto-relocates if held) |
+| `-VitePort <n>`    | Preferred Vite port (default 1420; auto-relocates if held)    |
+| `-NoBrowser`       | Don't open the Vite URL once it's up                          |
+| `-NoTauri`         | Sidecar + Vite only; skip the Rust build and desktop window   |
 
 ### End-to-end tests
 
