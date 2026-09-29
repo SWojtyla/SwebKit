@@ -142,11 +142,11 @@ test.describe("Settings", () => {
         );
     });
 
-    test("Service Bus auth mode switches to Entra ID and survives a reload", async ({
+    test("Service Bus auth mode defaults to Entra ID and a switch survives a reload", async ({
         page,
     }) => {
-        // The reported bug: clicking Entra ID appeared to do nothing. Profile saves were not
-        // serialized, so a refetch triggered by an earlier keystroke landed after this click's
+        // The reported bug: clicking an auth radio appeared to do nothing. Profile saves were
+        // not serialized, so a refetch triggered by an earlier keystroke landed after this click's
         // PUT and overwrote the cache with pre-click state — the radio snapped back.
         //
         // Scoped to the row this test adds: the e2e sidecar's appdata is shared by every test
@@ -167,19 +167,22 @@ test.describe("Settings", () => {
 
         const nsId = await lastItemId(page, "sb");
         const entra = page.getByTestId(`sb-auth-entra-${nsId}`);
-        await expect(entra).toBeVisible();
-        await expect(entra).not.toBeChecked();
+        const connString = page.getByTestId(`sb-auth-connstring-${nsId}`);
+        // Entra is the recommended path — a freshly added namespace selects it by default.
+        await expect(entra).toBeChecked();
 
         // Click rather than `check()`: the state change round-trips through a save, and
         // `check()` asserts synchronously right after clicking. Wait for that save's PUT
         // explicitly rather than only polling the checked state, so a slow CI runner can't
         // time out the UI poll before the round-trip that actually flips it has landed.
-        await Promise.all([saveProfile("PUT"), entra.click()]);
-        await expect(entra).toBeChecked();
+        await Promise.all([saveProfile("PUT"), connString.click()]);
+        await expect(connString).toBeChecked();
 
         await page.reload();
         await page.getByTestId("settings-tab-service-bus").click();
-        await expect(page.getByTestId(`sb-auth-entra-${nsId}`)).toBeChecked();
+        await expect(
+            page.getByTestId(`sb-auth-connstring-${nsId}`),
+        ).toBeChecked();
     });
 
     test("Service Bus text fields commit on blur rather than per keystroke", async ({
@@ -438,7 +441,9 @@ test.describe("Settings", () => {
 
         await Promise.all([
             saveUserSettings("PUT"),
-            editor.getByTestId(`agent-profile-acp-mcp-${profileId}-add`).click(),
+            editor
+                .getByTestId(`agent-profile-acp-mcp-${profileId}-add`)
+                .click(),
         ]);
         const row = editor.locator('[data-testid*="-row-"]');
         await expect(row).toHaveCount(1);
@@ -825,7 +830,10 @@ test.describe("Settings", () => {
         ]);
 
         const nsId = await lastItemId(page, "sb");
+        // New namespaces default to Entra — switch to Connection String first so the
+        // credential-key field renders.
         const connString = page.getByTestId(`sb-auth-connstring-${nsId}`);
+        await Promise.all([saveProfile("PUT"), connString.click()]);
         await expect(connString).toBeChecked();
 
         const credKey = page.getByTestId(`sb-credential-key-${nsId}`);
@@ -988,6 +996,13 @@ test.describe("Settings", () => {
             page.getByRole("button", { name: "Add Cache" }).click(),
         ]);
         const configuredCacheId = await lastItemId(page, "redis");
+        // New caches default to Entra — switch to Connection String so the field renders.
+        await Promise.all([
+            saveProfile("PUT"),
+            page
+                .getByTestId(`redis-auth-connstring-${configuredCacheId}`)
+                .click(),
+        ]);
         const connInput = page
             .getByTestId(`redis-cache-${configuredCacheId}`)
             .locator('input[placeholder="localhost:6379"]');

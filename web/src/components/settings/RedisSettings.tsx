@@ -4,6 +4,7 @@ import { saveCredential } from "@/lib/api";
 import { useRedisTestConnection } from "@/lib/hooks/useRedis";
 import { useNotification } from "@/components/layout/notification-context";
 import { clampInt } from "@/lib/clamp-int";
+import { normalizeRedisCacheName } from "@/lib/azure-hostname";
 import type { RedisCacheEntry } from "@/lib/types";
 import { DraftInput } from "./DraftInput";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
@@ -56,7 +57,9 @@ export function RedisSettings() {
             credentialKey: "",
             connectionString: "",
             database: 0,
-            useAad: false,
+            // Entra is the recommended path — new caches default to it; existing
+            // caches keep whichever mode they were saved with.
+            useAad: true,
             cacheName: "",
         };
         update({
@@ -133,6 +136,8 @@ export function RedisSettings() {
                 getSubtitle={(c) =>
                     c.useAad
                         ? c.cacheName
+                            ? `${c.cacheName}.redis.cache.windows.net`
+                            : ""
                         : c.connectionString ||
                           (c.credentialKey ? "Credential store" : "")
                 }
@@ -252,21 +257,21 @@ function CacheRow({
                     <input
                         type="radio"
                         name={`redis-auth-${cache.id}`}
-                        checked={!cache.useAad}
-                        onChange={() => onUpdate({ useAad: false })}
-                        data-testid={`redis-auth-connstring-${cache.id}`}
+                        checked={cache.useAad}
+                        onChange={() => onUpdate({ useAad: true })}
+                        data-testid={`redis-auth-entra-${cache.id}`}
                     />
-                    Connection String
+                    Entra ID
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                     <input
                         type="radio"
                         name={`redis-auth-${cache.id}`}
-                        checked={cache.useAad}
-                        onChange={() => onUpdate({ useAad: true })}
-                        data-testid={`redis-auth-entra-${cache.id}`}
+                        checked={!cache.useAad}
+                        onChange={() => onUpdate({ useAad: false })}
+                        data-testid={`redis-auth-connstring-${cache.id}`}
                     />
-                    Entra ID (AAD)
+                    Connection String
                 </label>
             </div>
 
@@ -275,15 +280,17 @@ function CacheRow({
                     <DraftInput
                         type="text"
                         value={cache.cacheName}
-                        onCommit={(v) => onUpdate({ cacheName: v })}
+                        onCommit={(v) =>
+                            onUpdate({ cacheName: normalizeRedisCacheName(v) })
+                        }
                         className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-                        placeholder="my-cache"
+                        placeholder="Cache name, e.g. my-cache"
                     />
                     <p className="mt-1 text-xs text-muted-foreground">
-                        The cache's resource name from the Azure portal —
-                        connects to{" "}
+                        Just the cache name — connects to{" "}
                         <code>&lt;name&gt;.redis.cache.windows.net</code> using
-                        your signed-in Azure identity.
+                        your signed-in Azure identity. A pasted hostname has the
+                        suffix removed automatically.
                     </p>
                     <DraftInput
                         type="text"
