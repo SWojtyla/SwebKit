@@ -38,11 +38,26 @@ function Stop-Tree {
 
 $stoppedAny = $false
 
+# run-dev records the ports it actually bound (possibly relocated off the
+# defaults when 5199/1420 were taken) in dev-ports.json — prefer those for the
+# port fallback, keeping the defaults as a final guess.
+$savedPorts = @{ sidecar = 5199; vite = 1420 }
+$portsFile = Join-Path $logDir 'dev-ports.json'
+if (Test-Path $portsFile) {
+    try {
+        $saved = Get-Content $portsFile -Raw | ConvertFrom-Json
+        if ($saved.sidecar) { $savedPorts.sidecar = [int]$saved.sidecar }
+        if ($saved.vite) { $savedPorts.vite = [int]$saved.vite }
+        Remove-Item $portsFile -Force -ErrorAction SilentlyContinue
+    }
+    catch { }
+}
+
 # Tier name -> listen port used as the fallback lookup when no live PID exists.
 $tiers = @(
-    @{ Name = 'sidecar'; Port = 5199 },
-    @{ Name = 'vite';    Port = 1420 },
-    @{ Name = 'tauri';   Port = 0 }   # no port; PID file or the built app exe only
+    @{ Name = 'sidecar'; Port = $savedPorts.sidecar },
+    @{ Name = 'vite'; Port = $savedPorts.vite },
+    @{ Name = 'tauri'; Port = 0 }   # no port; PID file or the built app exe only
 )
 
 foreach ($tier in $tiers) {
@@ -71,7 +86,7 @@ foreach ($tier in $tiers) {
 # reparented orphan would hold the webview (and the next run's file locks).
 $appExe = Join-Path (Get-RepoRoot) 'src-tauri\target\debug\swebkit.exe'
 $appRunning = Get-Process -Name 'swebkit' -ErrorAction SilentlyContinue |
-    Where-Object { try { $_.Path -eq $appExe } catch { $false } }
+Where-Object { try { $_.Path -eq $appExe } catch { $false } }
 foreach ($app in $appRunning) {
     $stoppedAny = (Stop-Tree -ProcessId $app.Id -Name 'tauri app') -or $stoppedAny
 }

@@ -81,19 +81,25 @@ pwsh -File scripts/tauri/run-dev.ps1     # or double-click run-dev.cmd
 ```
 
 Starts the sidecar (`dotnet run`, port 5199), the Vite dev server (port 1420) and the
-Tauri window as hidden background processes, skipping any tier that is already up.
+Tauri window as hidden background processes, skipping any tier that is already up —
+identity-checked, so another app answering on the port doesn't count. When the
+default port is held by something else, a free port is picked automatically and
+wired through all three tiers (the Tauri window's sidecar port included).
+
 The launcher window streams each tier's startup output live (dotnet build, vite
 warmup, cargo compile) and exits once the app is up — no extra consoles stay open.
 Logs: `scripts/logs/{sidecar,vite,tauri}.log` (+ `.err.log`); PIDs:
-`scripts/logs/<tier>.pid`.
+`scripts/logs/<tier>.pid`; chosen ports: `scripts/logs/dev-ports.json`.
 
 Stop the whole stack with `scripts/tauri/stop-dev.cmd` (kills the recorded PID
 trees, falling back to port lookup for tiers started by hand).
 
-| Flag         | Effect                                                      |
-| ------------ | ----------------------------------------------------------- |
-| `-NoBrowser` | Don't open http://localhost:1420/ once Vite is up           |
-| `-NoTauri`   | Sidecar + Vite only; skip the Rust build and desktop window |
+| Flag               | Effect                                                        |
+| ------------------ | ------------------------------------------------------------- |
+| `-SidecarPort <n>` | Preferred sidecar port (default 5199; auto-relocates if held) |
+| `-VitePort <n>`    | Preferred Vite port (default 1420; auto-relocates if held)    |
+| `-NoBrowser`       | Don't open the Vite URL once it's up                          |
+| `-NoTauri`         | Sidecar + Vite only; skip the Rust build and desktop window   |
 
 ### End-to-end tests
 
