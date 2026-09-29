@@ -161,6 +161,20 @@ Assert-Tool -Name 'dotnet' -InstallHint 'Install the .NET 10 SDK (see global.jso
 Assert-Tool -Name 'node'   -InstallHint 'Install Node.js 20+ from https://nodejs.org/.'
 Assert-Tool -Name 'npm'    -InstallHint 'Install Node.js 20+ from https://nodejs.org/.'
 
+# `dotnet` on PATH is not enough — global.json can still reject every installed
+# SDK ("A compatible .NET SDK was not found"), which otherwise only surfaces as
+# an opaque 'sidecar exited early'. Resolve the SDK now, from the repo root, so
+# the real error prints before anything is spawned.
+Push-Location $repoRoot
+try {
+    $sdkVersion = dotnet --version 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "No compatible .NET SDK for this repo (global.json):`n$sdkVersion"
+    }
+    Write-Info "dotnet SDK $sdkVersion"
+}
+finally { Pop-Location }
+
 # Ensure the bundle-sidecar glob placeholder exists (gitignored; required by
 # tauri dev's build script even though dev mode runs the sidecar externally).
 $binDir = Join-Path $repoRoot 'src-tauri\binaries\sidecar'
