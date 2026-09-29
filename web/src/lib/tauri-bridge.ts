@@ -3,54 +3,66 @@
 /// and fall back to web equivalents when running in the browser.
 
 function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
-  return tauriInvoke<T>(cmd, args);
+async function invoke<T>(
+    cmd: string,
+    args?: Record<string, unknown>,
+): Promise<T> {
+    const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
+    return tauriInvoke<T>(cmd, args);
 }
-
 
 // ── Clipboard ────────────────────────────────────────────────────────────────
 
 export async function writeClipboard(text: string): Promise<void> {
-  if (isTauri()) {
-    await invoke("write_clipboard", { text });
-  } else {
-    await navigator.clipboard.writeText(text);
-  }
+    if (isTauri()) {
+        await invoke("write_clipboard", { text });
+    } else {
+        await navigator.clipboard.writeText(text);
+    }
 }
 
 // ── File Dialogs ─────────────────────────────────────────────────────────────
 
-export async function pickFileWithContent(title?: string): Promise<{ path: string; content: string } | null> {
-  if (isTauri()) {
-    const path = await invoke<string | null>("pick_file", { title: title ?? null });
-    if (!path) return null;
-    const content = await readFile(path);
-    return { path, content };
-  }
-  return new Promise((resolve) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.onchange = () => {
-      const file = input.files?.[0];
-      if (!file) { resolve(null); return; }
-      const reader = new FileReader();
-      reader.onload = () => resolve({ path: file.name, content: String(reader.result) });
-      reader.readAsText(file);
-    };
-    input.click();
-  });
+export async function pickFileWithContent(
+    title?: string,
+): Promise<{ path: string; content: string } | null> {
+    if (isTauri()) {
+        const path = await invoke<string | null>("pick_file", {
+            title: title ?? null,
+        });
+        if (!path) return null;
+        const content = await readFile(path);
+        return { path, content };
+    }
+    return new Promise((resolve) => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.onchange = () => {
+            const file = input.files?.[0];
+            if (!file) {
+                resolve(null);
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = () =>
+                resolve({ path: file.name, content: String(reader.result) });
+            reader.readAsText(file);
+        };
+        input.click();
+    });
 }
 
 export async function pickDirectory(title?: string): Promise<string | null> {
-  if (isTauri()) {
-    return invoke<string | null>("pick_directory", { title: title ?? null });
-  }
-  // Web fallback: no directory picker in browser
-  return null;
+    if (isTauri()) {
+        return invoke<string | null>("pick_directory", {
+            title: title ?? null,
+        });
+    }
+    // Web fallback: no directory picker in browser
+    return null;
 }
 
 // ── Dialogs ──────────────────────────────────────────────────────────────────
@@ -58,47 +70,63 @@ export async function pickDirectory(title?: string): Promise<string | null> {
 // ── Port Forward ─────────────────────────────────────────────────────────────
 
 export interface PortForwardSessionInfo {
-  localPort: number;
-  namespace: string;
-  pod: string;
-  remotePort: number;
-  context: string | null;
+    localPort: number;
+    namespace: string;
+    pod: string;
+    remotePort: number;
+    context: string | null;
 }
 
 export async function startPortForward(
-  namespace: string,
-  pod: string,
-  remotePort: number,
-  localPort?: number,
-  context?: string | null,
-  kubeconfig?: string | null,
+    namespace: string,
+    pod: string,
+    remotePort: number,
+    localPort?: number,
+    context?: string | null,
+    kubeconfig?: string | null,
 ): Promise<number> {
-  if (isTauri()) {
-    return invoke<number>("start_port_forward", {
-      namespace,
-      pod,
-      remotePort,
-      localPort: localPort ?? null,
-      context: context ?? null,
-      kubeconfig: kubeconfig ?? null,
-    });
-  }
-  throw new Error("Port-forward requires the Tauri desktop app");
+    if (isTauri()) {
+        return invoke<number>("start_port_forward", {
+            namespace,
+            pod,
+            remotePort,
+            localPort: localPort ?? null,
+            context: context ?? null,
+            kubeconfig: kubeconfig ?? null,
+        });
+    }
+    throw new Error("Port-forward requires the Tauri desktop app");
 }
 
 export async function stopPortForward(localPort: number): Promise<void> {
-  if (isTauri()) {
-    await invoke("stop_port_forward", { localPort });
-  } else {
-    throw new Error("Port-forward requires the Tauri desktop app");
-  }
+    if (isTauri()) {
+        await invoke("stop_port_forward", { localPort });
+    } else {
+        throw new Error("Port-forward requires the Tauri desktop app");
+    }
 }
 
 export async function listPortForwards(): Promise<PortForwardSessionInfo[]> {
-  if (isTauri()) {
-    return invoke<PortForwardSessionInfo[]>("list_port_forwards");
-  }
-  return [];
+    if (isTauri()) {
+        return invoke<PortForwardSessionInfo[]>("list_port_forwards");
+    }
+    return [];
+}
+
+/// TCP-accept probe for a localhost port: `no-cors` resolves an opaque response on any
+/// accepting listener but rejects on a refused connection, which is exactly the signal a
+/// port-forward row needs — "is the tunnel up", not "does the pod speak HTTP".
+export async function probeLocalPort(port: number): Promise<boolean> {
+    try {
+        await fetch(`http://127.0.0.1:${port}/`, {
+            mode: "no-cors",
+            cache: "no-store",
+            signal: AbortSignal.timeout(2000),
+        });
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 // ── Pod Shell ────────────────────────────────────────────────────────────────
@@ -107,57 +135,67 @@ export async function listPortForwards(): Promise<PortForwardSessionInfo[]> {
 // JSON, so a raw string would risk corrupting anything that isn't valid UTF-8.
 
 function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
 }
 
 export function stringToBase64(text: string): string {
-  return bytesToBase64(new TextEncoder().encode(text));
+    return bytesToBase64(new TextEncoder().encode(text));
 }
 
 function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
 }
 
 export async function startPodShell(
-  namespace: string,
-  pod: string,
-  container?: string | null,
-  context?: string | null,
-  kubeconfig?: string | null,
+    namespace: string,
+    pod: string,
+    container?: string | null,
+    context?: string | null,
+    kubeconfig?: string | null,
 ): Promise<string> {
-  if (isTauri()) {
-    return invoke<string>("start_pod_shell", {
-      namespace,
-      pod,
-      container: container ?? null,
-      context: context ?? null,
-      kubeconfig: kubeconfig ?? null,
-    });
-  }
-  throw new Error("Pod shell requires the Tauri desktop app");
+    if (isTauri()) {
+        return invoke<string>("start_pod_shell", {
+            namespace,
+            pod,
+            container: container ?? null,
+            context: context ?? null,
+            kubeconfig: kubeconfig ?? null,
+        });
+    }
+    throw new Error("Pod shell requires the Tauri desktop app");
 }
 
-export async function writePodShell(sessionId: string, data: Uint8Array): Promise<void> {
-  if (isTauri()) {
-    await invoke("write_pod_shell", { sessionId, data: bytesToBase64(data) });
-  }
+export async function writePodShell(
+    sessionId: string,
+    data: Uint8Array,
+): Promise<void> {
+    if (isTauri()) {
+        await invoke("write_pod_shell", {
+            sessionId,
+            data: bytesToBase64(data),
+        });
+    }
 }
 
-export async function resizePodShell(sessionId: string, cols: number, rows: number): Promise<void> {
-  if (isTauri()) {
-    await invoke("resize_pod_shell", { sessionId, cols, rows });
-  }
+export async function resizePodShell(
+    sessionId: string,
+    cols: number,
+    rows: number,
+): Promise<void> {
+    if (isTauri()) {
+        await invoke("resize_pod_shell", { sessionId, cols, rows });
+    }
 }
 
 export async function closePodShell(sessionId: string): Promise<void> {
-  if (isTauri()) {
-    await invoke("close_pod_shell", { sessionId });
-  }
+    if (isTauri()) {
+        await invoke("close_pod_shell", { sessionId });
+    }
 }
 
 /**
@@ -166,58 +204,61 @@ export async function closePodShell(sessionId: string): Promise<void> {
  * listening on its own).
  */
 export async function onPodShellOutput(
-  sessionId: string,
-  onData: (bytes: Uint8Array) => void,
-  onExit: () => void,
+    sessionId: string,
+    onData: (bytes: Uint8Array) => void,
+    onExit: () => void,
 ): Promise<() => void> {
-  if (!isTauri()) return () => {};
+    if (!isTauri()) return () => {};
 
-  const { listen } = await import("@tauri-apps/api/event");
-  const unlistenOutput = await listen<string>(`pod-shell-output-${sessionId}`, (event) => {
-    onData(base64ToBytes(event.payload));
-  });
-  const unlistenExit = await listen(`pod-shell-exit-${sessionId}`, () => {
-    onExit();
-  });
+    const { listen } = await import("@tauri-apps/api/event");
+    const unlistenOutput = await listen<string>(
+        `pod-shell-output-${sessionId}`,
+        (event) => {
+            onData(base64ToBytes(event.payload));
+        },
+    );
+    const unlistenExit = await listen(`pod-shell-exit-${sessionId}`, () => {
+        onExit();
+    });
 
-  return () => {
-    unlistenOutput();
-    unlistenExit();
-  };
+    return () => {
+        unlistenOutput();
+        unlistenExit();
+    };
 }
 
 // ── Git Operations ───────────────────────────────────────────────────────────
 
 export interface GitStatus {
-  branch: string;
-  ahead: number;
-  behind: number;
-  staged: number;
-  modified: number;
-  untracked: number;
-  conflicted: number;
+    branch: string;
+    ahead: number;
+    behind: number;
+    staged: number;
+    modified: number;
+    untracked: number;
+    conflicted: number;
 }
 
 export interface GitBranch {
-  name: string;
-  current: boolean;
+    name: string;
+    current: boolean;
 }
 
 export interface GitFileChange {
-  path: string;
-  indexState: string;
-  worktreeState: string;
-  staged: boolean;
-  unstaged: boolean;
-  untracked: boolean;
-  conflicted: boolean;
-  origPath: string | null;
+    path: string;
+    indexState: string;
+    worktreeState: string;
+    staged: boolean;
+    unstaged: boolean;
+    untracked: boolean;
+    conflicted: boolean;
+    origPath: string | null;
 }
 
 export interface GitFileDiff {
-  original: string | null;
-  current: string;
-  isBinary: boolean;
+    original: string | null;
+    current: string;
+    isBinary: boolean;
 }
 
 /**
@@ -226,98 +267,125 @@ export interface GitFileDiff {
  * showing "requires the desktop app" for every error, as it used to.
  */
 export class GitUnavailableError extends Error {
-  constructor() {
-    super("Git actions need the SwebKit desktop app");
-    this.name = "GitUnavailableError";
-  }
+    constructor() {
+        super("Git actions need the SwebKit desktop app");
+        this.name = "GitUnavailableError";
+    }
 }
 
 /** A git command ran and failed. `message` is git's own stderr. */
 export class GitCommandError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "GitCommandError";
-  }
+    constructor(message: string) {
+        super(message);
+        this.name = "GitCommandError";
+    }
 }
 
-async function gitInvoke<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
-  if (!isTauri()) throw new GitUnavailableError();
-  try {
-    return await invoke<T>(cmd, args);
-  } catch (err) {
-    throw new GitCommandError(err instanceof Error ? err.message : String(err));
-  }
+async function gitInvoke<T>(
+    cmd: string,
+    args: Record<string, unknown>,
+): Promise<T> {
+    if (!isTauri()) throw new GitUnavailableError();
+    try {
+        return await invoke<T>(cmd, args);
+    } catch (err) {
+        throw new GitCommandError(
+            err instanceof Error ? err.message : String(err),
+        );
+    }
 }
 
 export function isGitAvailable(): boolean {
-  return isTauri();
+    return isTauri();
 }
 
 export async function gitIsRepo(path: string): Promise<boolean> {
-  return gitInvoke<boolean>("git_is_repo", { path });
+    return gitInvoke<boolean>("git_is_repo", { path });
 }
 
 export async function gitStatus(path: string): Promise<GitStatus> {
-  return gitInvoke<GitStatus>("git_status", { path });
+    return gitInvoke<GitStatus>("git_status", { path });
 }
 
 export async function gitChangedFiles(
-  path: string,
-  subpath?: string | null,
+    path: string,
+    subpath?: string | null,
 ): Promise<GitFileChange[]> {
-  return gitInvoke<GitFileChange[]>("git_changed_files", { path, subpath: subpath ?? null });
+    return gitInvoke<GitFileChange[]>("git_changed_files", {
+        path,
+        subpath: subpath ?? null,
+    });
 }
 
 export async function gitBranches(path: string): Promise<GitBranch[]> {
-  return gitInvoke<GitBranch[]>("git_branches", { path });
+    return gitInvoke<GitBranch[]>("git_branches", { path });
 }
 
-export async function gitStagePaths(path: string, paths: string[]): Promise<void> {
-  await gitInvoke<void>("git_stage_paths", { path, paths });
+export async function gitStagePaths(
+    path: string,
+    paths: string[],
+): Promise<void> {
+    await gitInvoke<void>("git_stage_paths", { path, paths });
 }
 
-export async function gitUnstagePaths(path: string, paths: string[]): Promise<void> {
-  await gitInvoke<void>("git_unstage_paths", { path, paths });
+export async function gitUnstagePaths(
+    path: string,
+    paths: string[],
+): Promise<void> {
+    await gitInvoke<void>("git_unstage_paths", { path, paths });
 }
 
-export async function gitRevertPaths(path: string, paths: string[]): Promise<void> {
-  await gitInvoke<void>("git_revert_paths", { path, paths });
+export async function gitRevertPaths(
+    path: string,
+    paths: string[],
+): Promise<void> {
+    await gitInvoke<void>("git_revert_paths", { path, paths });
 }
 
-export async function gitDiffFile(path: string, file: string): Promise<GitFileDiff> {
-  return gitInvoke<GitFileDiff>("git_diff_file", { path, file });
+export async function gitDiffFile(
+    path: string,
+    file: string,
+): Promise<GitFileDiff> {
+    return gitInvoke<GitFileDiff>("git_diff_file", { path, file });
 }
 
 export async function gitCommit(
-  path: string,
-  message: string,
-  subpath?: string | null,
+    path: string,
+    message: string,
+    subpath?: string | null,
 ): Promise<void> {
-  await gitInvoke<void>("git_commit", { path, message, subpath: subpath ?? null });
+    await gitInvoke<void>("git_commit", {
+        path,
+        message,
+        subpath: subpath ?? null,
+    });
 }
 
 export async function gitPush(path: string): Promise<string> {
-  return gitInvoke<string>("git_push", { path });
+    return gitInvoke<string>("git_push", { path });
 }
 
 export async function gitPull(path: string): Promise<string> {
-  return gitInvoke<string>("git_pull", { path });
+    return gitInvoke<string>("git_pull", { path });
 }
 
-export async function gitCheckoutBranch(path: string, branch: string): Promise<void> {
-  await gitInvoke<void>("git_checkout_branch", { path, branch });
+export async function gitCheckoutBranch(
+    path: string,
+    branch: string,
+): Promise<void> {
+    await gitInvoke<void>("git_checkout_branch", { path, branch });
 }
 
 export async function gitCreateBranch(
-  path: string,
-  branch: string,
-  checkout = true,
+    path: string,
+    branch: string,
+    checkout = true,
 ): Promise<void> {
-  await gitInvoke<void>("git_create_branch", { path, branch, checkout });
+    await gitInvoke<void>("git_create_branch", { path, branch, checkout });
 }
 
 export async function gitRemoteUrl(path: string): Promise<string | null> {
-  return gitInvoke<string | null>("git_remote_url", { path });
+    return gitInvoke<string | null>("git_remote_url", { path });
 }
 
 /**
@@ -325,47 +393,50 @@ export async function gitRemoteUrl(path: string): Promise<string | null> {
  * Returns false when the path is not on the persisted grant list.
  */
 export async function restoreAllowedRoot(path: string): Promise<boolean> {
-  if (!isTauri()) return false;
-  try {
-    return await invoke<boolean>("restore_allowed_root", { path });
-  } catch {
-    return false;
-  }
+    if (!isTauri()) return false;
+    try {
+        return await invoke<boolean>("restore_allowed_root", { path });
+    } catch {
+        return false;
+    }
 }
 
 // ── Filesystem ───────────────────────────────────────────────────────────────
 
 export async function readFile(path: string): Promise<string> {
-  if (isTauri()) {
-    return await invoke<string>("read_file", { path });
-  }
-  throw new Error("Filesystem access requires the Tauri desktop app");
+    if (isTauri()) {
+        return await invoke<string>("read_file", { path });
+    }
+    throw new Error("Filesystem access requires the Tauri desktop app");
 }
 
 // ── Notifications ────────────────────────────────────────────────────────────
 
-export async function showNotification(title: string, body: string): Promise<void> {
-  if (isTauri()) {
-    await invoke("show_notification", { title, body });
-  } else if ("Notification" in window) {
-    new Notification(title, { body });
-  }
+export async function showNotification(
+    title: string,
+    body: string,
+): Promise<void> {
+    if (isTauri()) {
+        await invoke("show_notification", { title, body });
+    } else if ("Notification" in window) {
+        new Notification(title, { body });
+    }
 }
 
 // ── Sidecar ──────────────────────────────────────────────────────────────────
 
 export async function getSidecarPort(): Promise<number | null> {
-  if (isTauri()) {
-    return invoke<number>("get_sidecar_port");
-  }
-  return null;
+    if (isTauri()) {
+        return invoke<number>("get_sidecar_port");
+    }
+    return null;
 }
 
 export async function restartSidecar(): Promise<number | null> {
-  if (isTauri()) {
-    return invoke<number>("restart_sidecar");
-  }
-  return null;
+    if (isTauri()) {
+        return invoke<number>("restart_sidecar");
+    }
+    return null;
 }
 
 /**
@@ -378,28 +449,33 @@ export async function restartSidecar(): Promise<number | null> {
  * dev builds, where the sidecar is run externally and there's no process handle to supervise.
  */
 export interface SidecarLifecycleHandlers {
-  onCrashed?: () => void;
-  onRestarted?: (port: number) => void;
-  onRecoveryFailed?: () => void;
+    onCrashed?: () => void;
+    onRestarted?: (port: number) => void;
+    onRecoveryFailed?: () => void;
 }
 
 export async function onSidecarLifecycleEvent(
-  handlers: SidecarLifecycleHandlers,
+    handlers: SidecarLifecycleHandlers,
 ): Promise<() => void> {
-  if (!isTauri()) return () => {};
+    if (!isTauri()) return () => {};
 
-  const { listen } = await import("@tauri-apps/api/event");
-  const unlistenCrashed = await listen("sidecar-crashed", () => handlers.onCrashed?.());
-  const unlistenRestarted = await listen<number>("sidecar-restarted", (event) =>
-    handlers.onRestarted?.(event.payload),
-  );
-  const unlistenFailed = await listen("sidecar-recovery-failed", () => handlers.onRecoveryFailed?.());
+    const { listen } = await import("@tauri-apps/api/event");
+    const unlistenCrashed = await listen("sidecar-crashed", () =>
+        handlers.onCrashed?.(),
+    );
+    const unlistenRestarted = await listen<number>(
+        "sidecar-restarted",
+        (event) => handlers.onRestarted?.(event.payload),
+    );
+    const unlistenFailed = await listen("sidecar-recovery-failed", () =>
+        handlers.onRecoveryFailed?.(),
+    );
 
-  return () => {
-    unlistenCrashed();
-    unlistenRestarted();
-    unlistenFailed();
-  };
+    return () => {
+        unlistenCrashed();
+        unlistenRestarted();
+        unlistenFailed();
+    };
 }
 
 // ── Secret Store (API Client auth) ───────────────────────────────────────────
@@ -407,31 +483,37 @@ export async function onSidecarLifecycleEvent(
 const WEB_SECRET_VAULT_KEY = "sw-secrets-v1";
 
 export async function saveSecret(key: string, secret: string): Promise<void> {
-  if (isTauri()) {
-    await invoke("save_secret", { key, secret });
-    return;
-  }
-  const vault = JSON.parse(localStorage.getItem(WEB_SECRET_VAULT_KEY) ?? "{}");
-  vault[key] = secret;
-  localStorage.setItem(WEB_SECRET_VAULT_KEY, JSON.stringify(vault));
+    if (isTauri()) {
+        await invoke("save_secret", { key, secret });
+        return;
+    }
+    const vault = JSON.parse(
+        localStorage.getItem(WEB_SECRET_VAULT_KEY) ?? "{}",
+    );
+    vault[key] = secret;
+    localStorage.setItem(WEB_SECRET_VAULT_KEY, JSON.stringify(vault));
 }
 
 export async function getSecret(key: string): Promise<string | null> {
-  if (isTauri()) {
-    return invoke<string | null>("get_secret", { key });
-  }
-  const vault = JSON.parse(localStorage.getItem(WEB_SECRET_VAULT_KEY) ?? "{}");
-  return vault[key] ?? null;
+    if (isTauri()) {
+        return invoke<string | null>("get_secret", { key });
+    }
+    const vault = JSON.parse(
+        localStorage.getItem(WEB_SECRET_VAULT_KEY) ?? "{}",
+    );
+    return vault[key] ?? null;
 }
 
 export async function deleteSecret(key: string): Promise<void> {
-  if (isTauri()) {
-    await invoke("delete_secret", { key });
-    return;
-  }
-  const vault = JSON.parse(localStorage.getItem(WEB_SECRET_VAULT_KEY) ?? "{}");
-  delete vault[key];
-  localStorage.setItem(WEB_SECRET_VAULT_KEY, JSON.stringify(vault));
+    if (isTauri()) {
+        await invoke("delete_secret", { key });
+        return;
+    }
+    const vault = JSON.parse(
+        localStorage.getItem(WEB_SECRET_VAULT_KEY) ?? "{}",
+    );
+    delete vault[key];
+    localStorage.setItem(WEB_SECRET_VAULT_KEY, JSON.stringify(vault));
 }
 
 // ── External browser ─────────────────────────────────────────────────────────
@@ -440,12 +522,10 @@ export async function deleteSecret(key: string): Promise<void> {
 /// provider login must not run inside the app's webview (cookie isolation, conditional
 /// access policies, password managers). Falls back to a new tab in plain-web mode.
 export async function openExternal(url: string): Promise<void> {
-  if (isTauri()) {
-    const { open } = await import("@tauri-apps/plugin-shell");
-    await open(url);
-    return;
-  }
-  window.open(url, "_blank", "noopener");
+    if (isTauri()) {
+        const { open } = await import("@tauri-apps/plugin-shell");
+        await open(url);
+        return;
+    }
+    window.open(url, "_blank", "noopener");
 }
-
-

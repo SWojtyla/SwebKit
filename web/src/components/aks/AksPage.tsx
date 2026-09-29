@@ -527,10 +527,8 @@ function AksPageContent() {
                                 )}
                                 {ws.activeTab === "portforward" && (
                                     <PortForwardPanel
-                                        ns={ws.namespaceToken}
-                                        selectedPod={
-                                            ws.selectedPod?.name ?? null
-                                        }
+                                        selectedPod={ws.selectedPod}
+                                        onPodConsumed={() => ws.setPodKey(null)}
                                         context={ws.currentContext}
                                         kubeconfig={ws.kubeconfigPath}
                                         pods={ws.allPods}

@@ -401,6 +401,16 @@ public class ContainerDetail
     public string? ImageTag { get; set; }
     public ResourceRequirements Resources { get; set; } = new();
     public List<EnvVarDetail> EnvVars { get; set; } = [];
+    public List<ContainerPortInfo> Ports { get; set; } = [];
+}
+
+/// A containerPort declared on the pod spec — what the container *claims* to listen on.
+/// Surfaced so the port-forward dialog can offer real ports instead of making the user guess.
+public class ContainerPortInfo
+{
+    public string? Name { get; set; }
+    public int Port { get; set; }
+    public string Protocol { get; set; } = "TCP";
 }
 
 public class ResourceRequirements

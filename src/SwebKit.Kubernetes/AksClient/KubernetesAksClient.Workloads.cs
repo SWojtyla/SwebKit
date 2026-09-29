@@ -266,7 +266,13 @@ public partial class KubernetesAksClient
                         CpuLimit = GetResourceValue(c.Resources?.Limits, "cpu"),
                         MemoryLimit = GetResourceValue(c.Resources?.Limits, "memory")
                     },
-                    EnvVars = envVars
+                    EnvVars = envVars,
+                    Ports = (c.Ports ?? []).Select(p => new ContainerPortInfo
+                    {
+                        Name = p.Name,
+                        Port = p.ContainerPort,
+                        Protocol = p.Protocol ?? "TCP"
+                    }).ToList()
                 };
             }).ToList();
         }).ConfigureAwait(false);

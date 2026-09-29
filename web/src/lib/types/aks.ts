@@ -274,6 +274,14 @@ export interface ContainerDetail {
     imageTag: string | null;
     resources: ResourceRequirements;
     envVars: EnvVarDetail[];
+    /** containerPorts declared on the pod spec — offered as port-forward targets. */
+    ports: ContainerPortInfo[];
+}
+
+export interface ContainerPortInfo {
+    name: string | null;
+    port: number;
+    protocol: string;
 }
 
 export interface ResourceRequirements {
