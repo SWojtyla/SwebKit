@@ -314,4 +314,35 @@ test.describe("AKS workspace UX", () => {
             "off",
         );
     });
+
+    test("columns without an explicit sort key still sort by their rendered text", async ({
+        page,
+    }) => {
+        await page.goto("/aks");
+        await page.getByTestId("aks-namespace-select").selectOption(NAMESPACE);
+        const body = page.getByTestId("deployments-table-body");
+        await expect(body).toBeVisible();
+        await page.getByTestId("aks-auto-refresh-checkbox").uncheck();
+
+        // "Image" declares no sortValue — the header sorts on the tag text, with
+        // numeric-aware ordering (1.5.0-beta.4 lowest, 4.1.0 highest in demo data).
+        await page.getByTestId("deployments-sort-2").click();
+        await expect(body.locator("tr").first()).toContainText(
+            "search-indexer",
+        );
+        await page.getByTestId("deployments-sort-2").click();
+        await expect(body.locator("tr").first()).toContainText(
+            "payment-gateway",
+        );
+
+        // A third click clears the sort and restores the unhealthy-first default
+        // (inventory-worker is the first non-ready row in demo order).
+        await page.getByTestId("deployments-sort-2").click();
+        await expect(body.locator("tr").first()).toContainText(
+            "inventory-worker",
+        );
+
+        // Action columns stay unsorted — no sort affordance on the last header.
+        await expect(page.getByTestId("deployments-sort-3")).toHaveCount(0);
+    });
 });

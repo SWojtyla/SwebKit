@@ -196,6 +196,7 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
             },
             {
                 header: "Actions",
+                sortable: false,
                 cell: (cj) => (
                     <button
                         onClick={(e) => {

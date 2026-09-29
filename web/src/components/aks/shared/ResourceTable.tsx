@@ -16,13 +16,18 @@ import {
 } from "lucide-react";
 import { SkeletonTableRows } from "@/components/shared/Skeleton";
 import { useGridKeyboardNav } from "@/lib/hooks/useGridKeyboardNav";
+import { extractSortText } from "@/lib/sort-text";
 
 export interface Column<T> {
     header: ReactNode;
     cell: (row: T) => ReactNode;
     className?: string;
-    /** When present, the column header becomes clickable and sorts rows by this derived value. */
+    /** Explicit sort key. When omitted the rendered cell's text is used, so every column sorts
+     * by default; supply this only when the visible text would order wrong (e.g. status
+     * severity, durations that need a canonical value). */
     sortValue?: (row: T) => string | number;
+    /** Set false for columns with no meaningful order — action buttons, icon-only cells. */
+    sortable?: boolean;
 }
 
 export interface ResourceTableProps<
@@ -62,7 +67,7 @@ export interface ResourceTableProps<
     compact?: boolean;
 }
 
-type SortKey = "name" | number;
+type SortKey = "name" | "namespace" | number;
 type SortState = { key: SortKey; direction: "asc" | "desc" } | null;
 
 function compareValues(a: string | number, b: string | number): number {
@@ -121,18 +126,28 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
                       direction: defaultSort.direction ?? "asc",
                   }
                 : null);
-        const sortValueFor = sort
-            ? sort.key === "name"
-                ? (row: T) => row.name
-                : columns[sort.key as number]?.sortValue
-            : defaultSort?.sortValue;
+        const sortValueFor = (() => {
+            if (!sort) return defaultSort?.sortValue;
+            if (sort.key === "name") return (row: T) => row.name;
+            if (sort.key === "namespace")
+                return (row: T) => row.namespace ?? "";
+            const col = columns[sort.key as number];
+            if (!col || col.sortable === false) return undefined;
+            return (
+                col.sortValue ?? ((row: T) => extractSortText(col.cell(row)))
+            );
+        })();
 
         if (!activeSort || !sortValueFor) return filtered;
-        const sorted = [...filtered].sort((a, b) =>
-            compareValues(sortValueFor(a), sortValueFor(b)),
-        );
-        if (activeSort.direction === "desc") sorted.reverse();
-        return sorted;
+        // Keys are computed once per row — an extracted cell key would otherwise re-render
+        // the cell on every comparison.
+        const keyed = filtered.map((row) => ({
+            row,
+            key: sortValueFor(row),
+        }));
+        keyed.sort((a, b) => compareValues(a.key, b.key));
+        if (activeSort.direction === "desc") keyed.reverse();
+        return keyed.map((entry) => entry.row);
     }, [rawRows, nameFilter, sort, defaultSort, columns]);
 
     const toggleSort = (key: SortKey) => {
@@ -207,7 +222,15 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
                     </button>
                 </th>
                 {isMulti && (
-                    <th className="whitespace-nowrap py-2 pr-4">Namespace</th>
+                    <th className="whitespace-nowrap py-2 pr-4">
+                        <button
+                            onClick={() => toggleSort("namespace")}
+                            className="flex items-center gap-1 hover:text-foreground"
+                            data-testid={`${testIdPrefix}s-sort-namespace`}
+                        >
+                            Namespace {sortIcon("namespace")}
+                        </button>
+                    </th>
                 )}
                 {columns.map((col, i) => (
                     <th
@@ -216,7 +239,9 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
                             col.className ?? "whitespace-nowrap py-2 pr-4"
                         }
                     >
-                        {col.sortValue ? (
+                        {col.sortable === false ? (
+                            col.header
+                        ) : (
                             <button
                                 onClick={() => toggleSort(i)}
                                 className="flex items-center gap-1 hover:text-foreground"
@@ -224,8 +249,6 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
                             >
                                 {col.header} {sortIcon(i)}
                             </button>
-                        ) : (
-                            col.header
                         )}
                     </th>
                 ))}
@@ -307,7 +330,8 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
                             {visibleRows.map((row, rowIndex) => {
                                 const rowKey = getKey(row);
                                 const isSelected = selectedKey === rowKey;
-                                const isFocused = gridNav.focusedIndex === rowIndex;
+                                const isFocused =
+                                    gridNav.focusedIndex === rowIndex;
                                 return (
                                     <tr
                                         key={rowKey}

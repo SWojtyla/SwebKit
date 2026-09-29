@@ -27,7 +27,11 @@ export function confirmMutation<TArgs>(
     resourceName: string,
     args: TArgs,
 ): void {
-    ws.requestConfirm({ message, resourceName, onConfirm: () => mutation.mutate(args) });
+    ws.requestConfirm({
+        message,
+        resourceName,
+        onConfirm: () => mutation.mutate(args),
+    });
 }
 
 /**
@@ -41,13 +45,27 @@ export function resourceMenuItems(
     opts: { middle?: ContextMenuItem[]; onDelete?: () => void } = {},
 ): ContextMenuItem[] {
     return [
-        { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(resource.name) },
-        { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml(yamlKind, resource.name, resource.namespace) },
+        {
+            label: "Copy name",
+            icon: "📋",
+            onClick: () => ws.copyToClipboard(resource.name),
+        },
+        {
+            label: "View YAML",
+            icon: "{ }",
+            onClick: () =>
+                ws.openYaml(yamlKind, resource.name, resource.namespace),
+        },
         ...(opts.middle ?? []),
         ...(opts.onDelete
             ? [
                   { label: "", separator: true, onClick: () => {} },
-                  { label: "Delete", icon: "✕", onClick: opts.onDelete, destructive: true },
+                  {
+                      label: "Delete",
+                      icon: "✕",
+                      onClick: opts.onDelete,
+                      destructive: true,
+                  },
               ]
             : []),
     ];
@@ -60,13 +78,21 @@ export function resourceMenuItems(
 export function actionsColumn<T extends NamedResource>(
     ws: Pick<AksActionsValue, "showContextMenu">,
     buildMenu: (resource: T) => ContextMenuItem[],
-    opts: { primaryLabel?: string; onPrimary?: (resource: T) => void; testIdPrefix: string },
+    opts: {
+        primaryLabel?: string;
+        onPrimary?: (resource: T) => void;
+        testIdPrefix: string;
+    },
 ): Column<T> {
     return {
         header: "Actions",
+        sortable: false,
         className: "py-2 pr-4 w-px whitespace-nowrap",
         cell: (resource) => (
-            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <div
+                className="flex items-center gap-1"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {opts.onPrimary && (
                     <button
                         onClick={() => opts.onPrimary!(resource)}
