@@ -49,11 +49,57 @@ public sealed class SearchApiRequestsTool : IAgentTool
             method = r.Method.ToString(),
             url = r.Url,
             collection = r.CollectionName,
+            collection_id = r.CollectionId,
             origin = r.CollectionOrigin,
             folder = r.FolderPath,
         });
 
         return JsonSerializer.Serialize(new { count = results.Count, requests });
+    }
+}
+
+/// <summary>
+/// Lists every collection with IDs and folder structure — the discovery call a model needs
+/// before proposing a create, since <c>collection_id</c> targets by ID or name.
+/// </summary>
+public sealed class ListApiCollectionsTool : IAgentTool
+{
+    private readonly IApiClientAgentService _apiClient;
+
+    public ListApiCollectionsTool(IApiClientAgentService apiClient) => _apiClient = apiClient;
+
+    public string Name => "list_api_collections";
+    public string Description => "List all API Client collections with their IDs, folder paths, and request counts. Call this before proposing a request create so the target collection and folder actually exist in the output.";
+
+    private static readonly JsonElement Schema = AgentToolSchema.Parse("""
+    {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+    }
+    """);
+
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
+
+    public JsonElement ParametersSchema => Schema;
+
+    public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
+    {
+        var collections = await _apiClient.GetCollectionsAsync(ct);
+
+        if (collections.Count == 0)
+            return """{"count":0,"collections":[],"message":"No collections exist yet. A create proposal may name one — it is created on confirm."}""";
+
+        var result = collections.Select(c => new
+        {
+            id = c.Id,
+            name = c.Name,
+            origin = c.Origin,
+            folders = c.FolderPaths,
+            request_count = c.RequestCount,
+        });
+
+        return JsonSerializer.Serialize(new { count = collections.Count, collections = result });
     }
 }
 
@@ -156,11 +202,11 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
             },
             "collection_id": {
                 "type": "string",
-                "description": "ID of the target collection (for create)."
+                "description": "ID or exact name of the target collection (for create) — call list_api_collections to see what exists. If nothing matches, a new collection with this name is created when the action is confirmed."
             },
             "folder_path": {
                 "type": "string",
-                "description": "Folder path within the collection (for create, move)."
+                "description": "Folder path within the collection (for create, move). Missing segments are created on confirm for 'create'; 'move' requires an existing folder."
             },
             "name": {
                 "type": "string",
@@ -207,7 +253,7 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
         {
             case "create":
             {
-                if (!arguments.TryGetProperty("collection_id", out var collId))
+                if (!arguments.TryGetProperty("collection_id", out var collId) || collId.GetString() is not { Length: > 0 } collectionRef)
                     return """{"error":"Missing required parameter 'collection_id' for create operation."}""";
                 if (!arguments.TryGetProperty("name", out var nameProp) || nameProp.GetString() is not { } name)
                     return """{"error":"Missing required parameter 'name' for create operation."}""";
@@ -215,10 +261,30 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
                 var url = arguments.TryGetProperty("url", out var u) ? u.GetString() ?? "" : "";
                 var folderPath = arguments.TryGetProperty("folder_path", out var f) ? f.GetString() : null;
 
+                // Resolve the target now so the preview tells the user exactly what confirm will
+                // create — the collection itself and/or folder segments that don't exist yet.
+                var collections = await _apiClient.GetCollectionsAsync(ct);
+                var match = collections.FirstOrDefault(c =>
+                    c.Id == collectionRef ||
+                    c.Name.Equals(collectionRef, StringComparison.OrdinalIgnoreCase));
+
+                var willCreate = new List<string>();
+                if (match is null)
+                {
+                    willCreate.Add($"collection '{collectionRef}'");
+                }
+                else if (!string.IsNullOrEmpty(folderPath))
+                {
+                    var missing = MissingFolderSegments(match.FolderPaths, folderPath);
+                    if (missing.Count > 0)
+                        willCreate.Add($"folder{(missing.Count > 1 ? "s" : "")} '{string.Join("', '", missing)}'");
+                }
+
                 actionType = AgentActionType.CreateRequest;
-                target = $"Collection {collId}" + (folderPath is not null ? $"/{folderPath}" : "");
+                target = $"Collection {match?.Name ?? collectionRef}" + (folderPath is not null ? $"/{folderPath}" : "");
                 summary = $"Create request '{name}' ({method} {url})";
-                preview = $"Name: {name}\nMethod: {method}\nURL: {url}\nLocation: {target}";
+                preview = $"Name: {name}\nMethod: {method}\nURL: {url}\nLocation: {target}"
+                    + (willCreate.Count > 0 ? $"\nWill be created: {string.Join("; ", willCreate)}" : "");
                 break;
             }
 
@@ -308,6 +374,23 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
             expires_at = action.ExpiresAt.ToString("yyyy-MM-dd HH:mm UTC"),
             message = "Action proposed. User must confirm before it is applied.",
         });
+    }
+
+    /// <summary>Path prefixes of <paramref name="folderPath"/> with no existing folder, e.g. a path
+    /// "Signing/Onboarding" where only "Signing" exists reports ["Signing/Onboarding"] — the
+    /// preview can then name exactly what the confirm will create.</summary>
+    private static List<string> MissingFolderSegments(IReadOnlyList<string> existingPaths, string folderPath)
+    {
+        var missing = new List<string>();
+        var parts = folderPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var prefix = "";
+        foreach (var part in parts)
+        {
+            prefix = prefix.Length == 0 ? part : $"{prefix}/{part}";
+            if (!existingPaths.Contains(prefix, StringComparer.Ordinal))
+                missing.Add(prefix);
+        }
+        return missing;
     }
 }
 

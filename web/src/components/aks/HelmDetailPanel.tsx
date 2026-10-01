@@ -20,6 +20,8 @@ import { formatLocalDate } from "@/lib/datetime";
 interface HelmDetailPanelProps {
     ns: string;
     release: string;
+    /** Cluster the release lives in — history/values/rollback all route there. */
+    context?: string;
     onClose: () => void;
     onRequestConfirm: (opts: {
         message: string;
@@ -34,6 +36,7 @@ type HelmTab = "history" | "values" | "notes" | "manifest";
 export function HelmDetailPanel({
     ns,
     release,
+    context,
     onClose,
     onRequestConfirm,
     onError,
@@ -42,21 +45,25 @@ export function HelmDetailPanel({
     const { data: history, isLoading: historyLoading } = useAksHelmHistory(
         ns,
         release,
+        context,
     );
     const { data: values, isLoading: valuesLoading } = useAksHelmValues(
         ns,
         release,
+        context,
     );
     // Gated on their tabs: each of these spawns a `helm` process server-side (~0.5–2s of Helm startup
     // apiece), and the panel opens on History, so most releases never need either.
     const { data: notes, isLoading: notesLoading } = useAksHelmNotes(
         ns,
         release,
+        context,
         { enabled: tab === "notes" },
     );
     const { data: manifest, isLoading: manifestLoading } = useAksHelmManifest(
         ns,
         release,
+        context,
         { enabled: tab === "manifest" },
     );
     const [valuesTab, setValuesTab] = useState<"user" | "computed">("user");
@@ -64,11 +71,11 @@ export function HelmDetailPanel({
 
     const requestRollback = (targetRevision: number) => {
         onRequestConfirm({
-            message: `Rollback "${release}" to revision ${targetRevision}? This will re-deploy that revision's chart and values.`,
+            message: `Rollback "${release}" to revision ${targetRevision}${context ? ` in ${context}` : ""}? This will re-deploy that revision's chart and values.`,
             resourceName: release,
             onConfirm: () => {
                 rollback.mutate(
-                    { ns, release, targetRevision },
+                    { ns, release, targetRevision, context },
                     {
                         onError: (err) =>
                             onError?.(

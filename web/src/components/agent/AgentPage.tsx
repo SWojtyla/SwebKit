@@ -13,7 +13,6 @@ import { AcpPermissionCard } from "./AcpPermissionCard";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentThoughtBlock } from "./AgentThoughtBlock";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
-import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { AgentPromptExamples } from "./AgentPromptExamples";
 import { ResizablePanels } from "@/components/ui/ResizablePanels";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
@@ -152,7 +151,7 @@ export function AgentPage() {
                         <div
                             className={`min-w-0 max-w-[80%] [overflow-wrap:anywhere] rounded-lg px-4 py-2 ${
                                 msg.role === "user"
-                                    ? "bg-primary text-primary-foreground"
+                                    ? "border border-primary/25 bg-primary/10"
                                     : msg.error
                                       ? "border border-destructive/30 bg-destructive/10"
                                       : "bg-muted"
@@ -161,7 +160,7 @@ export function AgentPage() {
                             {msg.role === "assistant" ? (
                                 <AgentMarkdown
                                     content={msg.content}
-                                    className="prose prose-sm dark:prose-invert max-w-none text-sm [&_p]:my-1"
+                                    className="text-sm"
                                     renderVisualBlocks={
                                         !showVisuals ||
                                         msg.id !== lastAssistantMessage?.id
@@ -325,20 +324,6 @@ export function AgentPage() {
                         data-testid="agent-history-count"
                     >
                         {status.data?.historyCount ?? 0} messages in history
-                        {status.data && status.data.estimatedTokens > 0 && (
-                            <>
-                                {" "}
-                                · ~
-                                {status.data.estimatedTokens.toLocaleString()}{" "}
-                                tokens
-                            </>
-                        )}
-                        <ContextUsageIndicator
-                            percent={status.data?.contextUsagePercent ?? 0}
-                            warningAt={
-                                status.data?.contextUsageWarningPercent ?? 75
-                            }
-                        />
                     </span>
                 </div>
                 <div className="flex items-center gap-2">

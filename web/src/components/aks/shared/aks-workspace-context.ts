@@ -1,6 +1,7 @@
 import { createContext, useContext, type MouseEvent } from "react";
 import type { ContextMenuItem } from "../ContextMenu";
 import type {
+    AksQueryTarget,
     PodInfo,
     SecretInfo,
     ConfigMapInfo,
@@ -43,13 +44,32 @@ export type TabId = (typeof allTabs)[number]["id"];
 
 export const networkTabIds = new Set<string>(networkTabs.map((t) => t.id));
 
+/**
+ * One namespace pick inside one selected context. `context` is the resolved kubeconfig
+ * context name — never the URL's "bare means primary" form.
+ */
+export interface NsSelection {
+    context: string;
+    namespace: string;
+}
+
+/** A parsed detail/log target that may originate from a non-primary cluster.
+ * `context` null means "the primary context" (legacy bare keys decode that way). */
+export interface ScopedKey {
+    context: string | null;
+    ns: string;
+    name: string;
+}
+
 // URL key helpers — these serialize AKS drill-down state into query params
 // so back/forward and deep links preserve the current view.
 export function makeKey(ns: string, name: string): string {
     return `${encodeURIComponent(ns)}/${encodeURIComponent(name)}`;
 }
 
-export function parseKey(key: string | null): { ns: string; name: string } | null {
+export function parseKey(
+    key: string | null,
+): { ns: string; name: string } | null {
     if (!key) return null;
     const slash = key.indexOf("/");
     if (slash === -1) return null;
@@ -59,20 +79,162 @@ export function parseKey(key: string | null): { ns: string; name: string } | nul
     };
 }
 
-export function makeYamlKey(kind: string, ns: string, name: string): string {
-    return `${kind}:${makeKey(ns, name)}`;
+/**
+ * Scoped resource identity: `ns/name` for the primary context (identical to the
+ * pre-multi-context format, so existing deep links keep working) or `ctx:ns/name`
+ * for a secondary context. Every segment is URI-encoded, so a context name containing
+ * `:` or `/` (EKS ARNs do) stays unambiguous.
+ */
+export function makeScopedKey(
+    context: string | null | undefined,
+    primaryContext: string | null,
+    ns: string,
+    name: string,
+): string {
+    const base = makeKey(ns, name);
+    return context && context !== primaryContext
+        ? `${encodeURIComponent(context)}:${base}`
+        : base;
 }
 
-export function parseYamlKey(
-    key: string | null,
-): { kind: string; namespace: string; name: string } | null {
+export function parseScopedKey(key: string | null): ScopedKey | null {
+    if (!key) return null;
+    const slash = key.indexOf("/");
+    if (slash === -1) return null;
+    const head = key.slice(0, slash);
+    const colon = head.indexOf(":");
+    return {
+        context: colon === -1 ? null : decodeURIComponent(head.slice(0, colon)),
+        ns: decodeURIComponent(colon === -1 ? head : head.slice(colon + 1)),
+        name: decodeURIComponent(key.slice(slash + 1)),
+    };
+}
+
+export function makeYamlKey(
+    kind: string,
+    context: string | null | undefined,
+    primaryContext: string | null,
+    ns: string,
+    name: string,
+): string {
+    return `${kind}:${makeScopedKey(context, primaryContext, ns, name)}`;
+}
+
+export function parseYamlKey(key: string | null): {
+    kind: string;
+    context: string | null;
+    namespace: string;
+    name: string;
+} | null {
     if (!key) return null;
     const colon = key.indexOf(":");
     if (colon === -1) return null;
     const kind = key.slice(0, colon);
-    const parsed = parseKey(key.slice(colon + 1));
+    const parsed = parseScopedKey(key.slice(colon + 1));
     if (!parsed) return null;
-    return { kind, namespace: parsed.ns, name: parsed.name };
+    return {
+        kind,
+        context: parsed.context,
+        namespace: parsed.ns,
+        name: parsed.name,
+    };
+}
+
+/**
+ * `ns` param codec. Comma-separated picks; a bare name belongs to the primary context
+ * (byte-identical to the pre-multi-context format — `ns=ecommerce` links still work),
+ * a secondary context's pick is `ctx:ns` with both parts URI-encoded. `*` means "all
+ * namespaces of its context"; a legacy bare `*` covers the primary context.
+ */
+export function parseNamespaceSelection(
+    value: string | null,
+    primaryContext: string | null,
+): NsSelection[] {
+    if (!value) return [];
+    return value
+        .split(",")
+        .filter(Boolean)
+        .map((entry) => {
+            const colon = entry.indexOf(":");
+            if (colon === -1)
+                return {
+                    context: primaryContext ?? "",
+                    namespace: entry === "*" ? "*" : decodeURIComponent(entry),
+                };
+            return {
+                context: decodeURIComponent(entry.slice(0, colon)),
+                namespace: decodeURIComponent(entry.slice(colon + 1)),
+            };
+        });
+}
+
+export function encodeNamespaceSelection(
+    sel: NsSelection[],
+    primaryContext: string | null,
+): string | null {
+    if (sel.length === 0) return null;
+    return sel
+        .map((s) =>
+            !s.context || s.context === primaryContext
+                ? s.namespace === "*"
+                    ? "*"
+                    : encodeURIComponent(s.namespace)
+                : `${encodeURIComponent(s.context)}:${encodeURIComponent(s.namespace)}`,
+        )
+        .join(",");
+}
+
+/** `ctxs` param: the attached (non-primary) contexts, comma-separated and URI-encoded. */
+export function parseContextParam(value: string | null): string[] {
+    if (!value) return [];
+    return value.split(",").filter(Boolean).map(decodeURIComponent);
+}
+
+export function encodeContextParam(contexts: string[]): string | null {
+    if (contexts.length === 0) return null;
+    return contexts.map(encodeURIComponent).join(",");
+}
+
+/**
+ * `logs` param: comma-separated scoped pod keys (new format) or bare pod names paired
+ * with the legacy `logsNs` param (pre-multi-context links still resolve).
+ */
+export function parseLogsParam(
+    logs: string | null,
+    legacyNs: string | null,
+): ScopedKey[] {
+    if (!logs) return [];
+    if (legacyNs) {
+        return logs
+            .split(",")
+            .filter(Boolean)
+            .map((name) => ({
+                context: null,
+                ns: decodeURIComponent(legacyNs),
+                name: decodeURIComponent(name),
+            }));
+    }
+    return logs
+        .split(",")
+        .filter(Boolean)
+        .map(parseScopedKey)
+        .filter((k): k is ScopedKey => k !== null);
+}
+
+export function makeLogsParam(
+    pods: { context?: string | null; namespace: string; name: string }[],
+    primaryContext: string | null,
+): string {
+    return pods
+        .map((p) =>
+            makeScopedKey(
+                p.context ?? null,
+                primaryContext,
+                p.namespace,
+                p.name,
+            ),
+        )
+        .join(",");
 }
 
 export function encodeNamespaces(namespaces: string[]): string | null {
@@ -111,6 +273,16 @@ export interface PendingConfirm {
  * Most tabs consume only `useAksActions` — stable callbacks that essentially never
  * change identity.
  */
+/** Per-context namespace scope: what one selected cluster's picker slice looks like. */
+export interface AksNamespaceScope {
+    context: string;
+    namespaces: string[] | undefined;
+    isLoading: boolean;
+    /** Error text when this context's list failed — RBAC denial stays distinguishable from
+     * an empty cluster. */
+    error: string | null;
+}
+
 export interface AksClusterValue {
     namespaces: string[] | undefined;
     nsLoading: boolean;
@@ -124,7 +296,18 @@ export interface AksClusterValue {
     /** Context being switched to while the POST is in flight, for "Switching to X…" labels. */
     pendingContext: string | null;
     contexts: KubeContextInfo[] | undefined;
+    /** The primary context — the configured profile context (or the kubeconfig's current one).
+     * Actions and agent tools default here; secondary contexts are explicit. */
     currentContext: string | null;
+    /** Every context the workspace queries — primary first, then attached. */
+    selectedContexts: string[];
+    /** Non-primary contexts attached via the picker (mirrors the `ctxs` URL param). */
+    attachedContexts: string[];
+    /** Per-context namespace scope for the picker: list + loading + per-context error. */
+    nsScopes: AksNamespaceScope[];
+    /** Attach/detach a secondary context. No-op for the primary — that goes through
+     * `handleContextChange` (a real context switch). */
+    toggleAttachedContext: (context: string) => void;
     /** True once the profile query has resolved — gates the first-run "not configured" state. */
     profileLoaded: boolean;
     isDemoMode: boolean;
@@ -140,21 +323,38 @@ export interface AksNavValue {
     setActiveTab: (tab: TabId) => void;
     networkMenuOpen: boolean;
     setNetworkMenuOpen: (open: boolean | ((v: boolean) => boolean)) => void;
-    selectedNamespaces: string[];
-    setSelectedNamespaces: (namespaces: string[]) => void;
-    namespaceToken: string | null;
+    selectedNamespaces: NsSelection[];
+    setSelectedNamespaces: (namespaces: NsSelection[]) => void;
+    /**
+     * One fan-out target per (context, ns-token) the workspace queries. Replaces the single
+     * `namespaceToken`: each entry resolves independently and a context with no namespace
+     * picks contributes no target.
+     */
+    queryTargets: AksQueryTarget[];
     isMultiNamespace: boolean;
+    /** True when more than one kubeconfig context is attached — tabs show the Context column. */
+    isMultiContext: boolean;
     selectedPod: PodInfo | null;
-    yamlResource: { kind: string; namespace: string; name: string } | null;
+    yamlResource: {
+        kind: string;
+        context: string | null;
+        namespace: string;
+        name: string;
+    } | null;
     helmRelease: HelmReleaseInfo | null;
     selectedSecret: SecretInfo | null;
     selectedConfigMap: ConfigMapInfo | null;
     selectedHttpRoute: HttpRouteInfo | null;
     shellPod: PodInfo | null;
     askAiPod: PodInfo | null;
-    containerDetail: { podName: string; namespace: string } | null;
-    multiPodNames: string[];
-    multiPodNamespace: string | null;
+    containerDetail: {
+        podName: string;
+        context: string | null;
+        namespace: string;
+    } | null;
+    /** Pods whose logs are open in the multi-pod view — scoped so a same-named pod from a
+     * second cluster streams from its own cluster. */
+    multiLogPods: ScopedKey[];
     showMultiPodLogs: boolean;
     setHelmRelease: (rel: HelmReleaseInfo | null) => void;
     setSelectedSecret: (secret: SecretInfo | null) => void;
@@ -167,17 +367,26 @@ export interface AksNavValue {
         options?: { clearOthers?: boolean },
     ) => void;
     setYamlResource: (
-        res: { kind: string; namespace: string; name: string } | null,
+        res: {
+            kind: string;
+            context?: string | null;
+            namespace: string;
+            name: string;
+        } | null,
     ) => void;
     setContainerDetail: (
-        detail: { podName: string; namespace: string } | null,
+        detail: {
+            podName: string;
+            context?: string | null;
+            namespace: string;
+        } | null,
     ) => void;
 }
 
 export interface AksQueriesValue {
     allPods: PodInfo[] | undefined;
     podsFetching: boolean;
-    refetchPods: () => Promise<{ data: PodInfo[] | undefined }>;
+    refetchPods: () => Promise<PodInfo[]>;
 }
 
 export interface AksOpsValue {
@@ -202,11 +411,20 @@ export interface AksOverlaysValue {
 
 export interface AksActionsValue {
     copyToClipboard: (text: string) => void;
-    openYaml: (kind: string, name: string, namespace: string) => void;
+    openYaml: (
+        kind: string,
+        name: string,
+        namespace: string,
+        context?: string,
+    ) => void;
     openLogs: (pod: PodInfo) => void;
     openMultiPodLogs: (pods: PodInfo[]) => void;
     closeMultiPodLogs: () => void;
-    openContainerDetails: (podName: string, namespace: string) => void;
+    openContainerDetails: (
+        podName: string,
+        namespace: string,
+        context?: string,
+    ) => void;
     requestConfirm: (opts: {
         message: string;
         resourceName: string;
@@ -215,6 +433,7 @@ export interface AksActionsValue {
     resolvePodsForSelector: (
         namespace: string,
         selectorLabels: Record<string, string>,
+        context?: string,
     ) => Promise<PodInfo[]>;
     navigateToAnalysis: () => void;
     openPortForward: (pod: PodInfo) => void;
@@ -232,6 +451,8 @@ export type AksWorkspaceContextValue = AksClusterValue &
 export const AUTO_REFRESH_PREF = "aks-auto-refresh";
 export const REFRESH_INTERVAL_PREF = "aks-refresh-interval";
 export const DEFAULT_REFRESH_SECONDS = 10;
+/** Persisted secondary contexts, restored on the next visit (the `ctxs` URL param wins). */
+export const ATTACHED_CONTEXTS_PREF = "aks-attached-contexts";
 const SELECTED_NS_PREF_PREFIX = "aks-selected-ns";
 
 /** Per-cluster storage key: each kube context remembers its own last-selected namespace(s). */
@@ -273,4 +494,3 @@ export function useAksOverlays(): AksOverlaysValue {
 export function useAksActions(): AksActionsValue {
     return useRequired(useContext(AksActionsContext), "useAksActions");
 }
-

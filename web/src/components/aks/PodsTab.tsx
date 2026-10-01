@@ -17,11 +17,13 @@ import {
     useAksNav,
 } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
-import type { PodInfo, PodMetricInfo } from "@/lib/types";
+import type { AksQueryTarget, PodInfo, PodMetricInfo } from "@/lib/types";
 
 interface PodsTabProps {
-    ns: string;
+    targets: AksQueryTarget[];
     isMulti?: boolean;
+    /** Merged multi-cluster view — shows the Context column and per-cluster errors. */
+    showContext?: boolean;
 }
 
 const CPU_CEILING_MILLICORES = 500;
@@ -105,9 +107,9 @@ function PodStatusBadge({ status }: { status: string }) {
     return <span className={color}>{status}</span>;
 }
 
-export function PodsTab({ ns, isMulti }: PodsTabProps) {
-    const { data: pods, isLoading, error } = useAksPods(ns);
-    const { data: metrics } = useAksPodMetrics(ns);
+export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
+    const { data: pods, isLoading, error, contextErrors } = useAksPods(targets);
+    const { data: metrics } = useAksPodMetrics(targets);
     const [hideCompleted, setHideCompleted] = useState(true);
     const deleteMutation = useAksDeletePod();
     const nav = useAksNav();
@@ -116,7 +118,11 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     const navigate = useNavigate();
     const ws = useMemo(() => ({ ...nav, ...actions }), [nav, actions]);
     const prevStatusesRef = useRef<Map<string, string>>(new Map());
-    const prevNsRef = useRef(ns);
+    const targetsKey = useMemo(
+        () => targets.map((t) => `${t.context}:${t.ns}`).join(","),
+        [targets],
+    );
+    const prevTargetsRef = useRef(targetsKey);
 
     // Fires a native notification the moment a pod actually transitions into
     // Failed (not on initial load, which would spam notifications for
@@ -125,13 +131,16 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     // and real clusters.
     useEffect(() => {
         if (!pods) return;
-        if (prevNsRef.current !== ns) {
+        if (prevTargetsRef.current !== targetsKey) {
             prevStatusesRef.current = new Map();
-            prevNsRef.current = ns;
+            prevTargetsRef.current = targetsKey;
         }
         const prev = prevStatusesRef.current;
         for (const pod of pods) {
-            const prevStatus = prev.get(pod.name);
+            // Identity is (context, ns, name) — a same-named pod failing in a second
+            // cluster must not be swallowed by the primary's row for the same name.
+            const podKey = `${pod.context}:${pod.namespace}/${pod.name}`;
+            const prevStatus = prev.get(podKey);
             if (
                 prevStatus &&
                 prevStatus !== "Failed" &&
@@ -139,12 +148,17 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
             ) {
                 showNotification(
                     "Pod failed",
-                    `${pod.name} in ${ns} transitioned to Failed`,
+                    `${pod.name} in ${pod.context ? `${pod.context} · ` : ""}${pod.namespace} transitioned to Failed`,
                 ).catch(() => {});
             }
         }
-        prevStatusesRef.current = new Map(pods.map((p) => [p.name, p.status]));
-    }, [pods, ns]);
+        prevStatusesRef.current = new Map(
+            pods.map((p) => [
+                `${p.context}:${p.namespace}/${p.name}`,
+                p.status,
+            ]),
+        );
+    }, [pods, targetsKey]);
 
     const isCompletedPod = (pod: PodInfo) =>
         pod.phase === "Succeeded" || pod.status?.toLowerCase() === "completed";
@@ -161,10 +175,10 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
         // O(pods × metrics) — about 2.25M comparisons on a 1500-pod cluster — recomputed every time either
         // query settled, which with auto-refresh is every 10 seconds.
         const byPod = new Map(
-            metrics.map((m) => [`${m.namespace}/${m.podName}`, m]),
+            metrics.map((m) => [`${m.context}:${m.namespace}/${m.podName}`, m]),
         );
         for (const pod of visiblePods ?? []) {
-            const podKey = `${pod.namespace}/${pod.name}`;
+            const podKey = `${pod.context}:${pod.namespace}/${pod.name}`;
             map.set(podKey, aggregatePodUsage(byPod.get(podKey)));
         }
         return map;
@@ -173,12 +187,13 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     const handleDelete = useCallback(
         (pod: PodInfo) => {
             ws.requestConfirm({
-                message: `Delete pod "${pod.name}"? The controller will recreate it.`,
+                message: `Delete pod "${pod.name}"${pod.context ? ` in ${pod.context}` : ""}? The controller will recreate it.`,
                 resourceName: pod.name,
                 onConfirm: () =>
                     deleteMutation.mutate({
                         ns: pod.namespace,
                         name: pod.name,
+                        context: pod.context,
                     }),
             });
         },
@@ -188,21 +203,33 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
     // "Watch this" deep link (monitoring-closed-loop): opens Monitoring → New Rule prefilled with
     // this surface's context (namespace + cluster), source and a sensible threshold — the rule is
     // still editable in the dialog before it's saved.
+    // A monitoring rule binds to one cluster — when the merged view spans several
+    // contexts the rule watches the primary's slice, not an aggregate that doesn't
+    // exist server-side.
     const watchNamespace = useCallback(() => {
+        const nsTokens =
+            targets
+                .filter(
+                    (t) =>
+                        t.context === cluster.currentContext ||
+                        !cluster.currentContext,
+                )
+                .map((t) => t.ns)
+                .join(",") || "*";
         navigate("/monitoring", {
             state: {
                 prefillRule: {
-                    name: `Pod restarts — ${ns}`,
+                    name: `Pod restarts — ${nsTokens}`,
                     source: "AksPodRestartRate",
                     aksPodParams: {
-                        namespace: ns,
+                        namespace: nsTokens,
                         kubeconfigContext: cluster.currentContext ?? "",
                         restartThreshold: 5,
                     },
                 },
             },
         });
-    }, [navigate, ns, cluster.currentContext]);
+    }, [navigate, targets, cluster.currentContext]);
 
     const watchPod = useCallback(
         (pod: PodInfo) => {
@@ -213,7 +240,8 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
                         source: "AksPodHealth",
                         aksPodParams: {
                             namespace: pod.namespace,
-                            kubeconfigContext: cluster.currentContext ?? "",
+                            kubeconfigContext:
+                                pod.context ?? cluster.currentContext ?? "",
                         },
                     },
                 },
@@ -232,13 +260,19 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
             {
                 label: "View YAML",
                 icon: "{ }",
-                onClick: () => ws.openYaml("pod", pod.name, pod.namespace),
+                onClick: () =>
+                    ws.openYaml("pod", pod.name, pod.namespace, pod.context),
             },
             { label: "View Logs", icon: "☰", onClick: () => ws.openLogs(pod) },
             {
                 label: "Container Details",
                 icon: "⚙",
-                onClick: () => ws.openContainerDetails(pod.name, pod.namespace),
+                onClick: () =>
+                    ws.openContainerDetails(
+                        pod.name,
+                        pod.namespace,
+                        pod.context,
+                    ),
             },
             {
                 label: "Analyze network",
@@ -307,7 +341,9 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
             {
                 header: "CPU",
                 cell: (pod) => {
-                    const usage = usageFor.get(`${pod.namespace}/${pod.name}`);
+                    const usage = usageFor.get(
+                        `${pod.context}:${pod.namespace}/${pod.name}`,
+                    );
                     if (!usage)
                         return (
                             <span
@@ -342,7 +378,9 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
             {
                 header: "Memory",
                 cell: (pod) => {
-                    const usage = usageFor.get(`${pod.namespace}/${pod.name}`);
+                    const usage = usageFor.get(
+                        `${pod.context}:${pod.namespace}/${pod.name}`,
+                    );
                     if (!usage)
                         return (
                             <span
@@ -442,7 +480,7 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
                 <button
                     onClick={watchNamespace}
                     className="ml-auto flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-                    title={`Create an alert rule watching pod restarts in ${ns}`}
+                    title="Create an alert rule watching pod restarts"
                     data-testid="pods-watch-namespace"
                 >
                     <Bell className="h-3 w-3" />
@@ -454,6 +492,8 @@ export function PodsTab({ ns, isMulti }: PodsTabProps) {
                 isLoading={isLoading}
                 error={error}
                 isMulti={isMulti}
+                showContext={showContext}
+                contextErrors={contextErrors}
                 testIdPrefix="pod"
                 tableBodyTestId="pods-table-body"
                 emptyMessage="No pods found"

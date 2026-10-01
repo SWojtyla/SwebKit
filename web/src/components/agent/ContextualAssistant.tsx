@@ -18,7 +18,7 @@ import { AcpPermissionCard } from "./AcpPermissionCard";
 import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { AgentReasoningTrace } from "./AgentReasoningTrace";
 import { AgentSummarizedNotice } from "./AgentSummarizedNotice";
-import { ContextUsageIndicator } from "./ContextUsageIndicator";
+
 import { AgentThoughtBlock } from "./AgentThoughtBlock";
 import { AgentFeedbackButton } from "./AgentFeedbackButton";
 import { profileSupportsTools } from "@/lib/agent-capability";
@@ -73,7 +73,7 @@ export function ContextualAssistant({
     const [scopeRetry, setScopeRetry] = useState(false);
     const [lastUserText, setLastUserText] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const { mode, setMode, scope, setScope, chat, status, sendMessage } =
+    const { mode, setMode, scope, setScope, chat, sendMessage } =
         useContextualAgent(featureArea, selection, { sessionId, defaultScope });
 
     const lastAssistantContent = useMemo(() => {
@@ -248,26 +248,6 @@ export function ContextualAssistant({
                             >
                                 Ask AI — {title}
                             </h2>
-                            {status.data && status.data.estimatedTokens > 0 && (
-                                <p
-                                    className="text-xs text-muted-foreground"
-                                    data-testid="contextual-assistant-token-estimate"
-                                >
-                                    ~
-                                    {status.data.estimatedTokens.toLocaleString()}{" "}
-                                    tokens in this conversation
-                                    <ContextUsageIndicator
-                                        percent={
-                                            status.data.contextUsagePercent
-                                        }
-                                        warningAt={
-                                            status.data
-                                                .contextUsageWarningPercent ??
-                                            75
-                                        }
-                                    />
-                                </p>
-                            )}
                         </div>
                         <div className="flex items-center gap-2">
                             <button
@@ -409,17 +389,14 @@ export function ContextualAssistant({
                                 <div
                                     className={`min-w-0 max-w-[90%] [overflow-wrap:anywhere] rounded-lg px-3 py-2 text-sm ${
                                         msg.role === "user"
-                                            ? "bg-primary text-primary-foreground"
+                                            ? "border border-primary/25 bg-primary/10"
                                             : msg.error
                                               ? "bg-destructive/10 border border-destructive/30"
                                               : "bg-muted"
                                     }`}
                                 >
                                     {msg.role === "assistant" ? (
-                                        <AgentMarkdown
-                                            content={msg.content}
-                                            className="prose prose-sm dark:prose-invert max-w-none [&_p]:my-1"
-                                        />
+                                        <AgentMarkdown content={msg.content} />
                                     ) : (
                                         <div className="whitespace-pre-wrap">
                                             {msg.content}

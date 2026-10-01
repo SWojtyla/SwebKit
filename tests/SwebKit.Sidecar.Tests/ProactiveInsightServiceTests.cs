@@ -848,4 +848,256 @@ public class ProactiveInsightServiceTests
         Assert.Equal("yaml", report.ProposedFix!.Language);
         Assert.Contains("investigate_workspace_issue", report.ToolsUsed);
     }
+
+    // ── ai-reports-kanban — manual mode queue + manual run ───────────────────
+
+    [Fact]
+    public async Task AlertFired_ManualMode_QueuesPreparedReport_WithoutTouchingTheModel()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, engine, ruleRepo, profiles, _, registry, modelClient, reportRepo) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
+        var modelCalls = 0;
+        // If any model path fires (fallback draft or the runner's loop) this increments —
+        // the whole point of manual mode is that firing time costs zero tokens.
+        modelClient.OnComplete = _ => { Interlocked.Increment(ref modelCalls); return "nope"; };
+        registry.CannedResult = """{"pods":[{"name":"api-7c9f","restarts":12}]}""";
+
+        var rule = AksRule("prod");
+        rule.AiInvestigationMode = AiInvestigationMode.Manual;
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        var statuses = new List<ProactiveInsightStatusEvent>();
+        insights.InsightStatus += e => statuses.Add(e);
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => statuses.Any(s => s.Stage == ProactiveInsightStage.Queued), timeoutMs: 5000);
+        await insights.DrainAsync();
+
+        Assert.Equal(0, modelCalls);
+        Assert.Null(ready); // nothing is Ready yet — only prepared
+        Assert.DoesNotContain(statuses, s => s.Stage == ProactiveInsightStage.Started);
+
+        var queued = Assert.Single(await reportRepo.GetAllAsync());
+        Assert.Equal(InsightReportStatus.Queued, queued.Status);
+        Assert.Equal(rule.Id, queued.RuleId);
+        Assert.NotNull(queued.PreparedContextSummary);
+        Assert.Contains("api-7c9f", queued.ReportJson); // the deterministic probe output is stored as prepared context
+        Assert.Single(registry.Calls);
+        Assert.Equal("investigate_workspace_issue", registry.Calls[0].ToolName);
+    }
+
+    [Fact]
+    public async Task AlertFired_ManualMode_ProbeFailure_StillQueues_WithTheErrorInTheSummary()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, engine, ruleRepo, profiles, _, registry, modelClient, reportRepo) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
+        modelClient.OnComplete = _ => "unused";
+        // A probe that throws must still park the card — the eventual run re-probes live anyway.
+        registry.RealTools["investigate_workspace_issue"] = new ThrowingTool("investigate_workspace_issue");
+
+        var rule = AksRule("prod");
+        rule.AiInvestigationMode = AiInvestigationMode.Manual;
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        var statuses = new List<ProactiveInsightStatusEvent>();
+        insights.InsightStatus += e => statuses.Add(e);
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => statuses.Any(s => s.Stage == ProactiveInsightStage.Queued), timeoutMs: 5000);
+        await insights.DrainAsync();
+
+        var queued = Assert.Single(await reportRepo.GetAllAsync());
+        Assert.Equal(InsightReportStatus.Queued, queued.Status);
+        Assert.Contains("failed", queued.PreparedContextSummary);
+    }
+
+    private sealed class ThrowingTool(string name) : IAgentTool
+    {
+        // JsonDocument.RootElement dies with the document — Parse clones so the schema survives.
+        private static readonly JsonElement Schema = AgentToolSchema.Parse("""{ "type": "object", "properties": {} }""");
+        public string Name => name;
+        public string Description => "always throws";
+        public JsonElement ParametersSchema => Schema;
+        public FeatureArea FeatureArea => FeatureArea.Aks;
+        public Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct) =>
+            throw new InvalidOperationException("probe backend unreachable");
+    }
+
+    [Fact]
+    public async Task RunQueuedInsight_UnknownId_ReturnsNotFound()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, _, _, _, _, _, _, _) = Build(AgentCapability.ToolCalling);
+
+        Assert.Equal(
+            ProactiveInsightService.QueuedRunOutcome.NotFound,
+            await insights.RunQueuedInsightAsync("missing"));
+    }
+
+    [Fact]
+    public async Task RunQueuedInsight_ReadyReport_ReturnsNotQueued()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, _, _, _, _, _, _, reportRepo) = Build(AgentCapability.ToolCalling);
+        await reportRepo.UpsertAsync(new ProactiveInsightReport
+        {
+            Id = "done-report",
+            SessionId = "done-report",
+            RuleId = "r1",
+            RuleName = "rule",
+            Status = InsightReportStatus.Ready,
+        });
+
+        Assert.Equal(
+            ProactiveInsightService.QueuedRunOutcome.NotQueued,
+            await insights.RunQueuedInsightAsync("done-report"));
+    }
+
+    [Fact]
+    public async Task RunQueuedInsight_QueuedReport_Investigates_ReusesPreparedProbe_AndBecomesReady()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, engine, ruleRepo, profiles, _, registry, modelClient, reportRepo) = Build(AgentCapability.ToolCalling, new FakeSignalSource(AlertRuleSource.AksPodHealth, AlertSignalStatus.Firing));
+        profiles.Config.Topology.Nodes.Add(new WorkspaceResourceNode { Area = WorkspaceResourceArea.Aks, ResourceKey = "prod/api", DisplayLabel = "api" });
+        registry.CannedResult = """{"pods":[{"name":"api-7c9f","restarts":12}]}""";
+        modelClient.OnComplete = _ => """{"hypothesis":"queued investigation done","severity":"medium"}""";
+
+        var rule = AksRule("prod");
+        rule.AiInvestigationMode = AiInvestigationMode.Manual;
+        await ruleRepo.UpsertAsync(rule);
+        await engine.ReloadRulesAsync();
+
+        var statuses = new List<ProactiveInsightStatusEvent>();
+        insights.InsightStatus += e => statuses.Add(e);
+        ProactiveInsightReadyEvent? ready = null;
+        insights.InsightReady += e => ready = e;
+
+        await engine.RunEvaluationOnceAsync();
+        await WaitUntilAsync(() => statuses.Any(s => s.Stage == ProactiveInsightStage.Queued), timeoutMs: 5000);
+        var queued = Assert.Single(await reportRepo.GetAllAsync());
+
+        var outcome = await insights.RunQueuedInsightAsync(queued.Id);
+        Assert.Equal(ProactiveInsightService.QueuedRunOutcome.Started, outcome);
+
+        await WaitUntilAsync(() => ready is not null, timeoutMs: 5000);
+        await insights.DrainAsync();
+
+        Assert.NotNull(ready);
+        Assert.Equal("queued investigation done", ready!.Summary);
+        var finished = await reportRepo.GetByIdAsync(queued.Id);
+        Assert.Equal(InsightReportStatus.Ready, finished!.Status);
+        // The stored prepared probe feeds the fallback draft — no second live probe.
+        Assert.Single(registry.Calls);
+    }
+
+    [Fact]
+    public async Task RunQueuedInsight_WhileAnInvestigationIsInFlight_ReturnsBusy()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var gate = new TaskCompletionSource();
+        var (insights, _, _, _, _, registry, _, reportRepo) = Build(AgentCapability.ToolCalling);
+        registry.BlockUntil = gate.Task;
+        await reportRepo.UpsertAsync(new ProactiveInsightReport
+        {
+            Id = "queued-a",
+            SessionId = "queued-a",
+            RuleId = "r1",
+            RuleName = "rule",
+            Status = InsightReportStatus.Queued,
+            Source = AlertRuleSource.AksPodHealth,
+            ReportJson = "{}",
+        });
+        await reportRepo.UpsertAsync(new ProactiveInsightReport
+        {
+            Id = "queued-b",
+            SessionId = "queued-b",
+            RuleId = "r1",
+            RuleName = "rule",
+            Status = InsightReportStatus.Queued,
+            Source = AlertRuleSource.AksPodHealth,
+            ReportJson = "{}",
+        });
+
+        // No matching rule means the run skips the live loop and goes straight to drafting
+        // from the stored probe — registry.BlockUntil isn't even needed to hold it open, the
+        // single-flight flag is claimed synchronously before the task starts.
+        Assert.Equal(
+            ProactiveInsightService.QueuedRunOutcome.Started,
+            await insights.RunQueuedInsightAsync("queued-a"));
+        Assert.Equal(
+            ProactiveInsightService.QueuedRunOutcome.Busy,
+            await insights.RunQueuedInsightAsync("queued-b"));
+
+        gate.SetResult();
+        await insights.DrainAsync();
+    }
+
+    [Fact]
+    public async Task SetInsightStatus_UnknownId_ReturnsNull()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, _, _, _, _, _, _, _) = Build(AgentCapability.ToolCalling);
+
+        Assert.Null(await insights.SetInsightStatusAsync("missing", InsightReportStatus.Done));
+    }
+
+    [Fact]
+    public async Task SetInsightStatus_ReadyDoneRoundTrip_Persists()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, _, _, _, _, _, _, reportRepo) = Build(AgentCapability.ToolCalling);
+        await reportRepo.UpsertAsync(new ProactiveInsightReport
+        {
+            Id = "r",
+            SessionId = "r",
+            RuleId = "r1",
+            RuleName = "rule",
+            Status = InsightReportStatus.Ready,
+        });
+
+        var done = await insights.SetInsightStatusAsync("r", InsightReportStatus.Done);
+        Assert.Equal(InsightReportStatus.Done, done!.Status);
+        Assert.Equal(InsightReportStatus.Done, (await reportRepo.GetByIdAsync("r"))!.Status);
+
+        var back = await insights.SetInsightStatusAsync("r", InsightReportStatus.Ready);
+        Assert.Equal(InsightReportStatus.Ready, back!.Status);
+    }
+
+    [Fact]
+    public async Task SetInsightStatus_QueuedToDone_Discards_QueuedToReady_Throws()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, _, _, _, _, _, _, reportRepo) = Build(AgentCapability.ToolCalling);
+        await reportRepo.UpsertAsync(new ProactiveInsightReport
+        {
+            Id = "q1",
+            SessionId = "q1",
+            RuleId = "r1",
+            RuleName = "rule",
+            Status = InsightReportStatus.Queued,
+        });
+        await reportRepo.UpsertAsync(new ProactiveInsightReport
+        {
+            Id = "q2",
+            SessionId = "q2",
+            RuleId = "r1",
+            RuleName = "rule",
+            Status = InsightReportStatus.Queued,
+        });
+
+        // Discard is a real transition — a prepared card the user doesn't want investigated.
+        var discarded = await insights.SetInsightStatusAsync("q1", InsightReportStatus.Done);
+        Assert.Equal(InsightReportStatus.Done, discarded!.Status);
+
+        // Queued→Ready is not — the only way out of Queued is an actual investigation.
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => insights.SetInsightStatusAsync("q2", InsightReportStatus.Ready));
+        Assert.Equal(InsightReportStatus.Queued, (await reportRepo.GetByIdAsync("q2"))!.Status);
+    }
 }

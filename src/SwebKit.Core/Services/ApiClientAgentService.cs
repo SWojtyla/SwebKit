@@ -73,16 +73,25 @@ public sealed class ApiClientAgentService : IApiClientAgentService
     }
 
     public async Task<ApiClientMutationResult> CreateRequestAsync(
-        string collectionId,
+        string collectionIdOrName,
         string? folderPath,
         string name,
         ApiRequestMethod method,
         string url,
         CancellationToken ct = default)
     {
-        var (collection, origin, linkedRootId) = await FindCollectionAsync(collectionId, ct);
+        var (collection, origin, linkedRootId) = await ResolveCollectionAsync(collectionIdOrName, ct);
         if (collection is null)
-            return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Collection '{collectionId}' not found." };
+        {
+            // A 32-hex value is a generated store ID — the model passed a stale or hallucinated
+            // ID, not a name, and minting a collection called "a1b2…" would be worse than failing.
+            if (LooksLikeGeneratedId(collectionIdOrName))
+                return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Collection '{collectionIdOrName}' not found." };
+
+            collection = await _localRepo.AddCollectionAsync(collectionIdOrName).ConfigureAwait(false);
+            origin = "local";
+            linkedRootId = null;
+        }
 
         var request = new HttpRequestEntry
         {
@@ -108,17 +117,14 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         }
         else
         {
-            var folder = FindFolder(collection.Nodes, folderPath);
-            if (folder is null)
-                return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Folder '{folderPath}' not found." };
-            folder.Children.Add(node);
+            EnsureFolderPath(collection.Nodes, folderPath).Children.Add(node);
         }
 
         await PersistAsync(collection, origin, linkedRootId, ct);
 
         await _events.PublishAsync(new ApiClientDataChanged
         {
-            CollectionId = collectionId,
+            CollectionId = collection.Id,
             RequestId = request.Id,
             ChangeType = "create"
         });
@@ -127,7 +133,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         {
             IsSuccess = true,
             RequestId = request.Id,
-            CollectionId = collectionId
+            CollectionId = collection.Id
         };
     }
 
@@ -376,11 +382,24 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         return new ApiClientMutationResult { IsSuccess = true, CollectionId = collectionId };
     }
 
-    public async Task<IReadOnlyList<(string Id, string Name, string Origin, string? LinkedRootId)>> GetCollectionsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<ApiCollectionSummary>> GetCollectionsAsync(CancellationToken ct = default)
     {
-        var result = (await GetAllCollectionsAsync(ct))
-            .Select(c => (c.Collection.Id, c.Collection.Name, c.Origin, c.LinkedRootId))
-            .ToList();
+        var result = new List<ApiCollectionSummary>();
+        foreach (var (collection, origin, linkedRootId) in await GetAllCollectionsAsync(ct))
+        {
+            var folderPaths = new List<string>();
+            var requestCount = 0;
+            CollectStructure(collection.Nodes, "", folderPaths, ref requestCount);
+            result.Add(new ApiCollectionSummary
+            {
+                Id = collection.Id,
+                Name = collection.Name,
+                Origin = origin,
+                LinkedRootId = linkedRootId,
+                FolderPaths = folderPaths,
+                RequestCount = requestCount,
+            });
+        }
         return result;
     }
 
@@ -413,6 +432,77 @@ public sealed class ApiClientAgentService : IApiClientAgentService
                 return (collection, origin, linkedRootId);
         }
         return (null, "", null);
+    }
+
+    /// <summary>
+    /// Resolves a collection by ID first, then by exact name — proposals carry whichever the
+    /// model had in context, and the read tools surface names more often than IDs.
+    /// </summary>
+    private async Task<(ApiCollection? Collection, string Origin, string? LinkedRootId)> ResolveCollectionAsync(string collectionIdOrName, CancellationToken ct)
+    {
+        var all = await GetAllCollectionsAsync(ct);
+        foreach (var (collection, origin, linkedRootId) in all)
+        {
+            if (collection.Id == collectionIdOrName)
+                return (collection, origin, linkedRootId);
+        }
+        foreach (var (collection, origin, linkedRootId) in all)
+        {
+            if (string.Equals(collection.Name, collectionIdOrName, StringComparison.OrdinalIgnoreCase))
+                return (collection, origin, linkedRootId);
+        }
+        return (null, "", null);
+    }
+
+    private static bool LooksLikeGeneratedId(string value) =>
+        value.Length == 32 && value.All(Uri.IsHexDigit);
+
+    /// <summary>Returns the folder node for <paramref name="folderPath"/>, creating each
+    /// missing segment along the way (same '/'-separated shape <see cref="FindFolder"/> reads).</summary>
+    private static ApiCollectionNode EnsureFolderPath(List<ApiCollectionNode> nodes, string folderPath)
+    {
+        var parts = folderPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var current = nodes;
+        ApiCollectionNode? folder = null;
+
+        foreach (var part in parts)
+        {
+            folder = current.FirstOrDefault(n => n.Type == ApiCollectionNodeType.Folder && n.Name == part);
+            if (folder is null)
+            {
+                folder = new ApiCollectionNode
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Type = ApiCollectionNodeType.Folder,
+                    Name = part,
+                };
+                current.Add(folder);
+            }
+            current = folder.Children;
+        }
+
+        return folder!;
+    }
+
+    private static void CollectStructure(
+        List<ApiCollectionNode> nodes,
+        string currentPath,
+        List<string> folderPaths,
+        ref int requestCount)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Type == ApiCollectionNodeType.Request)
+            {
+                requestCount++;
+            }
+            else if (node.Type == ApiCollectionNodeType.Folder)
+            {
+                var childPath = string.IsNullOrEmpty(currentPath) ? node.Name : $"{currentPath}/{node.Name}";
+                folderPaths.Add(childPath);
+                CollectStructure(node.Children, childPath, folderPaths, ref requestCount);
+            }
+        }
     }
 
     private async Task<(ApiCollection? Collection, string Origin, string? LinkedRootId)> FindCollectionByRequestAsync(string requestId, CancellationToken ct)

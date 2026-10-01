@@ -8,6 +8,8 @@ import {
     getMonitoringHistory,
     getMonitoringInsights,
     deleteMonitoringInsight,
+    runMonitoringInsight,
+    updateMonitoringInsightStatus,
     openInsightChat,
     getMonitoringSilences,
     createMonitoringSilence,
@@ -21,6 +23,7 @@ import { useMonitoringStreamApi } from "@/lib/monitoring-stream-context";
 import type {
     MonitoringAlertRule,
     MonitoringSilence,
+    InsightReportStatus,
     AlertFiredEvent,
     AlertResolvedEvent,
     AlertSignalStatus,
@@ -93,7 +96,8 @@ export function useMonitoringHistory() {
 export function useMonitoringHistorySummary(windowHours: number) {
     return useQuery({
         queryKey: ["monitoring", "history-summary", windowHours],
-        queryFn: ({ signal }) => getMonitoringHistorySummary(windowHours, signal),
+        queryFn: ({ signal }) =>
+            getMonitoringHistorySummary(windowHours, signal),
         refetchInterval: 30_000,
     });
 }
@@ -189,6 +193,45 @@ export function useDeleteMonitoringInsight() {
     });
 }
 
+/** Manual trigger for a queued insight (ai-reports-kanban): 202 fire-and-forget — the
+ * insights query invalidates when the SSE proactiveInsightStatus/Ready frames land, so a
+ * success here only needs to confirm the kick-off. */
+export function useRunMonitoringInsight() {
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: (id: string) => runMonitoringInsight(id),
+        onSuccess: () => {
+            notify(
+                "info",
+                "Investigation started",
+                "The report lands in Ready when it finishes.",
+            );
+        },
+        onError: (error) =>
+            notify("error", "Couldn't start the investigation", String(error)),
+    });
+}
+
+/** Kanban move (ai-reports-kanban): Ready↔Done, or Queued→Done to discard a prepared card. */
+export function useUpdateInsightStatus() {
+    const qc = useQueryClient();
+    const { notify } = useNotification();
+    return useMutation({
+        mutationFn: ({
+            id,
+            status,
+        }: {
+            id: string;
+            status: InsightReportStatus;
+        }) => updateMonitoringInsightStatus(id, status),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["monitoring", "insights"] });
+        },
+        onError: (error) =>
+            notify("error", "Couldn't move the report", String(error)),
+    });
+}
+
 /** Materializes a report's chat session (re-seeded server-side if evicted) and
  * returns it with its transcript — the "Discuss in chat" handoff. */
 export function useOpenInsightChat() {
@@ -233,11 +276,21 @@ export function useMonitoringStream(
 ) {
     const stream = useMonitoringStreamApi();
     const onEventEffect = useEffectEvent(onEvent);
-    const onInsightReadyEffect = useEffectEvent((evt: ProactiveInsightReadyEvent) => onInsightReady?.(evt));
-    const onEvaluationEffect = useEffectEvent((evt: AlertEvaluatedEvent) => onEvaluation?.(evt));
-    const onInsightStatusEffect = useEffectEvent((evt: ProactiveInsightStatusEvent) => onInsightStatus?.(evt));
-    const onResolvedEffect = useEffectEvent((evt: AlertResolvedEvent) => onResolved?.(evt));
-    const onPendingActionProposedEffect = useEffectEvent((evt: PendingActionProposedEvent) => onPendingActionProposed?.(evt));
+    const onInsightReadyEffect = useEffectEvent(
+        (evt: ProactiveInsightReadyEvent) => onInsightReady?.(evt),
+    );
+    const onEvaluationEffect = useEffectEvent((evt: AlertEvaluatedEvent) =>
+        onEvaluation?.(evt),
+    );
+    const onInsightStatusEffect = useEffectEvent(
+        (evt: ProactiveInsightStatusEvent) => onInsightStatus?.(evt),
+    );
+    const onResolvedEffect = useEffectEvent((evt: AlertResolvedEvent) =>
+        onResolved?.(evt),
+    );
+    const onPendingActionProposedEffect = useEffectEvent(
+        (evt: PendingActionProposedEvent) => onPendingActionProposed?.(evt),
+    );
 
     // Highest seq this subscription has already consumed — replaying only newer frames keeps
     // a StrictMode re-subscribe from double-appending buffered events into subscriber state.
@@ -249,9 +302,7 @@ export function useMonitoringStream(
             if (frame.kind === "alertFired") {
                 onEventEffect(frame.event as AlertFiredEvent);
             } else if (frame.kind === "proactiveInsightReady") {
-                onInsightReadyEffect(
-                    frame.event as ProactiveInsightReadyEvent,
-                );
+                onInsightReadyEffect(frame.event as ProactiveInsightReadyEvent);
             } else if (frame.kind === "evaluationCompleted") {
                 onEvaluationEffect(frame.event as AlertEvaluatedEvent);
             } else if (frame.kind === "proactiveInsightStatus") {

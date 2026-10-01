@@ -3,66 +3,164 @@ import { useAksIngresses, useAksDeleteIngress } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksActions } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
-import type { IngressInfo } from "@/lib/types";
+import type { AksQueryTarget, IngressInfo } from "@/lib/types";
 
 interface IngressesTabProps {
-  ns: string;
-  isMulti?: boolean;
+    targets: AksQueryTarget[];
+    isMulti?: boolean;
+    showContext?: boolean;
 }
 
 const columns: Column<IngressInfo>[] = [
-  { header: "Class", cell: (ing) => <span className="text-muted-foreground">{ing.ingressClass ?? "—"}</span> },
-  { header: "Hosts", cell: (ing) => (
-    <span className="text-xs">{ing.rules.map((r) => r.host).filter(Boolean).join(", ") || "—"}</span>
-  )},
-  { header: "Addresses", cell: (ing) => (
-    <span className="text-xs text-muted-foreground">{ing.addresses.length > 0 ? ing.addresses.join(", ") : "—"}</span>
-  )},
-  { header: "Rules", cell: (ing) => <span className="text-xs text-muted-foreground">{ing.rules.length} rule(s)</span>, sortValue: (ing) => ing.rules.length },
+    {
+        header: "Class",
+        cell: (ing) => (
+            <span className="text-muted-foreground">
+                {ing.ingressClass ?? "—"}
+            </span>
+        ),
+    },
+    {
+        header: "Hosts",
+        cell: (ing) => (
+            <span className="text-xs">
+                {ing.rules
+                    .map((r) => r.host)
+                    .filter(Boolean)
+                    .join(", ") || "—"}
+            </span>
+        ),
+    },
+    {
+        header: "Addresses",
+        cell: (ing) => (
+            <span className="text-xs text-muted-foreground">
+                {ing.addresses.length > 0 ? ing.addresses.join(", ") : "—"}
+            </span>
+        ),
+    },
+    {
+        header: "Rules",
+        cell: (ing) => (
+            <span className="text-xs text-muted-foreground">
+                {ing.rules.length} rule(s)
+            </span>
+        ),
+        sortValue: (ing) => ing.rules.length,
+    },
 ];
 
-export function IngressesTab({ ns, isMulti }: IngressesTabProps) {
-  const { data: ingresses, isLoading, error } = useAksIngresses(ns);
-  const ws = useAksActions();
-  const deleteIngress = useAksDeleteIngress();
+export function IngressesTab({
+    targets,
+    isMulti,
+    showContext,
+}: IngressesTabProps) {
+    const {
+        data: ingresses,
+        isLoading,
+        error,
+        contextErrors,
+    } = useAksIngresses(targets);
+    const ws = useAksActions();
+    const deleteIngress = useAksDeleteIngress();
 
-  const buildMenu = useCallback((ing: IngressInfo): ContextMenuItem[] => {
-    const host = ing.rules.find((r) => r.host)?.host;
-    return [
-      { label: "Copy name", icon: "📋", onClick: () => ws.copyToClipboard(ing.name) },
-      { label: "View YAML", icon: "{ }", onClick: () => ws.openYaml("ingress", ing.name, ing.namespace) },
-      { label: "Edit YAML", icon: "✎", onClick: () => ws.openYaml("ingress", ing.name, ing.namespace) },
-      { label: "Open URL in browser", icon: "🔗", onClick: () => { if (host) window.open(`http://${host}`, "_blank"); }, disabled: !host },
-      { label: "Copy URL", icon: "📋", onClick: () => { if (host) ws.copyToClipboard(`http://${host}`); }, disabled: !host },
-      { label: "Analyze ingress", icon: "🔍", onClick: () => ws.navigateToAnalysis() },
-      { label: "", separator: true, onClick: () => {} },
-      { label: "Delete Ingress", icon: "✕", onClick: () => {
-        ws.requestConfirm({
-          message: `Delete ingress "${ing.name}"?`,
-          resourceName: ing.name,
-          onConfirm: () => deleteIngress.mutate({ ns: ing.namespace, name: ing.name }),
-        });
-      }, destructive: true },
-    ];
-  }, [ws, deleteIngress]);
+    const buildMenu = useCallback(
+        (ing: IngressInfo): ContextMenuItem[] => {
+            const host = ing.rules.find((r) => r.host)?.host;
+            return [
+                {
+                    label: "Copy name",
+                    icon: "📋",
+                    onClick: () => ws.copyToClipboard(ing.name),
+                },
+                {
+                    label: "View YAML",
+                    icon: "{ }",
+                    onClick: () =>
+                        ws.openYaml(
+                            "ingress",
+                            ing.name,
+                            ing.namespace,
+                            ing.context,
+                        ),
+                },
+                {
+                    label: "Edit YAML",
+                    icon: "✎",
+                    onClick: () =>
+                        ws.openYaml(
+                            "ingress",
+                            ing.name,
+                            ing.namespace,
+                            ing.context,
+                        ),
+                },
+                {
+                    label: "Open URL in browser",
+                    icon: "🔗",
+                    onClick: () => {
+                        if (host) window.open(`http://${host}`, "_blank");
+                    },
+                    disabled: !host,
+                },
+                {
+                    label: "Copy URL",
+                    icon: "📋",
+                    onClick: () => {
+                        if (host) ws.copyToClipboard(`http://${host}`);
+                    },
+                    disabled: !host,
+                },
+                {
+                    label: "Analyze ingress",
+                    icon: "🔍",
+                    onClick: () => ws.navigateToAnalysis(),
+                },
+                { label: "", separator: true, onClick: () => {} },
+                {
+                    label: "Delete Ingress",
+                    icon: "✕",
+                    onClick: () => {
+                        ws.requestConfirm({
+                            message: `Delete ingress "${ing.name}"${ing.context ? ` in ${ing.context}` : ""}?`,
+                            resourceName: ing.name,
+                            onConfirm: () =>
+                                deleteIngress.mutate({
+                                    ns: ing.namespace,
+                                    name: ing.name,
+                                    context: ing.context,
+                                }),
+                        });
+                    },
+                    destructive: true,
+                },
+            ];
+        },
+        [ws, deleteIngress],
+    );
 
-  const handleRowContextMenu = useCallback(
-    (e: MouseEvent<HTMLTableRowElement>, ing: IngressInfo) => ws.showContextMenu(e, buildMenu(ing)),
-    [ws, buildMenu],
-  );
+    const handleRowContextMenu = useCallback(
+        (e: MouseEvent<HTMLTableRowElement>, ing: IngressInfo) =>
+            ws.showContextMenu(e, buildMenu(ing)),
+        [ws, buildMenu],
+    );
 
-  return (
-    <ResourceTable
-      data={ingresses}
-      isLoading={isLoading}
-      error={error}
-      isMulti={isMulti}
-      testIdPrefix="ingress"
-      tableBodyTestId="ingresses-table-body"
-      emptyMessage="No ingresses found"
-      onRowClick={(ing) => ws.openYaml("ingress", ing.name, ing.namespace)}
-      onRowContextMenu={handleRowContextMenu}
-      columns={columns}
-    />
-  );
+    return (
+        <ResourceTable
+            data={ingresses}
+            isLoading={isLoading}
+            error={error}
+            isMulti={isMulti}
+            showContext={showContext}
+            contextErrors={contextErrors}
+            testIdPrefix="ingress"
+            tableBodyTestId="ingresses-table-body"
+            emptyMessage="No ingresses found"
+            onRowClick={(ing) =>
+                ws.openYaml("ingress", ing.name, ing.namespace, ing.context)
+            }
+            onRowContextMenu={handleRowContextMenu}
+            columns={columns}
+        />
+    );
 }

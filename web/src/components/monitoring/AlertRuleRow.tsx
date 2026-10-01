@@ -10,6 +10,7 @@ import type {
     AlertSignalStatus,
     AlertEvaluatedEvent,
 } from "../../lib/api";
+import { effectiveAiInvestigationMode } from "../../lib/api";
 
 // There's a "Monitoring" backend FeatureArea but it only holds alert-rule *mutation* tools
 // (propose_create_alert_rule) — a rule's signal source already names the area it's actually
@@ -121,18 +122,25 @@ export function AlertRuleRow({
                         >
                             {rule.severity}
                         </span>
-                        {rule.aiInvestigationEnabled && (
+                        {effectiveAiInvestigationMode(rule) !== "Off" && (
                             <span
                                 className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs text-primary"
-                                title="AI investigation on — when this alert fires, the agent investigates related workspace resources and posts an insight. Requires an agent profile with tool calling and the resource on the Map."
+                                title={
+                                    effectiveAiInvestigationMode(rule) ===
+                                    "Manual"
+                                        ? "AI investigation (manual) — a firing prepares the context and queues a card in AI Reports; you click Investigate to spend tokens."
+                                        : "AI investigation on — when this alert fires, the agent investigates related workspace resources and posts an insight. Requires an agent profile with tool calling and the resource on the Map."
+                                }
                                 data-testid={`monitoring-rule-ai-badge-${rule.id}`}
                             >
                                 <Sparkles className="h-3 w-3" />
-                                AI
+                                {effectiveAiInvestigationMode(rule) === "Manual"
+                                    ? "AI·manual"
+                                    : "AI"}
                             </span>
                         )}
                         {rule.autoFixProposalsEnabled &&
-                            rule.aiInvestigationEnabled && (
+                            effectiveAiInvestigationMode(rule) !== "Off" && (
                                 <span
                                     className="flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary"
                                     title="May propose fixes — investigations can park confirmable remediation actions (restart, resubmit, flush…). Nothing runs without your confirmation."

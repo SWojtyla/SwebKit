@@ -59,6 +59,7 @@ builder.Services.AddSingleton<SwebKit.Core.Services.PostmanCollectionImporter>()
 builder.Services.AddSingleton<SwebKit.Core.Services.SwebKitEnvironmentImporter>();
 builder.Services.AddSingleton<SwebKit.Core.Services.BrunoFolderImporter>();
 builder.Services.AddSingleton<SwebKit.Core.Services.CollectionImportService>();
+builder.Services.AddSingleton<SwebKit.Core.Services.ApiClientWorkflowService>();
 builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
 builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
 builder.Services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
@@ -230,6 +231,7 @@ builder.Services.AddSingleton<IAgentTool, GetStorageBlobPropertiesTool>();
 builder.Services.AddSingleton<IAgentTool, AnalyzeStorageHealthTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeCopyBlobTool>();
 builder.Services.AddSingleton<IAgentTool, SearchApiRequestsTool>();
+builder.Services.AddSingleton<IAgentTool, ListApiCollectionsTool>();
 builder.Services.AddSingleton<IAgentTool, GetApiRequestTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApiRequestChangeTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApiRequestDeleteTool>();

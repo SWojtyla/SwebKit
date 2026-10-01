@@ -42,6 +42,22 @@ public sealed class ApiRequestSummary
 }
 
 /// <summary>
+/// Structure of one collection as the agent sees it: identity plus enough shape
+/// (folder paths, request count) for the model to target a create/update without
+/// guessing IDs it was never shown.
+/// </summary>
+public sealed class ApiCollectionSummary
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public required string Origin { get; init; } // "local" or "linked"
+    public required string? LinkedRootId { get; init; }
+    /// <summary>Every folder path in the collection, '/'-separated (e.g. "Auth/OAuth").</summary>
+    public IReadOnlyList<string> FolderPaths { get; init; } = [];
+    public required int RequestCount { get; init; }
+}
+
+/// <summary>
 /// Result of a mutation operation on the API Client store.
 /// </summary>
 public sealed class ApiClientMutationResult
@@ -64,9 +80,16 @@ public interface IApiClientAgentService
     /// <summary>Reads a single request by ID with secrets masked. Returns null if not found.</summary>
     Task<ApiRequestSnapshot?> GetRequestAsync(string requestId, CancellationToken ct = default);
 
-    /// <summary>Creates a new request in the specified collection (or root if folderPath is null).</summary>
+    /// <summary>
+    /// Creates a new request in the specified collection (or root if folderPath is null).
+    /// <paramref name="collectionIdOrName"/> resolves by ID first, then by exact name —
+    /// agent proposals routinely carry a name because that is all the read tools surface.
+    /// When nothing matches, a new local collection is created under that name; a value that
+    /// looks like a generated store ID (32 hex chars) still fails instead of creating a
+    /// collection named after a stale ID. Missing folder segments are created along the path.
+    /// </summary>
     Task<ApiClientMutationResult> CreateRequestAsync(
-        string collectionId,
+        string collectionIdOrName,
         string? folderPath,
         string name,
         ApiRequestMethod method,
@@ -107,8 +130,8 @@ public interface IApiClientAgentService
         string folderPath,
         CancellationToken ct = default);
 
-    /// <summary>Lists all collections with their origin (local/linked).</summary>
-    Task<IReadOnlyList<(string Id, string Name, string Origin, string? LinkedRootId)>> GetCollectionsAsync(CancellationToken ct = default);
+    /// <summary>Lists all collections with origin, folder structure, and request counts.</summary>
+    Task<IReadOnlyList<ApiCollectionSummary>> GetCollectionsAsync(CancellationToken ct = default);
 }
 
 /// <summary>

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Logging.Abstractions;
+using SwebKit.Agents;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Models;
@@ -268,5 +269,127 @@ public class MonitoringEndpointsTests
             "missing", new MuteRuleRequest(DateTimeOffset.UtcNow.AddHours(1)), repo, engine);
 
         Assert.IsAssignableFrom<NotFound>(result.Result);
+    }
+
+    // ── AI reports kanban (ai-reports-kanban): run + status endpoints ────────
+
+    private static (
+        ProactiveInsightService Insights,
+        ProactiveInsightReportRepository Reports) BuildInsights()
+    {
+        var ruleRepo = new FakeAlertRuleRepository();
+        var reportRepo = new ProactiveInsightReportRepository();
+        var profiles = new ProfileRepository();
+        var engine = new MonitoringAlertEvaluationService(
+            ruleRepo, new FakeMonitoringConnectionPool(), [], profiles,
+            new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(),
+            NullLogger<MonitoringAlertEvaluationService>.Instance);
+        var registry = new AgentToolRegistry([]);
+        var model = new ContextBudgetModelClient();
+        var settings = new UserSettingsRepository();
+        var chat = new SidecarAgentChatService(
+            model, registry, profiles, settings, new DemoModeService());
+        var runner = new ProactiveInvestigationRunner(
+            model, registry, profiles, new DemoModeService(),
+            NullLogger<ProactiveInvestigationRunner>.Instance);
+        return (new ProactiveInsightService(
+            engine, ruleRepo, reportRepo, profiles, registry, model, settings, chat,
+            runner, NullLogger<ProactiveInsightService>.Instance), reportRepo);
+    }
+
+    [Fact]
+    public async Task RunQueuedInsightAsync_UnknownReport_ReturnsNotFound()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, _) = BuildInsights();
+
+        var result = await MonitoringEndpoints.RunQueuedInsightAsync("missing", insights);
+
+        Assert.IsAssignableFrom<NotFound>(result);
+    }
+
+    [Fact]
+    public async Task RunQueuedInsightAsync_NonQueuedReport_ReturnsConflict()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, reports) = BuildInsights();
+        await reports.UpsertAsync(new ProactiveInsightReport
+        {
+            Id = "ready-1",
+            SessionId = "ready-1",
+            RuleId = "r1",
+            RuleName = "rule",
+            Status = InsightReportStatus.Ready,
+        });
+
+        var result = await MonitoringEndpoints.RunQueuedInsightAsync("ready-1", insights);
+
+        Assert.IsAssignableFrom<Conflict<string>>(result);
+    }
+
+    [Fact]
+    public async Task SetInsightStatusAsync_UnknownStatusName_ReturnsBadRequest()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, _) = BuildInsights();
+
+        var result = await MonitoringEndpoints.SetInsightStatusAsync(
+            "any", new SetInsightStatusRequest("Bogus"), insights);
+
+        Assert.IsAssignableFrom<BadRequest<string>>(result);
+    }
+
+    [Fact]
+    public async Task SetInsightStatusAsync_UnknownReport_ReturnsNotFound()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, _) = BuildInsights();
+
+        var result = await MonitoringEndpoints.SetInsightStatusAsync(
+            "missing", new SetInsightStatusRequest("Done"), insights);
+
+        Assert.IsAssignableFrom<NotFound>(result);
+    }
+
+    [Fact]
+    public async Task SetInsightStatusAsync_QueuedToReady_ReturnsBadRequest()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, reports) = BuildInsights();
+        await reports.UpsertAsync(new ProactiveInsightReport
+        {
+            Id = "q1",
+            SessionId = "q1",
+            RuleId = "r1",
+            RuleName = "rule",
+            Status = InsightReportStatus.Queued,
+        });
+
+        var result = await MonitoringEndpoints.SetInsightStatusAsync(
+            "q1", new SetInsightStatusRequest("Ready"), insights);
+
+        Assert.IsAssignableFrom<BadRequest<string>>(result);
+    }
+
+    [Fact]
+    public async Task SetInsightStatusAsync_QueuedToDone_ReturnsUpdatedReport()
+    {
+        using var _sandbox = new AppDataSandbox();
+        var (insights, reports) = BuildInsights();
+        await reports.UpsertAsync(new ProactiveInsightReport
+        {
+            Id = "q1",
+            SessionId = "q1",
+            RuleId = "r1",
+            RuleName = "rule",
+            Status = InsightReportStatus.Queued,
+        });
+
+        var result = await MonitoringEndpoints.SetInsightStatusAsync(
+            "q1", new SetInsightStatusRequest("Done"), insights);
+
+        var ok = Assert.IsAssignableFrom<Ok<ProactiveInsightReport>>(result);
+        Assert.Equal(InsightReportStatus.Done, ok.Value!.Status);
+        Assert.Equal(InsightReportStatus.Done, (await reports.GetByIdAsync("q1"))!.Status);
     }
 }

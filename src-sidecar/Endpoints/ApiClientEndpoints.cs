@@ -82,6 +82,10 @@ public static class ApiClientEndpoints
 
         app.MapPost("/api/api-client/evaluate-jsonpath", EvaluateJsonPathAsync);
 
+        // Paste-a-cURL import: parses only, the client inserts the returned request into the
+        // collection tree itself via the normal collections store — no direct persistence here.
+        app.MapPost("/api/api-client/import-curl", ImportCurl);
+
         // OAuth 2.0 authorization-code + PKCE: the frontend asks for an authorize URL, opens it in
         // the system browser, and the provider redirects back to the loopback callback below — the
         // sidecar *is* a localhost server, so no deep-link/protocol registration is needed.
@@ -127,6 +131,16 @@ public static class ApiClientEndpoints
         app.MapGet("/api/api-client/oauth/result/{transactionId}", (
             string transactionId,
             OAuth2PkceFlowService flow) => Results.Ok(flow.GetResult(transactionId)));
+    }
+
+    /// <summary>Named for unit testing — the endpoint is a thin adapter over
+    /// <see cref="ApiClientWorkflowService.ImportCurl"/>, which is covered in Core tests.</summary>
+    internal static IResult ImportCurl(ImportCurlRequest req, ApiClientWorkflowService workflow)
+    {
+        var result = workflow.ImportCurl(req.Command ?? string.Empty);
+        return result.IsSuccess && result.Request is not null
+            ? Results.Ok(result.Request)
+            : ApiErrors.BadRequest(result.ErrorMessage ?? "Could not parse the cURL command.");
     }
 
     internal static IResult EvaluateJsonPathAsync(EvaluateJsonPathRequest req)
@@ -303,6 +317,8 @@ public sealed record PreviewKeyVaultSecretRequest(string? KeyVaultName, string S
 public sealed record SaveCredentialRequest(string Key, string? Secret);
 
 public sealed record PreviewCredentialRequest(string Key);
+
+public sealed record ImportCurlRequest(string? Command);
 
 public sealed record KeyVaultPreviewResponse(
     string Status,

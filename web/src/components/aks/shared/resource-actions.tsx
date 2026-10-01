@@ -14,6 +14,9 @@ import type { AksActionsValue } from "./aks-workspace-context";
 export interface NamedResource {
     name: string;
     namespace: string;
+    /** Source cluster stamp — merged multi-context rows carry it so actions route
+     * to the cluster the row came from. */
+    context?: string;
 }
 
 /**
@@ -54,7 +57,12 @@ export function resourceMenuItems(
             label: "View YAML",
             icon: "{ }",
             onClick: () =>
-                ws.openYaml(yamlKind, resource.name, resource.namespace),
+                ws.openYaml(
+                    yamlKind,
+                    resource.name,
+                    resource.namespace,
+                    resource.context,
+                ),
         },
         ...(opts.middle ?? []),
         ...(opts.onDelete

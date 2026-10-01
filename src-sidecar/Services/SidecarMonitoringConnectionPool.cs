@@ -55,7 +55,7 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
     public IAksClient? GetAksClient(string? context)
     {
         if (_demo.IsDemoMode)
-            return _demo.GetAksClient();
+            return _demo.GetAksClient(context);
 
         var aksConfig = _profile.GetProfileData().Config.AksConfig;
         if (aksConfig is null)

@@ -71,8 +71,9 @@ test.describe("AKS workspace UX", () => {
         page,
     }) => {
         let deploymentCalls = 0;
+        // Scoped calls carry ?context= — the trailing glob has to cover it.
         await page.route(
-            `**/api/aks/${NAMESPACE}/deployments`,
+            `**/api/aks/${NAMESPACE}/deployments*`,
             async (route) => {
                 deploymentCalls += 1;
                 await route.fallback();

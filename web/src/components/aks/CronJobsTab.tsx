@@ -11,15 +11,25 @@ import { CronJobScheduleDialog } from "./CronJobScheduleDialog";
 import { nextCronRun } from "@/lib/cron";
 import { formatLocalDateTime } from "@/lib/datetime";
 import type { ContextMenuItem } from "./ContextMenu";
-import type { CronJobInfo } from "@/lib/types";
+import type { AksQueryTarget, CronJobInfo } from "@/lib/types";
 
 interface CronJobsTabProps {
-    ns: string;
+    targets: AksQueryTarget[];
     isMulti?: boolean;
+    showContext?: boolean;
 }
 
-export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
-    const { data: cronjobs, isLoading, error } = useAksCronJobs(ns);
+export function CronJobsTab({
+    targets,
+    isMulti,
+    showContext,
+}: CronJobsTabProps) {
+    const {
+        data: cronjobs,
+        isLoading,
+        error,
+        contextErrors,
+    } = useAksCronJobs(targets);
     const ws = useAksActions();
     const suspendMutation = useAksSuspendCronJob();
     const triggerMutation = useAksTriggerCronJob();
@@ -34,13 +44,14 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
             const next = !cj.suspend;
             const action = next ? "suspend" : "resume";
             ws.requestConfirm({
-                message: `${action === "suspend" ? "Suspend" : "Resume"} cronjob "${cj.name}"?`,
+                message: `${action === "suspend" ? "Suspend" : "Resume"} cronjob "${cj.name}"${cj.context ? ` in ${cj.context}` : ""}?`,
                 resourceName: cj.name,
                 onConfirm: () =>
                     suspendMutation.mutate({
                         ns: cj.namespace,
                         name: cj.name,
                         suspend: next,
+                        context: cj.context,
                     }),
             });
         },
@@ -53,13 +64,14 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
             const cj = scheduleTarget;
             setScheduleTarget(null);
             ws.requestConfirm({
-                message: `Change schedule for "${cj.name}" to "${schedule}"?`,
+                message: `Change schedule for "${cj.name}" to "${schedule}"${cj.context ? ` in ${cj.context}` : ""}?`,
                 resourceName: cj.name,
                 onConfirm: () =>
                     scheduleMutation.mutate({
                         ns: cj.namespace,
                         name: cj.name,
                         schedule,
+                        context: cj.context,
                     }),
             });
         },
@@ -76,7 +88,8 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
             {
                 label: "View YAML",
                 icon: "{ }",
-                onClick: () => ws.openYaml("cronjob", cj.name, cj.namespace),
+                onClick: () =>
+                    ws.openYaml("cronjob", cj.name, cj.namespace, cj.context),
             },
             {
                 label: "Edit schedule…",
@@ -91,6 +104,7 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
                     triggerMutation.mutate({
                         ns: cj.namespace,
                         name: cj.name,
+                        context: cj.context,
                     }),
                 disabled: triggerMutation.isPending,
             },
@@ -233,11 +247,13 @@ export function CronJobsTab({ ns, isMulti }: CronJobsTabProps) {
                 isLoading={isLoading}
                 error={error}
                 isMulti={isMulti}
+                showContext={showContext}
+                contextErrors={contextErrors}
                 testIdPrefix="cronjob"
                 tableBodyTestId="cronjobs-table-body"
                 emptyMessage="No cron jobs found"
                 onRowClick={(cj) =>
-                    ws.openYaml("cronjob", cj.name, cj.namespace)
+                    ws.openYaml("cronjob", cj.name, cj.namespace, cj.context)
                 }
                 onRowContextMenu={handleRowContextMenu}
                 columns={columns}

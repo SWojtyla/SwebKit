@@ -9,15 +9,26 @@ import { useAksActions } from "./shared/aks-workspace-context";
 import { resourceMenuItems } from "./shared/resource-actions";
 import { ScaleDialog } from "./ScaleDialog";
 import type { ContextMenuItem } from "./ContextMenu";
-import type { DeploymentInfo } from "@/lib/types";
+import type { AksQueryTarget, DeploymentInfo } from "@/lib/types";
 
 interface DeploymentsTabProps {
-    ns: string;
+    targets: AksQueryTarget[];
     isMulti?: boolean;
+    /** Merged multi-cluster view — shows the Context column and per-cluster errors. */
+    showContext?: boolean;
 }
 
-export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
-    const { data: deployments, isLoading, error } = useAksDeployments(ns);
+export function DeploymentsTab({
+    targets,
+    isMulti,
+    showContext,
+}: DeploymentsTabProps) {
+    const {
+        data: deployments,
+        isLoading,
+        error,
+        contextErrors,
+    } = useAksDeployments(targets);
     const ws = useAksActions();
     const restartMutation = useAksRestartDeployment();
     const scaleMutation = useAksScaleDeployment();
@@ -31,13 +42,14 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
         (dep: DeploymentInfo, replicas: number) => {
             setScaleTarget(null);
             ws.requestConfirm({
-                message: `Scale deployment "${dep.name}" to ${replicas} replicas?`,
+                message: `Scale deployment "${dep.name}" to ${replicas} replicas${dep.context ? ` in ${dep.context}` : ""}?`,
                 resourceName: dep.name,
                 onConfirm: () =>
                     scaleMutation.mutate({
                         ns: dep.namespace,
                         name: dep.name,
                         replicas,
+                        context: dep.context,
                     }),
             });
         },
@@ -47,12 +59,13 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
     const restart = useCallback(
         (dep: DeploymentInfo) => {
             ws.requestConfirm({
-                message: `Restart deployment "${dep.name}"?`,
+                message: `Restart deployment "${dep.name}"${dep.context ? ` in ${dep.context}` : ""}?`,
                 resourceName: dep.name,
                 onConfirm: () =>
                     restartMutation.mutate({
                         ns: dep.namespace,
                         name: dep.name,
+                        context: dep.context,
                     }),
             });
         },
@@ -67,7 +80,12 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
                         label: "Edit YAML",
                         icon: "✎",
                         onClick: () =>
-                            ws.openYaml("deployment", dep.name, dep.namespace),
+                            ws.openYaml(
+                                "deployment",
+                                dep.name,
+                                dep.namespace,
+                                dep.context,
+                            ),
                     },
                     {
                         label: "View Logs",
@@ -76,6 +94,7 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
                             const pods = await ws.resolvePodsForSelector(
                                 dep.namespace,
                                 dep.selectorLabels,
+                                dep.context,
                             );
                             if (pods.length > 0) ws.openLogs(pods[0]);
                         },
@@ -87,6 +106,7 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
                             const pods = await ws.resolvePodsForSelector(
                                 dep.namespace,
                                 dep.selectorLabels,
+                                dep.context,
                             );
                             ws.openMultiPodLogs(pods);
                         },
@@ -98,11 +118,13 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
                             const pods = await ws.resolvePodsForSelector(
                                 dep.namespace,
                                 dep.selectorLabels,
+                                dep.context,
                             );
                             if (pods.length > 0)
                                 ws.openContainerDetails(
                                     pods[0].name,
                                     pods[0].namespace,
+                                    pods[0].context,
                                 );
                         },
                     },
@@ -206,11 +228,18 @@ export function DeploymentsTab({ ns, isMulti }: DeploymentsTabProps) {
                 isLoading={isLoading}
                 error={error}
                 isMulti={isMulti}
+                showContext={showContext}
+                contextErrors={contextErrors}
                 testIdPrefix="deployment"
                 tableBodyTestId="deployments-table-body"
                 emptyMessage="No deployments found"
                 onRowClick={(dep) =>
-                    ws.openYaml("deployment", dep.name, dep.namespace)
+                    ws.openYaml(
+                        "deployment",
+                        dep.name,
+                        dep.namespace,
+                        dep.context,
+                    )
                 }
                 onRowContextMenu={handleRowContextMenu}
                 defaultSort={{

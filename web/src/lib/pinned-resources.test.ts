@@ -82,9 +82,31 @@ describe("surface pin factories", () => {
     });
 
     it("pinAksNamespaces joins multi-namespace selections", () => {
-        const fav = pinAksNamespaces("prod-ctx", ["default", "app"]);
+        const fav = pinAksNamespaces(
+            ["prod-ctx"],
+            [
+                { context: "prod-ctx", namespace: "default" },
+                { context: "prod-ctx", namespace: "app" },
+            ],
+        );
         expect(resolveFavoriteTarget(fav)?.to).toBe("/aks?ns=default%2Capp");
-        expect(fav.snapshot.resource.metadata.context).toBe("prod-ctx");
+        expect(fav.snapshot.resource.metadata.contexts).toBe("prod-ctx");
+    });
+
+    it("pinAksNamespaces encodes attached contexts via ctxs + scoped ns", () => {
+        const fav = pinAksNamespaces(
+            ["prod-ctx", "staging"],
+            [
+                { context: "prod-ctx", namespace: "default" },
+                { context: "staging", namespace: "web" },
+            ],
+        );
+        expect(resolveFavoriteTarget(fav)?.to).toBe(
+            "/aks?ns=default%2Cstaging%3Aweb&ctxs=staging",
+        );
+        expect(fav.snapshot.resource.metadata.contexts).toBe(
+            "prod-ctx,staging",
+        );
     });
 
     it("pinSqlConnection writes ?connection=", () => {

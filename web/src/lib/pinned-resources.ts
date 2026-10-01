@@ -125,28 +125,50 @@ export function pinStorageAccount(account: {
 }
 
 /** Pins the AKS namespace selection — a single namespace or the joined
- *  multi-select (the page's `?ns=` param already accepts comma-joined lists and
- *  `*`). The kubeconfig context travels in metadata so the pin still tells you
- *  which cluster it came from after a context switch. */
+ *  multi-select. Selections are context-scoped (`contexts[0]` is the primary):
+ *  the deep link carries the composite `ns` param plus `ctxs` for attached
+ *  clusters, so a pin restores the merged multi-context view it came from. */
 export function pinAksNamespaces(
-    context: string | null,
-    namespaces: string[],
+    contexts: string[],
+    selections: { context: string; namespace: string }[],
 ): FavoriteResource {
-    const label = namespaces.join(", ");
-    const nsParam = encodeURIComponent(namespaces.join(","));
+    const primary = contexts[0] ?? null;
+    const attached = contexts.slice(1);
+    const label = selections
+        .map((s) =>
+            s.context === primary ? s.namespace : `${s.context}:${s.namespace}`,
+        )
+        .join(", ");
+    // Whole-value encoding: `ns=a,b%3Actx` decodes once at the page's URL parser
+    // into the codec's token list — identical to how the workspace serializes it.
+    const nsParam = encodeURIComponent(
+        selections
+            .map((s) =>
+                !s.context || s.context === primary
+                    ? s.namespace
+                    : `${s.context}:${s.namespace}`,
+            )
+            .join(","),
+    );
+    const ctxsParam = attached.length
+        ? `&ctxs=${attached.map(encodeURIComponent).join(",")}`
+        : "";
+    const keySel = selections
+        .map((s) => `${s.context}/${s.namespace}`)
+        .join(",");
     return makeFavoriteResource({
-        key: `aks:namespaces:${context ?? ""}:${namespaces.join(",")}`,
+        key: `aks:namespaces:${contexts.join("+")}:${keySel}`,
         area: "aks",
         kind: "namespaces",
         name: label,
-        displayPath: `/aks?ns=${nsParam}`,
-        summary: context ?? undefined,
+        displayPath: `/aks?ns=${nsParam}${ctxsParam}`,
+        summary: contexts.join(" + ") || undefined,
         icon: "☸",
         metadata: {
-            namespaces: namespaces.join(","),
-            ...(context ? { context } : {}),
+            namespaces: keySel,
+            ...(contexts.length ? { contexts: contexts.join(",") } : {}),
         },
-        restoreState: { namespaces: namespaces.join(",") },
+        restoreState: { namespaces: keySel },
     });
 }
 

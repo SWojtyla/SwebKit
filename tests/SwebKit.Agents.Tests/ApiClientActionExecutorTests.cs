@@ -18,8 +18,10 @@ internal sealed class FakeApiClientAgentService : IApiClientAgentService
     public ApiClientMutationResult NextResult { get; set; } = new() { IsSuccess = true, RequestId = "new-id" };
     public ApiRequestSnapshot? SnapshotToReturn { get; set; }
 
+    public List<ApiRequestSummary> RequestsToReturn { get; } = [];
+
     public Task<IReadOnlyList<ApiRequestSummary>> SearchRequestsAsync(string? query = null, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<ApiRequestSummary>>([]);
+        Task.FromResult<IReadOnlyList<ApiRequestSummary>>(RequestsToReturn);
 
     public Task<ApiRequestSnapshot?> GetRequestAsync(string requestId, CancellationToken ct = default) =>
         Task.FromResult(SnapshotToReturn);
@@ -60,8 +62,10 @@ internal sealed class FakeApiClientAgentService : IApiClientAgentService
     public Task<ApiClientMutationResult> DeleteFolderAsync(string collectionId, string folderPath, CancellationToken ct = default) =>
         Task.FromResult(NextResult);
 
-    public Task<IReadOnlyList<(string Id, string Name, string Origin, string? LinkedRootId)>> GetCollectionsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<(string, string, string, string?)>>([]);
+    public List<ApiCollectionSummary> CollectionsToReturn { get; } = [];
+
+    public Task<IReadOnlyList<ApiCollectionSummary>> GetCollectionsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ApiCollectionSummary>>(CollectionsToReturn);
 }
 
 public class ApiClientActionExecutorTests

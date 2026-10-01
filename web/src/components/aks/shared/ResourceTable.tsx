@@ -31,13 +31,18 @@ export interface Column<T> {
 }
 
 export interface ResourceTableProps<
-    T extends { name: string; namespace?: string },
+    T extends { name: string; namespace?: string; context?: string },
 > {
     data?: T[];
     isLoading: boolean;
     /** Distinct from "no items" — an RBAC-denied list or a sidecar error must not render as empty. */
     error?: unknown;
     isMulti?: boolean;
+    /** Merged multi-cluster view: adds the Context column so a row's origin is visible. */
+    showContext?: boolean;
+    /** Per-context failures from the scoped fan-out — rendered as a warning banner above
+     * the table so one unreachable cluster never blanks the others' rows. */
+    contextErrors?: { context: string; error: unknown }[];
     columns: Column<T>[];
     keyExtractor?: (row: T) => string;
     onRowClick?: (row: T) => void;
@@ -67,7 +72,7 @@ export interface ResourceTableProps<
     compact?: boolean;
 }
 
-type SortKey = "name" | "namespace" | number;
+type SortKey = "name" | "namespace" | "context" | number;
 type SortState = { key: SortKey; direction: "asc" | "desc" } | null;
 
 function compareValues(a: string | number, b: string | number): number {
@@ -78,11 +83,15 @@ function compareValues(a: string | number, b: string | number): number {
     });
 }
 
-function ResourceTableInner<T extends { name: string; namespace?: string }>({
+function ResourceTableInner<
+    T extends { name: string; namespace?: string; context?: string },
+>({
     data,
     isLoading,
     error,
     isMulti,
+    showContext,
+    contextErrors,
     columns,
     keyExtractor,
     onRowClick,
@@ -99,7 +108,8 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
     const [nameFilter, setNameFilter] = useState("");
     const [sort, setSort] = useState<SortState>(null);
 
-    const columnCount = 1 + (isMulti ? 1 : 0) + columns.length;
+    const columnCount =
+        1 + (isMulti ? 1 : 0) + (showContext ? 1 : 0) + columns.length;
 
     // Only a real onRowClick makes a row clickable. A context-menu-only row must not carry the
     // same pointer-cursor/hover/keyboard-activation affordance as one with a left-click action —
@@ -131,6 +141,7 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
             if (sort.key === "name") return (row: T) => row.name;
             if (sort.key === "namespace")
                 return (row: T) => row.namespace ?? "";
+            if (sort.key === "context") return (row: T) => row.context ?? "";
             const col = columns[sort.key as number];
             if (!col || col.sortable === false) return undefined;
             return (
@@ -207,7 +218,7 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
     const getKey =
         keyExtractor ??
         ((row: T) =>
-            row.namespace ? `${row.namespace}/${row.name}` : row.name);
+            `${row.context ? `${row.context}:` : ""}${row.namespace ? `${row.namespace}/` : ""}${row.name}`);
 
     const header = (
         <thead>
@@ -229,6 +240,17 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
                             data-testid={`${testIdPrefix}s-sort-namespace`}
                         >
                             Namespace {sortIcon("namespace")}
+                        </button>
+                    </th>
+                )}
+                {showContext && (
+                    <th className="whitespace-nowrap py-2 pr-4">
+                        <button
+                            onClick={() => toggleSort("context")}
+                            className="flex items-center gap-1 hover:text-foreground"
+                            data-testid={`${testIdPrefix}s-sort-context`}
+                        >
+                            Context {sortIcon("context")}
                         </button>
                     </th>
                 )}
@@ -298,6 +320,28 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
     return (
         <div className="p-4" ref={containerRef}>
             {filterBar}
+            {contextErrors && contextErrors.length > 0 && (
+                <div
+                    className="mb-2 flex flex-col gap-1"
+                    data-testid={`${testIdPrefix}s-context-errors`}
+                >
+                    {contextErrors.map((e) => (
+                        <div
+                            key={e.context}
+                            className="flex items-center gap-2 rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive"
+                            data-testid={`${testIdPrefix}s-context-error-${e.context}`}
+                        >
+                            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                            <span>
+                                {e.context}:{" "}
+                                {e.error instanceof Error
+                                    ? e.error.message
+                                    : String(e.error)}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            )}
             {visibleRows.length === 0 ? (
                 <div
                     className="p-4 text-sm text-muted-foreground"
@@ -368,6 +412,14 @@ function ResourceTableInner<T extends { name: string; namespace?: string }>({
                                         {isMulti && (
                                             <td className="whitespace-nowrap py-2 pr-4 text-xs text-muted-foreground">
                                                 {row.namespace ?? "—"}
+                                            </td>
+                                        )}
+                                        {showContext && (
+                                            <td
+                                                className="whitespace-nowrap py-2 pr-4 text-xs text-muted-foreground"
+                                                data-testid={`${testIdPrefix}-cell-context-${row.name}`}
+                                            >
+                                                {row.context ?? "—"}
                                             </td>
                                         )}
                                         {columns.map((col, i) => (

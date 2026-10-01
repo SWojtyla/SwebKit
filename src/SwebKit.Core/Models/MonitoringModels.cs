@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using SwebKit.Core.Security;
 
 namespace SwebKit.Core.Models;
@@ -17,6 +18,17 @@ public enum AlertRuleSource
 
 public enum AlertSeverity { Warning, Critical }
 
+/// <summary>Per-rule AI investigation mode (ai-reports-kanban). <c>Off</c> = never;
+/// <c>Auto</c> = investigate every firing immediately; <c>Manual</c> = prepare the context
+/// (probe included) at firing time, park a Queued report, spend model tokens only when the
+/// user clicks Investigate.</summary>
+public enum AiInvestigationMode { Off, Auto, Manual }
+
+/// <summary>Workflow status of a persisted insight report — the kanban columns
+/// (ai-reports-kanban). <c>Queued</c> = prepared but never sent to a model;
+/// <c>Ready</c> = a completed investigation; <c>Done</c> = reviewed/dismissed.</summary>
+public enum InsightReportStatus { Queued, Ready, Done }
+
 public sealed class MonitoringAlertRule
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -32,8 +44,21 @@ public sealed class MonitoringAlertRule
     public StorageAlertParams? StorageParams { get; set; }
     /// <summary>When true (default), a firing of this rule triggers a background proactive
     /// investigation (ProactiveInsightService). Default true preserves the pre-flag
-    /// auto-investigate behavior; rules persisted before the flag existed deserialize to true.</summary>
+    /// auto-investigate behavior; rules persisted before the flag existed deserialize to true.
+    /// Superseded by <see cref="AiInvestigationMode"/> — kept in sync on save so old builds
+    /// reading the file still behave. The service reads <see cref="EffectiveAiInvestigationMode"/>.</summary>
     public bool AiInvestigationEnabled { get; set; } = true;
+    /// <summary>How a firing feeds the AI pipeline (ai-reports-kanban): <c>Auto</c> runs the
+    /// investigation immediately; <c>Manual</c> only prepares the context (alert + topology +
+    /// deterministic probe — zero model tokens) and parks a Queued card until the user triggers
+    /// it. Nullable so rules saved before the field existed fall back to
+    /// <see cref="AiInvestigationEnabled"/>.</summary>
+    public AiInvestigationMode? AiInvestigationMode { get; set; }
+    /// <summary>The mode the insight service acts on: explicit <see cref="AiInvestigationMode"/>
+    /// when present, else derived from <see cref="AiInvestigationEnabled"/> for legacy files.</summary>
+    [JsonIgnore]
+    public AiInvestigationMode EffectiveAiInvestigationMode =>
+        AiInvestigationMode ?? (AiInvestigationEnabled ? Models.AiInvestigationMode.Auto : Models.AiInvestigationMode.Off);
     /// <summary>Per-rule opt-in (monitoring-closed-loop 1b): when true, a background
     /// investigation of a firing may also call the whitelisted <c>propose_*</c> tools to park
     /// confirmable remediation actions. Default FALSE — today's posture
@@ -221,8 +246,28 @@ public sealed class ProactiveInsightReport
     public List<string> PendingActionIds { get; set; } = [];
     /// <summary>Structured result JSON (model-driven path) or raw investigate_workspace_issue
     /// output (fallback path) — the payload the seeded chat session carries for follow-up
-    /// questions. Not rendered in the reports UI.</summary>
+    /// questions. Not rendered in the reports UI. On a <see cref="InsightReportStatus.Queued"/>
+    /// report this holds the eagerly-run probe output instead — the prepared context a manual
+    /// run drafts from if the live tool loop fails.</summary>
     public string? ReportJson { get; set; }
     public string SessionId { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>Kanban status (ai-reports-kanban). The property initializer means reports
+    /// persisted before the field existed deserialize as <see cref="InsightReportStatus.Ready"/> —
+    /// only a queued record ever carries an explicit Queued value.</summary>
+    public InsightReportStatus Status { get; set; } = InsightReportStatus.Ready;
+    /// <summary>The fired rule's source — persisted on queued reports so a later manual run can
+    /// rebuild the <see cref="AlertFiredEvent"/> without the live event still being around.</summary>
+    public AlertRuleSource? Source { get; set; }
+    /// <summary>The fired alert's severity (Warning/Critical) — distinct from
+    /// <see cref="Severity"/>, the model-assessed impact of the findings.</summary>
+    public AlertSeverity? AlertSeverity { get; set; }
+    /// <summary>The firing event's detail line — needed to rebuild the event for a manual run.</summary>
+    public string? AlertDetail { get; set; }
+    /// <summary>One-line description of what "prepare" collected (probe target, map, probe
+    /// outcome) — rendered on the queued card so the user sees what the model will get.</summary>
+    public string? PreparedContextSummary { get; set; }
+    /// <summary>When the queued card's context was captured (manual mode).</summary>
+    public DateTimeOffset? PreparedAt { get; set; }
 }

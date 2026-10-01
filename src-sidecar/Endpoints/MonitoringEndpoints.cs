@@ -50,6 +50,10 @@ public static class MonitoringEndpoints
 
         group.MapDelete("/insights/{id}", DeleteInsightAsync);
 
+        group.MapPost("/insights/{id}/run", RunQueuedInsightAsync);
+
+        group.MapPatch("/insights/{id}", SetInsightStatusAsync);
+
         group.MapPost("/insights/{id}/open-chat", OpenInsightChatAsync);
 
         // ── Live SSE stream of fired alerts ─────────────────────────────────
@@ -263,6 +267,43 @@ public static class MonitoringEndpoints
         return TypedResults.NoContent();
     }
 
+    /// <summary>Manual trigger for a queued insight (ai-reports-kanban): kicks off the
+    /// model-driven investigation in the background and returns 202 — progress reaches the
+    /// UI over the normal proactiveInsightStatus/Ready SSE events, same as the auto path.</summary>
+    internal static async Task<IResult> RunQueuedInsightAsync(
+        string id,
+        ProactiveInsightService insights)
+    {
+        var outcome = await insights.RunQueuedInsightAsync(id);
+        return outcome switch
+        {
+            ProactiveInsightService.QueuedRunOutcome.Started => TypedResults.Accepted($"/api/monitoring/insights/{id}"),
+            ProactiveInsightService.QueuedRunOutcome.NotFound => TypedResults.NotFound(),
+            ProactiveInsightService.QueuedRunOutcome.Busy => TypedResults.Conflict("Another investigation is already running — try again when it finishes."),
+            _ => TypedResults.Conflict("This report isn't queued — it was already investigated or moved."),
+        };
+    }
+
+    /// <summary>Kanban move (ai-reports-kanban): Ready↔Done plus Queued→Done (discard). The
+    /// service rejects Queued→Ready — only an actual investigation produces a report.</summary>
+    internal static async Task<IResult> SetInsightStatusAsync(
+        string id,
+        SetInsightStatusRequest body,
+        ProactiveInsightService insights)
+    {
+        if (!Enum.TryParse<InsightReportStatus>(body.Status, ignoreCase: true, out var status))
+            return TypedResults.BadRequest($"Unknown status '{body.Status}' — expected Queued, Ready or Done.");
+        try
+        {
+            var report = await insights.SetInsightStatusAsync(id, status);
+            return report is null ? TypedResults.NotFound() : TypedResults.Ok(report);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return TypedResults.BadRequest(ex.Message);
+        }
+    }
+
     /// <summary>Materializes the report's chat session (re-seeding it from the persisted report
     /// when the in-memory store already evicted it) and returns the session id plus its
     /// transcript — everything the "Discuss in chat" panel needs in one round trip.</summary>
@@ -287,6 +328,10 @@ public static class MonitoringEndpoints
 /// <summary>Body of <c>POST /api/monitoring/rules/{id}/mute</c> — <c>until</c> is an ISO
 /// timestamp; null (or a past timestamp, normalized server-side) unmutes the rule.</summary>
 public sealed record MuteRuleRequest(DateTimeOffset? Until);
+
+/// <summary>Body of <c>PATCH /api/monitoring/insights/{id}</c> — the target kanban status
+/// name (<c>Queued</c>/<c>Ready</c>/<c>Done</c>).</summary>
+public sealed record SetInsightStatusRequest(string Status);
 
 /// <summary>Response of <c>POST /api/monitoring/insights/{id}/open-chat</c>.</summary>
 public sealed class InsightChatSession

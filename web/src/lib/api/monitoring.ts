@@ -14,6 +14,27 @@ export type AlertRuleSource =
     | "StorageBlobCount";
 
 export type AlertSeverity = "Warning" | "Critical";
+
+/** Per-rule AI investigation mode (ai-reports-kanban). */
+export type AiInvestigationMode = "Off" | "Auto" | "Manual";
+
+/** The mode a rule actually runs with: the explicit mode when set, else derived from the
+ * legacy boolean for rules saved before modes existed. */
+export function effectiveAiInvestigationMode(
+    rule: Pick<
+        MonitoringAlertRule,
+        "aiInvestigationMode" | "aiInvestigationEnabled"
+    >,
+): AiInvestigationMode {
+    return (
+        rule.aiInvestigationMode ??
+        (rule.aiInvestigationEnabled ? "Auto" : "Off")
+    );
+}
+
+/** Kanban status of a persisted insight report (ai-reports-kanban). Queued = prepared
+ * context, waiting for a manual run; Ready = completed investigation; Done = reviewed. */
+export type InsightReportStatus = "Queued" | "Ready" | "Done";
 export type AlertSignalStatus = "Ok" | "Firing" | "Skipped" | "Error";
 
 export interface AksPodAlertParams {
@@ -47,8 +68,15 @@ export interface MonitoringAlertRule {
     serviceBusParams?: ServiceBusAlertParams | null;
     redisAlertParams?: RedisAlertParams | null;
     /** When true (default), a firing triggers a background AI investigation that posts a
-     * proactive insight. Old persisted rules without the field deserialize to true. */
+     * proactive insight. Old persisted rules without the field deserialize to true.
+     * Superseded by {@link MonitoringAlertRule.aiInvestigationMode} — kept in sync on save
+     * (mode !== "Off") so older builds behave identically. */
     aiInvestigationEnabled: boolean;
+    /** How a firing feeds the AI pipeline (ai-reports-kanban): "Auto" investigates
+     * immediately; "Manual" prepares the context (alert + topology + deterministic probe —
+     * zero tokens) and parks a Queued card for the user to trigger. Absent on rules saved
+     * before the field existed — read it via {@link effectiveAiInvestigationMode}. */
+    aiInvestigationMode?: AiInvestigationMode | null;
     /** Per-rule opt-in (monitoring-closed-loop 1b): when true, an investigation may also park
      * confirmable remediation proposals (propose_* tools). Default false — and even when on,
      * nothing mutates without explicit user confirmation. */
@@ -106,7 +134,9 @@ export interface AlertHistoryEntry {
 
 /** Maps a live `alertFired` stream event into the durable-history row shape so the History
  * tab can merge both feeds before the persisted store catches up on the next poll. */
-export function firedEventToHistoryEntry(evt: AlertFiredEvent): AlertHistoryEntry {
+export function firedEventToHistoryEntry(
+    evt: AlertFiredEvent,
+): AlertHistoryEntry {
     return {
         id: `live-${evt.ruleId}-${evt.firedAt}`,
         ruleId: evt.ruleId,
@@ -148,7 +178,7 @@ export interface ProactiveInsightStatusEvent {
     ruleId: string;
     firedAt: string;
     ruleName: string;
-    stage: "Started" | "Skipped" | "Failed";
+    stage: "Started" | "Skipped" | "Failed" | "Queued";
     reason?: string | null;
 }
 
@@ -409,6 +439,20 @@ export interface ProactiveInsightReport {
     pendingActionIds?: string[];
     sessionId: string;
     createdAt: string;
+    /** Kanban status (ai-reports-kanban). Absent on reports persisted by older builds —
+     * they deserialize server-side as Ready, but tolerate undefined anyway. */
+    status?: InsightReportStatus;
+    /** The fired alert's severity (the rule's Warning/Critical) — distinct from
+     * {@link ProactiveInsightReport.severity}, the model-assessed impact. */
+    alertSeverity?: AlertSeverity | null;
+    /** The firing event's detail line — kept so a queued report can rebuild its event. */
+    alertDetail?: string | null;
+    /** One-line description of the prepared context on a queued card (probe target + map). */
+    preparedContextSummary?: string | null;
+    preparedAt?: string | null;
+    /** Structured result JSON on finished reports; the raw prepared probe output on
+     * queued ones — what the queued card shows as "prepared context". */
+    reportJson?: string | null;
 }
 
 /** Response of `openInsightChat` — the report's chat session plus its transcript. */
@@ -429,6 +473,29 @@ export async function deleteMonitoringInsight(id: string): Promise<void> {
     await apiSend<void>(
         `/api/monitoring/insights/${encodeURIComponent(id)}`,
         "DELETE",
+    );
+}
+
+/** Manual trigger for a queued insight (ai-reports-kanban): the sidecar starts the
+ * model-driven investigation in the background and returns 202 — progress lands over the
+ * monitoring SSE stream (proactiveInsightStatus → proactiveInsightReady). */
+export async function runMonitoringInsight(id: string): Promise<void> {
+    await apiSend<void>(
+        `/api/monitoring/insights/${encodeURIComponent(id)}/run`,
+        "POST",
+    );
+}
+
+/** Kanban move for a report: Ready↔Done, or Queued→Done to discard. The sidecar rejects
+ * Queued→Ready — a report only becomes Ready by actually running. */
+export async function updateMonitoringInsightStatus(
+    id: string,
+    status: InsightReportStatus,
+): Promise<ProactiveInsightReport> {
+    return apiSend<ProactiveInsightReport>(
+        `/api/monitoring/insights/${encodeURIComponent(id)}`,
+        "PATCH",
+        { status },
     );
 }
 

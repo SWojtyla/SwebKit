@@ -20,6 +20,9 @@ Plan files are the shared intent record: any tool or later session reads them to
 - `service-bus-power-ops.md` — reach-message DLQ-park/restore op, DLQ triage + resend-with-edit fix, session awareness, cross-env replay.
 - `ux-power-pack.md` — palette deepening, pinned rail, env badgeing, keyboard grids, toast dedupe.
 - `distribution-onboarding.md` — team workspace packs, "PRD day" demo tour stop, update channel, `swebkit://` deep links.
+- `aks-multi-context.md` — phased multi-context AKS workspace: attached secondary contexts (URL/view-pref state), grouped namespace picker, merged resource tables with a Context column, context-routed mutations; primary context keeps profile semantics.
+- `api-client-agent-fixes.md` — agent create-request resolves collection by id-or-name and auto-creates missing collection/folders, `list_api_collections` tool, non-AI cURL import dialog, chat markdown styling + drop stale context-window stats.
+- `ai-reports-kanban.md` — AI report board (Queued/Ready/Done) plus per-rule investigation modes (Off/Auto/Manual): Manual prepares deterministic context without a model call, explicit Investigate spends tokens.
 
 ## Plan file contract
 

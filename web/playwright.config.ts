@@ -14,34 +14,40 @@ import { sidecarPort, vitePort } from "./e2e/test-config";
  */
 
 export default defineConfig({
-  testDir: "./e2e",
-  globalSetup: "./e2e/global-setup.ts",
-  // The first navigation of a run pays for Vite's cold compile of the whole app,
-  // which can exceed the 30s default on a cold cache and fail an otherwise
-  // healthy test.
-  timeout: 60 * 1000,
-  fullyParallel: false,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: 1,
-  reporter: "list",
-  use: {
-    baseURL: `http://localhost:${vitePort}`,
-    trace: "on-first-retry",
-    screenshot: "only-on-failure",
-  },
-
-  projects: [
-    {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-    },
-  ],
-
-  webServer: {
-    command: `cross-env VITE_SIDECAR_URL=http://127.0.0.1:${sidecarPort} npx vite --port ${vitePort}`,
-    url: `http://localhost:${vitePort}`,
+    testDir: "./e2e",
+    globalSetup: "./e2e/global-setup.ts",
+    // The first navigation of a run pays for Vite's cold compile of the whole app,
+    // which can exceed the 30s default on a cold cache and fail an otherwise
+    // healthy test.
     timeout: 60 * 1000,
-    reuseExistingServer: false,
-  },
+    fullyParallel: false,
+    forbidOnly: !!process.env.CI,
+    retries: process.env.CI ? 2 : 0,
+    workers: 1,
+    reporter: "list",
+    use: {
+        baseURL: `http://localhost:${vitePort}`,
+        trace: "on-first-retry",
+        screenshot: "only-on-failure",
+    },
+
+    projects: [
+        {
+            name: "chromium",
+            use: { ...devices["Desktop Chrome"] },
+        },
+    ],
+
+    webServer: {
+        // Spawn vite's node binary directly — `npx vite` wraps it in cmd/npx
+        // indirection, so Playwright's teardown killed the wrapper and orphaned a
+        // vite listening on [::1]:1419, which then poisoned every later run.
+        command: `node node_modules/vite/bin/vite.js --port ${vitePort}`,
+        env: {
+            VITE_SIDECAR_URL: `http://127.0.0.1:${sidecarPort}`,
+        },
+        url: `http://localhost:${vitePort}`,
+        timeout: 60 * 1000,
+        reuseExistingServer: false,
+    },
 });

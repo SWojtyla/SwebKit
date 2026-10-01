@@ -8,11 +8,12 @@ import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksActions } from "./shared/aks-workspace-context";
 import { ScaleDialog } from "./ScaleDialog";
 import type { ContextMenuItem } from "./ContextMenu";
-import type { StatefulSetInfo } from "@/lib/types";
+import type { AksQueryTarget, StatefulSetInfo } from "@/lib/types";
 
 interface StatefulSetsTabProps {
-    ns: string;
+    targets: AksQueryTarget[];
     isMulti?: boolean;
+    showContext?: boolean;
 }
 
 const columns: Column<StatefulSetInfo>[] = [
@@ -49,8 +50,17 @@ const columns: Column<StatefulSetInfo>[] = [
     },
 ];
 
-export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
-    const { data: statefulsets, isLoading, error } = useAksStatefulSets(ns);
+export function StatefulSetsTab({
+    targets,
+    isMulti,
+    showContext,
+}: StatefulSetsTabProps) {
+    const {
+        data: statefulsets,
+        isLoading,
+        error,
+        contextErrors,
+    } = useAksStatefulSets(targets);
     const ws = useAksActions();
     const restartSts = useAksRestartStatefulSet();
     const scaleSts = useAksScaleStatefulSet();
@@ -63,13 +73,14 @@ export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
         (sts: StatefulSetInfo, replicas: number) => {
             setScaleTarget(null);
             ws.requestConfirm({
-                message: `Scale stateful set "${sts.name}" to ${replicas} replicas?`,
+                message: `Scale stateful set "${sts.name}" to ${replicas} replicas${sts.context ? ` in ${sts.context}` : ""}?`,
                 resourceName: sts.name,
                 onConfirm: () =>
                     scaleSts.mutate({
                         ns: sts.namespace,
                         name: sts.name,
                         replicas,
+                        context: sts.context,
                     }),
             });
         },
@@ -111,7 +122,12 @@ export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
                 label: "View YAML",
                 icon: "{ }",
                 onClick: () =>
-                    ws.openYaml("statefulset", sts.name, sts.namespace),
+                    ws.openYaml(
+                        "statefulset",
+                        sts.name,
+                        sts.namespace,
+                        sts.context,
+                    ),
             },
             {
                 label: "View Logs",
@@ -120,6 +136,7 @@ export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
                     const pods = await ws.resolvePodsForSelector(
                         sts.namespace,
                         sts.selectorLabels,
+                        sts.context,
                     );
                     if (pods.length > 0) ws.openLogs(pods[0]);
                 },
@@ -131,11 +148,13 @@ export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
                     const pods = await ws.resolvePodsForSelector(
                         sts.namespace,
                         sts.selectorLabels,
+                        sts.context,
                     );
                     if (pods.length > 0)
                         ws.openContainerDetails(
                             pods[0].name,
                             pods[0].namespace,
+                            pods[0].context,
                         );
                 },
             },
@@ -150,12 +169,13 @@ export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
                 icon: "↻",
                 onClick: () => {
                     ws.requestConfirm({
-                        message: `Restart stateful set "${sts.name}"?`,
+                        message: `Restart stateful set "${sts.name}"${sts.context ? ` in ${sts.context}` : ""}?`,
                         resourceName: sts.name,
                         onConfirm: () =>
                             restartSts.mutate({
                                 ns: sts.namespace,
                                 name: sts.name,
+                                context: sts.context,
                             }),
                     });
                 },
@@ -184,11 +204,18 @@ export function StatefulSetsTab({ ns, isMulti }: StatefulSetsTabProps) {
                 isLoading={isLoading}
                 error={error}
                 isMulti={isMulti}
+                showContext={showContext}
+                contextErrors={contextErrors}
                 testIdPrefix="statefulset"
                 tableBodyTestId="statefulsets-table-body"
                 emptyMessage="No stateful sets found"
                 onRowClick={(sts) =>
-                    ws.openYaml("statefulset", sts.name, sts.namespace)
+                    ws.openYaml(
+                        "statefulset",
+                        sts.name,
+                        sts.namespace,
+                        sts.context,
+                    )
                 }
                 onRowContextMenu={handleRowContextMenu}
                 columns={allColumns}
