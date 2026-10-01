@@ -22,6 +22,7 @@ Plan files are the shared intent record: any tool or later session reads them to
 - `distribution-onboarding.md` — team workspace packs, "PRD day" demo tour stop, update channel, `swebkit://` deep links.
 - `aks-multi-context.md` — phased multi-context AKS workspace: attached secondary contexts (URL/view-pref state), grouped namespace picker, merged resource tables with a Context column, context-routed mutations; primary context keeps profile semantics.
 - `api-client-agent-fixes.md` — agent create-request resolves collection by id-or-name and auto-creates missing collection/folders, `list_api_collections` tool, non-AI cURL import dialog, chat markdown styling + drop stale context-window stats.
+- `api-client-settings-tab.md` — API Client settings split out of General into their own tab (incl. Key Vaults), and a Storage section showing the real `collections.json` path via `GET /api/config/collections/location`.
 - `ai-reports-kanban.md` — AI report board (Queued/Ready/Done) plus per-rule investigation modes (Off/Auto/Manual): Manual prepares deterministic context without a model call, explicit Investigate spends tokens.
 
 ## Plan file contract

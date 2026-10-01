@@ -13,6 +13,7 @@ import { SqlSettings } from "./SqlSettings";
 import { StorageSettings } from "./StorageSettings";
 import { AgentSettings } from "./AgentSettings";
 import { AccessSettings } from "./AccessSettings";
+import { ApiClientSettings } from "./ApiClientSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
@@ -25,6 +26,7 @@ const tabs = [
     { id: "redis", label: "Redis" },
     { id: "sql", label: "SQL" },
     { id: "storage", label: "Storage" },
+    { id: "api-client", label: "API Client" },
     { id: "access", label: "Access" },
     { id: "agent", label: "AI Agent" },
     { id: "map", label: "Map" },
@@ -76,7 +78,10 @@ export function SettingsPage() {
         if (state?.tab && TAB_IDS.has(state.tab)) {
             // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
             setActiveTab(state.tab as TabId);
-            navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+            navigate(`${location.pathname}${location.search}`, {
+                replace: true,
+                state: null,
+            });
             return;
         }
         const tabParam = new URLSearchParams(location.search).get("tab");
@@ -138,9 +143,13 @@ export function SettingsPage() {
                                 onClick={() => {
                                     setActiveTab(tab.id);
                                     // Keep the URL honest so a copied link lands on the same tab.
-                                    const params = new URLSearchParams(location.search);
+                                    const params = new URLSearchParams(
+                                        location.search,
+                                    );
                                     params.set("tab", tab.id);
-                                    navigate(`${location.pathname}?${params}`, { replace: true });
+                                    navigate(`${location.pathname}?${params}`, {
+                                        replace: true,
+                                    });
                                 }}
                                 data-testid={`settings-tab-${tab.id}`}
                                 className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
@@ -180,6 +189,7 @@ export function SettingsPage() {
                     {activeTab === "redis" && <RedisSettings />}
                     {activeTab === "sql" && <SqlSettings />}
                     {activeTab === "storage" && <StorageSettings />}
+                    {activeTab === "api-client" && <ApiClientSettings />}
                     {activeTab === "access" && <AccessSettings />}
                     {activeTab === "agent" && <AgentSettings />}
                     {activeTab === "map" && <WorkspaceMapSettings />}

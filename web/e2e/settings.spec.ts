@@ -31,7 +31,9 @@ test.describe("Settings", () => {
             "service-bus",
             "aks",
             "redis",
+            "sql",
             "storage",
+            "api-client",
             "access",
             "agent",
             "map",
@@ -42,6 +44,25 @@ test.describe("Settings", () => {
             await page.getByTestId(`settings-tab-${id}`).click();
             await expect(page.getByTestId("settings-content")).toBeVisible();
         }
+    });
+
+    test("api client tab shows where collections are stored", async ({
+        page,
+    }) => {
+        await page.goto("/settings?tab=api-client");
+
+        await expect(
+            page.getByTestId("collections-storage-section"),
+        ).toBeVisible();
+        // The sandboxed e2e appdata root — the point of the field is that the
+        // path shown is where the store actually lives.
+        await expect(page.getByTestId("collections-store-path")).toContainText(
+            "collections.json",
+        );
+        await expect(page.getByTestId("collections-store-path")).toContainText(
+            ".e2e-appdata",
+        );
+        await expect(page.getByTestId("key-vaults-section")).toBeVisible();
     });
 
     test("general tab shows getting started readiness checklist", async ({

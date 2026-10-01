@@ -218,6 +218,15 @@ export const staticCommandPaletteItems: CommandPaletteItem[] = [
         state: { tab: "storage" },
     },
     {
+        id: "settings-api-client",
+        type: "nav",
+        label: "API Client Settings",
+        keywords: "settings api client http request collections key vault",
+        icon: Send,
+        to: "/settings",
+        state: { tab: "api-client" },
+    },
+    {
         id: "settings-access",
         type: "nav",
         label: "Access Settings",
@@ -360,8 +369,7 @@ export function buildPaletteItems(
         const nsLabel = namespace.alias || namespace.fullyQualifiedNamespace;
         for (const entity of entities) {
             const kind = sbEntityKind(entity);
-            const hasDlq =
-                (entity.stats?.deadLetterMessageCount ?? 0) > 0;
+            const hasDlq = (entity.stats?.deadLetterMessageCount ?? 0) > 0;
             // `entityName` is the leaf segment — subscriptions arrive as
             // `topic/subscriptions/name`, so a raw `entity.name` fallback could
             // carry slashes into the header breadcrumb.
@@ -369,9 +377,7 @@ export function buildPaletteItems(
                 entity.entityPath.split("/").filter(Boolean).pop() ??
                 entity.entityPath;
             const displayName =
-                entity.name && !entity.name.includes("/")
-                    ? entity.name
-                    : leaf;
+                entity.name && !entity.name.includes("/") ? entity.name : leaf;
             items.push({
                 id: `sb-entity-${namespace.id}-${entity.entityPath}`,
                 type: "resource",
@@ -470,7 +476,8 @@ export function buildPaletteItems(
 
     // Pinned resources — the same `favoriteResources` entries the sidebar rail
     // renders, resolved to their canonical targets.
-    const pinned = sources.pinnedResources ?? profile?.config.favoriteResources ?? [];
+    const pinned =
+        sources.pinnedResources ?? profile?.config.favoriteResources ?? [];
     for (const favorite of pinned) {
         const target = resolveFavoriteTarget(favorite);
         if (!target) continue;
@@ -491,7 +498,9 @@ export function buildPaletteItems(
             {
                 id: "action-toggle-demo",
                 type: "action",
-                label: actions.isDemoMode ? "Disable demo mode" : "Enable demo mode",
+                label: actions.isDemoMode
+                    ? "Disable demo mode"
+                    : "Enable demo mode",
                 subtitle: "Action",
                 keywords: "demo mode toggle live fake data",
                 icon: Beaker,

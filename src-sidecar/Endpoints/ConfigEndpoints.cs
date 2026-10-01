@@ -33,6 +33,7 @@ public static class ConfigEndpoints
 
         app.MapGet("/api/config/collections", GetCollections);
         app.MapGet("/api/config/collections/store", GetCollectionsStore);
+        app.MapGet("/api/config/collections/location", GetCollectionsLocation);
         app.MapPut("/api/config/collections", SaveCollectionsAsync);
         app.MapPost("/api/config/collections/import", ImportCollectionAsync);
 
@@ -406,6 +407,14 @@ public static class ConfigEndpoints
         }
         return Results.Ok(new CollectionsStoreResponse { SchemaVersion = 1, Collections = collections, ConcurrencyToken = repo.GetConcurrencyToken() });
     }
+
+    /// <summary>Where the collections store lives on disk — surfaced in Settings → API Client
+    /// so users can find (and back up) their collections.json.</summary>
+    internal static IResult GetCollectionsLocation() => Results.Ok(new
+    {
+        path = AppDataPaths.CollectionsJson,
+        directory = Path.GetDirectoryName(AppDataPaths.CollectionsJson),
+    });
 
     internal static IResult GetUserSettings(UserSettingsRepository repo) => Results.Ok(repo.Settings);
 

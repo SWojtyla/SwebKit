@@ -109,6 +109,14 @@ export async function importCurlRequest(
     });
 }
 
+/** Where collections.json lives on disk — shown in Settings → API Client. */
+export async function getCollectionsLocation(): Promise<{
+    path: string;
+    directory: string | null;
+}> {
+    return apiFetch("/api/config/collections/location");
+}
+
 export async function evaluateJsonPath(
     body: string,
     jsonPath: string,

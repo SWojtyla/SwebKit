@@ -652,6 +652,19 @@ public class ConfigEndpointsTests
         Assert.Equal(1, store.SchemaVersion);
     }
 
+    [Fact]
+    public void GetCollectionsLocation_ReturnsCollectionsJsonInsideTheAppDataRoot()
+    {
+        using var sandbox = new AppDataSandbox();
+
+        var result = Assert.IsAssignableFrom<IValueHttpResult>(ConfigEndpoints.GetCollectionsLocation());
+        var json = System.Text.Json.JsonSerializer.Serialize(result.Value);
+
+        // The path the UI shows must point at the sandboxed root, not the real %APPDATA%.
+        Assert.Contains("collections.json", json);
+        Assert.Contains("SwebKit.Tests", json);
+    }
+
     // ── User settings ────────────────────────────────────────────────────────
 
     [Fact]
