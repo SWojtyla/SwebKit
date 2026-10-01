@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import {
+    ArrowLeft,
     CheckCircle2,
     Loader2,
     Play,
@@ -104,6 +106,15 @@ export function AiReportsPanel({
     statusPending,
     runPending,
 }: AiReportsPanelProps) {
+    useEffect(() => {
+        if (!selectedId) return;
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === "Escape") onSelect(null);
+        };
+        document.addEventListener("keydown", handleEscape);
+        return () => document.removeEventListener("keydown", handleEscape);
+    }, [selectedId, onSelect]);
+
     if (isError) {
         return (
             <div
@@ -272,11 +283,42 @@ export function AiReportsPanel({
         );
     };
 
+    if (selected) {
+        return (
+            <div data-testid="ai-reports-panel">
+                <button
+                    type="button"
+                    onClick={() => onSelect(null)}
+                    className="mb-3 flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                    data-testid="ai-report-back"
+                >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back to board
+                </button>
+                {(selected.status ?? "Ready") === "Queued" ? (
+                    <QueuedReportDetail
+                        report={selected}
+                        running={runningKeys.has(cardKey(selected))}
+                        onRun={onRun}
+                        onDiscard={(r) => onSetStatus(r, "Done")}
+                        runPending={runPending}
+                        statusPending={statusPending}
+                    />
+                ) : (
+                    <AiReportDetail
+                        report={selected}
+                        onDiscuss={onDiscuss}
+                        onDelete={onDelete}
+                        discussPending={discussPending}
+                        deletePending={deletePending}
+                    />
+                )}
+            </div>
+        );
+    }
+
     return (
-        <div
-            className="grid items-start gap-4 lg:grid-cols-[1fr_minmax(320px,420px)]"
-            data-testid="ai-reports-panel"
-        >
+        <div data-testid="ai-reports-panel">
             <div
                 className="grid items-start gap-3 sm:grid-cols-3"
                 role="list"
@@ -325,35 +367,12 @@ export function AiReportsPanel({
                 })}
             </div>
 
-            <div className="min-w-0">
-                {selected ? (
-                    (selected.status ?? "Ready") === "Queued" ? (
-                        <QueuedReportDetail
-                            report={selected}
-                            running={runningKeys.has(cardKey(selected))}
-                            onRun={onRun}
-                            onDiscard={(r) => onSetStatus(r, "Done")}
-                            runPending={runPending}
-                            statusPending={statusPending}
-                        />
-                    ) : (
-                        <AiReportDetail
-                            report={selected}
-                            onDiscuss={onDiscuss}
-                            onDelete={onDelete}
-                            discussPending={discussPending}
-                            deletePending={deletePending}
-                        />
-                    )
-                ) : (
-                    <div
-                        className="rounded-lg border border-dashed px-3 py-10 text-center text-sm text-muted-foreground"
-                        data-testid="ai-report-none-selected"
-                    >
-                        Select a card to see the details.
-                    </div>
-                )}
-            </div>
+            <p
+                className="mt-3 text-center text-xs text-muted-foreground"
+                data-testid="ai-report-none-selected"
+            >
+                Select a card to see the details.
+            </p>
         </div>
     );
 }

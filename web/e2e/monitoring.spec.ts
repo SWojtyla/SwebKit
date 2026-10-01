@@ -1246,4 +1246,28 @@ test.describe("Monitoring", () => {
             "0",
         );
     });
+
+    test("opening a card replaces the board with a full-width detail; Back and Escape return", async ({
+        page,
+    }) => {
+        await mockKanbanBoard(page, [queuedReport, cannedReport]);
+        await page.goto("/monitoring?tab=reports");
+
+        await expect(page.getByTestId("ai-reports-col-queued")).toBeVisible();
+        await page.getByTestId(`ai-report-row-${cannedReport.id}`).click();
+
+        await expect(page.getByTestId("ai-report-detail")).toBeVisible();
+        await expect(page.getByTestId("ai-reports-col-queued")).toHaveCount(0);
+        await expect(page.getByTestId("ai-report-back")).toBeVisible();
+
+        await page.keyboard.press("Escape");
+        await expect(page.getByTestId("ai-reports-col-queued")).toBeVisible();
+        await expect(page.getByTestId("ai-report-detail")).toHaveCount(0);
+
+        await page.getByTestId(`ai-report-row-${queuedReport.id}`).click();
+        await expect(page.getByTestId("queued-report-detail")).toBeVisible();
+        await page.getByTestId("ai-report-back").click();
+        await expect(page.getByTestId("ai-reports-col-queued")).toBeVisible();
+        await expect(page.getByTestId("queued-report-detail")).toHaveCount(0);
+    });
 });

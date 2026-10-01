@@ -374,7 +374,7 @@ public sealed class BrunoFolderImporter
         {
             request.Body.Mode = RequestBodyMode.FormData;
             foreach (var (k, v) in ParseKeyValues(formLines))
-                request.Body.FormData.Add(new KeyValuePair<string> { Key = k, Value = v, IsEnabled = true });
+                request.Body.FormData.Add(new FormDataField { Key = k, Value = v, IsEnabled = true });
         }
 
         // GraphQL

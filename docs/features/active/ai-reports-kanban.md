@@ -58,7 +58,9 @@ Two user-requested changes to proactive AI insight reports:
 - `AiReportsPanel` → kanban: three columns; queued cards show the prepared
   context summary + Investigate (spinner while running) / Discard;
   ready/done cards keep the existing detail view; status moves via buttons
-  (no dnd library in the repo).
+  (no dnd library in the repo). Selecting a card swaps the board for a
+  full-width detail (Back button + Escape return; selection stays in the
+  `report` URL param).
 - `MonitoringPage`: wire the `Queued` stage to invalidate the insights
   query and surface "prepared" feed entries.
 
@@ -83,6 +85,7 @@ Two user-requested changes to proactive AI insight reports:
   queueing with zero model calls, probe-failure-still-queues, run→Ready,
   PATCH status validation, legacy mode coercion.
 - `vitest`: 791 passed.
-- e2e `monitoring.spec.ts` kanban section: 4/4 — column grouping/counts,
-  queued detail + Investigate POST, Discard→Done PATCH, Ready↔Done moves.
+- e2e `monitoring.spec.ts`: 40/40 — incl. kanban section 5/5 (column
+  grouping/counts, queued detail + Investigate POST, Discard→Done PATCH,
+  Ready↔Done moves, full-width detail swap with Back/Escape).
 - Aikido scan on all changed files: no findings.

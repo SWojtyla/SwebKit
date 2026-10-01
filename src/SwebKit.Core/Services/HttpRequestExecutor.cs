@@ -256,10 +256,19 @@ public sealed class HttpRequestExecutor(
             case RequestBodyMode.FormData:
                 {
                     var form = new MultipartFormDataContent();
-                    foreach (var kv in body.FormData.Where(f => f.IsEnabled && !string.IsNullOrWhiteSpace(f.Key)))
+                    foreach (var field in body.FormData.Where(f => f.IsEnabled && !string.IsNullOrWhiteSpace(f.Key)))
                     {
-                        var val = substitution.Substitute(kv.Value ?? string.Empty, scope);
-                        form.Add(new StringContent(val), kv.Key);
+                        var val = substitution.Substitute(field.Value ?? string.Empty, scope);
+                        if (field.IsFile && File.Exists(val))
+                        {
+                            var fileContent = new ByteArrayContent(File.ReadAllBytes(val));
+                            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                            form.Add(fileContent, field.Key, Path.GetFileName(val));
+                        }
+                        else
+                        {
+                            form.Add(new StringContent(val), field.Key);
+                        }
                     }
                     return form;
                 }

@@ -120,6 +120,21 @@ public interface IApiClientAgentService
         ApiRequestDetails? details = null,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Upserts a collection variable by key (case-insensitive). <paramref name="generator"/>
+    /// installs a <see cref="VariableGeneratorDefinition"/> (e.g. <c>Guid</c> — regenerated per
+    /// send) and clears the static value; without it the variable becomes a static
+    /// <paramref name="value"/>. Same id-or-name resolution as
+    /// <see cref="CreateRequestAsync"/>: an unmatched name creates a local collection.
+    /// </summary>
+    Task<ApiClientMutationResult> SetCollectionVariableAsync(
+        string collectionIdOrName,
+        string key,
+        string? value = null,
+        VariableGeneratorKind? generator = null,
+        bool enabled = true,
+        CancellationToken ct = default);
+
     /// <summary>Updates an existing request's name, method, URL, and any provided
     /// <paramref name="details"/> fields (headers, query params, body, auth, capture rules,
     /// protocol payloads). A <c>null</c> detail field leaves the existing value untouched.</summary>

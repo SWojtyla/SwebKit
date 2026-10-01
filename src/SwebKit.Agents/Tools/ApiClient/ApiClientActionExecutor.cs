@@ -27,6 +27,7 @@ public sealed class ApiClientActionExecutor : IAgentActionExecutor
         AgentActionType.MoveRequest or
         AgentActionType.RenameFolder or
         AgentActionType.DeleteFolder or
+        AgentActionType.SetCollectionVariable or
         AgentActionType.ExecuteHttpRequest;
 
     public Task<AgentActionResult> ApplyAsync(PendingAgentAction action, CancellationToken ct) => action.Type switch
@@ -36,6 +37,7 @@ public sealed class ApiClientActionExecutor : IAgentActionExecutor
         AgentActionType.DeleteRequest => ApplyDeleteAsync(action, ct),
         AgentActionType.DuplicateRequest => ApplyDuplicateAsync(action, ct),
         AgentActionType.MoveRequest => ApplyMoveAsync(action, ct),
+        AgentActionType.SetCollectionVariable => ApplySetCollectionVariableAsync(action, ct),
         AgentActionType.ExecuteHttpRequest => ApplyExecuteHttpAsync(action, ct),
         // No tool proposes RenameFolder/DeleteFolder yet (ApiClientTools.cs has no folder-rename/
         // delete proposal tool), so these are unreachable today — handled explicitly rather than
@@ -111,6 +113,29 @@ public sealed class ApiClientActionExecutor : IAgentActionExecutor
         return ToResult(result, result.IsSuccess ? "Request moved" : null);
     }
 
+    private async Task<AgentActionResult> ApplySetCollectionVariableAsync(PendingAgentAction action, CancellationToken ct)
+    {
+        if (action.Payload is not { } payload)
+            return Fail("Missing structured payload for set_collection_variable.");
+
+        var collectionId = GetString(payload, "collection_id");
+        var key = GetString(payload, "key");
+        if (string.IsNullOrEmpty(collectionId) || string.IsNullOrEmpty(key))
+            return Fail("Missing 'collection_id' or 'key' in the proposed action's payload.");
+
+        VariableGeneratorKind? generator = null;
+        if (payload.TryGetProperty("generator", out var g) && g.ValueKind == System.Text.Json.JsonValueKind.String
+            && Enum.TryParse<VariableGeneratorKind>(g.GetString(), ignoreCase: true, out var kind))
+            generator = kind;
+
+        var enabled = !payload.TryGetProperty("enabled", out var en)
+            || en.ValueKind != System.Text.Json.JsonValueKind.False;
+
+        var result = await _apiClient.SetCollectionVariableAsync(
+            collectionId, key, GetString(payload, "value"), generator, enabled, ct);
+        return ToResult(result, result.IsSuccess ? $"Variable '{key}' set" : null);
+    }
+
     private async Task<AgentActionResult> ApplyExecuteHttpAsync(PendingAgentAction action, CancellationToken ct)
     {
         var requestId = ExtractRequestIdFromTarget(action.Target);
@@ -178,6 +203,26 @@ public sealed class ApiClientActionExecutor : IAgentActionExecutor
             .ToList();
     }
 
+    /// <summary><c>form_data</c> rows carry an optional <c>type: "file"</c> — a file row's
+    /// <c>value</c> is a local path sent as a real multipart file part (may carry {{vars}}).</summary>
+    private static List<FormDataField>? ParseFormData(System.Text.Json.JsonElement payload)
+    {
+        if (!payload.TryGetProperty("form_data", out var el) || el.ValueKind != System.Text.Json.JsonValueKind.Array)
+            return null;
+
+        return el.EnumerateArray()
+            .Where(i => i.ValueKind == System.Text.Json.JsonValueKind.Object)
+            .Select(i => new FormDataField
+            {
+                Key = GetString(i, "key") ?? "",
+                Value = GetString(i, "value"),
+                IsEnabled = !i.TryGetProperty("enabled", out var en) || en.ValueKind != System.Text.Json.JsonValueKind.False,
+                IsFile = string.Equals(GetString(i, "type"), "file", StringComparison.OrdinalIgnoreCase),
+            })
+            .Where(p => p.Key.Length > 0)
+            .ToList();
+    }
+
     private static RequestBody? ParseBody(System.Text.Json.JsonElement payload)
     {
         RequestBodyMode mode = RequestBodyMode.None;
@@ -185,7 +230,7 @@ public sealed class ApiClientActionExecutor : IAgentActionExecutor
             && Enum.TryParse<RequestBodyMode>(modeEl.GetString(), ignoreCase: true, out mode);
         var raw = GetString(payload, "body");
         var contentType = GetString(payload, "body_content_type");
-        var formData = ParsePairs(payload, "form_data");
+        var formData = ParseFormData(payload);
         var filePath = GetString(payload, "file_path");
 
         if (!hasMode && raw is null && contentType is null && formData is null && filePath is null)

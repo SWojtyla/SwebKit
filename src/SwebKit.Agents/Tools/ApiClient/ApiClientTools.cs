@@ -196,6 +196,7 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
         "Propose a change to API Client requests (create, update, duplicate, or move). Returns a pending action for user confirmation — nothing is applied until confirmed. " +
         "Create and update accept the full request surface, not just name+URL: headers and query_params ([{key,value,enabled}]); a body via body_mode + body/body_content_type/form_data/file_path; auth (bearerToken, apiKey, basic, oauth2, inherited, none); capture_rules that extract response values into variables for request chaining; and GraphQL documents via method GraphQl + graphql_query/variables/operation. " +
         "Every string field may contain {{variable}} references, resolved at send time from collection/environment variables — use them for chaining: have one request's capture_rules write {{token}} from the login response body (e.g. source bodyJsonPath, json_path '$.access_token'), then reference {{token}} in the next request's headers or auth. " +
+        "When a flow needs a variable that does not exist yet (baseUrl, ids, secrets-as-variables), create it FIRST with propose_collection_variable_change — never tell the user to create variables manually; you have the tool. " +
         "Secrets go in auth.credential_secret (stored in the OS credential store on confirm, never in the collection file) or auth.credential_key to reference an existing sw-secret:* key — credential_key also accepts a {{variable}} reference so a captured token can act as the bearer secret. " +
         "For update, any field not supplied is left unchanged; a supplied list replaces the existing one entirely.";
     public ToolKind Kind => ToolKind.Mutate;
@@ -280,12 +281,13 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
             },
             "form_data": {
                 "type": "array",
-                "description": "Form fields when body_mode is formData. May contain {{variables}} in values.",
+                "description": "Multipart form fields when body_mode is formData. May contain {{variables}} in values. A field with type 'file' sends a real file part — its value is a local file path ({{variables}} allowed), not literal text.",
                 "items": {
                     "type": "object",
                     "properties": {
                         "key": { "type": "string" },
                         "value": { "type": "string" },
+                        "type": { "type": "string", "enum": ["text", "file"], "description": "'file' = multipart file upload, value is the local file path." },
                         "enabled": { "type": "boolean" }
                     },
                     "required": ["key"]
@@ -566,6 +568,122 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
                 missing.Add(prefix);
         }
         return missing;
+    }
+}
+
+/// <summary>
+/// Proposes a collection-variable change (set/update/disable). Without this the agent could
+/// reference {{variables}} but never create them — every chained flow stalled on the user
+/// hand-editing the collection (api-client-agent-variables). Pending-confirm like the other
+/// mutations.
+/// </summary>
+public sealed class ProposeCollectionVariableChangeTool : IAgentTool
+{
+    private readonly IApiClientAgentService _apiClient;
+    private readonly IAgentActionCoordinator _coordinator;
+
+    public ProposeCollectionVariableChangeTool(IApiClientAgentService apiClient, IAgentActionCoordinator coordinator)
+    {
+        _apiClient = apiClient;
+        _coordinator = coordinator;
+    }
+
+    public string Name => "propose_collection_variable_change";
+    public string Description =>
+        "Propose setting (or disabling) a collection variable on an API Client collection — returns a pending action for user confirmation. " +
+        "Use for static values (baseUrl, ids) AND generated ones: generator 'guid' mints a fresh GUID on every send — the right choice for per-run ids a later capture_rule then overwrites or references. " +
+        "Collection variables are always in scope for the collection's requests; environment variables are not covered by this tool. " +
+        "collection_id accepts the collection's ID or exact name — an unmatched name creates the collection on confirm. Disabling (enabled=false) keeps the variable for later.";
+    public ToolKind Kind => ToolKind.Mutate;
+    public ToolRisk Risk => ToolRisk.Low;
+
+    private static readonly JsonElement Schema = AgentToolSchema.Parse("""
+    {
+        "type": "object",
+        "properties": {
+            "collection_id": {
+                "type": "string",
+                "description": "ID or exact name of the target collection — call list_api_collections to see what exists. If nothing matches, a new collection with this name is created when the action is confirmed."
+            },
+            "key": {
+                "type": "string",
+                "description": "Variable key — the name requests reference as {{key}}."
+            },
+            "value": {
+                "type": "string",
+                "description": "Static value. Ignored when 'generator' is set — a generator and a static value are mutually exclusive."
+            },
+            "generator": {
+                "type": "string",
+                "enum": ["integer", "decimal", "boolean", "guid", "dateTime", "list", "faker"],
+                "description": "Generate the value at send time instead of storing a static one — e.g. 'guid' for per-run identifiers."
+            },
+            "enabled": {
+                "type": "boolean",
+                "description": "False disables the variable without deleting it."
+            }
+        },
+        "required": ["collection_id", "key"],
+        "additionalProperties": false
+    }
+    """);
+
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
+
+    public JsonElement ParametersSchema => Schema;
+
+    public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
+    {
+        if (!arguments.TryGetProperty("collection_id", out var collId) || collId.GetString() is not { Length: > 0 } collectionRef)
+            return """{"error":"Missing required parameter 'collection_id'."}""";
+        if (!arguments.TryGetProperty("key", out var keyProp) || keyProp.GetString() is not { Length: > 0 } key)
+            return """{"error":"Missing required parameter 'key'."}""";
+
+        var value = arguments.TryGetProperty("value", out var v) ? v.GetString() : null;
+        var generator = arguments.TryGetProperty("generator", out var g) ? g.GetString() : null;
+        var enabled = !arguments.TryGetProperty("enabled", out var en) || en.ValueKind != JsonValueKind.False;
+
+        if (value is null && generator is null && enabled)
+            return """{"error":"Provide 'value' or 'generator' — an enabled variable needs a source."}""";
+        if (value is not null && generator is not null)
+            return """{"error":"'value' and 'generator' are mutually exclusive — pick one."}""";
+        if (generator is not null && !Enum.TryParse<VariableGeneratorKind>(generator, ignoreCase: true, out _))
+            return $$"""{"error":"Unknown generator '{{generator}}'."}""";
+
+        var collections = await _apiClient.GetCollectionsAsync(ct);
+        var match = collections.FirstOrDefault(c =>
+            c.Id == collectionRef ||
+            c.Name.Equals(collectionRef, StringComparison.OrdinalIgnoreCase));
+
+        var actionId = Guid.NewGuid().ToString("N");
+        var sourceDesc = generator is not null ? $"generated ({generator})" : $"'{value ?? ""}'";
+        var action = new PendingAgentAction
+        {
+            Id = actionId,
+            Type = AgentActionType.SetCollectionVariable,
+            Summary = enabled
+                ? $"Set variable '{key}' = {sourceDesc} in '{match?.Name ?? collectionRef}'"
+                : $"Disable variable '{key}' in '{match?.Name ?? collectionRef}'",
+            Target = $"Collection {match?.Name ?? collectionRef}",
+            Risk = AgentActionRisk.Low,
+            Preview = $"Variable: {key}\nCollection: {match?.Name ?? collectionRef}\nSource: {(enabled ? sourceDesc : "(disabled)")}"
+                + (match is null ? $"\nWill be created: collection '{collectionRef}'" : ""),
+            ExpectedFingerprint = null,
+            Payload = arguments.Clone(),
+        };
+
+        _coordinator.RegisterAction(action);
+
+        return JsonSerializer.Serialize(new
+        {
+            action_id = actionId,
+            status = "pending_confirmation",
+            summary = action.Summary,
+            preview = action.Preview,
+            risk = action.Risk.ToString(),
+            expires_at = action.ExpiresAt.ToString("yyyy-MM-dd HH:mm UTC"),
+            message = "Action proposed. User must confirm before it is applied.",
+        });
     }
 }
 

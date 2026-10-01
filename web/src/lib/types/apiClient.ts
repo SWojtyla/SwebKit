@@ -127,8 +127,17 @@ export interface RequestBody {
     mode: RequestBodyMode;
     rawContent: string | null;
     contentType: string | null;
-    formData: KeyValuePair<string>[];
+    formData: FormDataField[];
     filePath: string | null;
+}
+
+/** One multipart form-data row. `isFile` sends `value` (a local path, {{vars}}
+ * allowed) as a real file part instead of a text field. */
+export interface FormDataField {
+    key: string;
+    value: string | null;
+    isEnabled: boolean;
+    isFile?: boolean;
 }
 
 export interface KeyValuePair<T> {

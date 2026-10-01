@@ -139,6 +139,62 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         };
     }
 
+    public async Task<ApiClientMutationResult> SetCollectionVariableAsync(
+        string collectionIdOrName,
+        string key,
+        string? value = null,
+        VariableGeneratorKind? generator = null,
+        bool enabled = true,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = "Variable key is required." };
+
+        var (collection, origin, linkedRootId) = await ResolveCollectionAsync(collectionIdOrName, ct);
+        if (collection is null)
+        {
+            if (LooksLikeGeneratedId(collectionIdOrName))
+                return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Collection '{collectionIdOrName}' not found." };
+
+            collection = await _localRepo.AddCollectionAsync(collectionIdOrName).ConfigureAwait(false);
+            origin = "local";
+            linkedRootId = null;
+        }
+
+        var variable = collection.Variables.FirstOrDefault(v =>
+            v.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
+        if (variable is null)
+        {
+            variable = new CollectionVariable { Key = key };
+            collection.Variables.Add(variable);
+        }
+
+        // A generator and a static value are mutually exclusive: the caller picks one
+        // authoritative source, otherwise a stale generator would keep winning at send time.
+        if (generator is { } kind)
+        {
+            variable.Generator = new VariableGeneratorDefinition { Kind = kind };
+            variable.Value = null;
+        }
+        else
+        {
+            variable.Generator = null;
+            variable.Value = value;
+        }
+        variable.IsEnabled = enabled;
+
+        await PersistAsync(collection, origin, linkedRootId, ct);
+
+        await _events.PublishAsync(new ApiClientDataChanged
+        {
+            CollectionId = collection.Id,
+            RequestId = null,
+            ChangeType = "update"
+        });
+
+        return new ApiClientMutationResult { IsSuccess = true, CollectionId = collection.Id };
+    }
+
     public async Task<ApiClientMutationResult> UpdateRequestAsync(
         string requestId,
         string? name = null,
@@ -196,6 +252,8 @@ public sealed class ApiClientAgentService : IApiClientAgentService
                 Mode = node.Request.Body.Mode,
                 RawContent = node.Request.Body.RawContent,
                 ContentType = node.Request.Body.ContentType,
+                FormData = node.Request.Body.FormData.Select(CopyFormField).ToList(),
+                FilePath = node.Request.Body.FilePath,
             },
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
@@ -479,7 +537,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
                 Mode = details.Body.Mode,
                 RawContent = details.Body.RawContent,
                 ContentType = details.Body.ContentType,
-                FormData = details.Body.FormData.Select(CopyPair).ToList(),
+                FormData = details.Body.FormData.Select(CopyFormField).ToList(),
                 FilePath = details.Body.FilePath,
             };
         if (details.Auth is not null)
@@ -509,6 +567,9 @@ public sealed class ApiClientAgentService : IApiClientAgentService
 
     private static KeyValuePair<string> CopyPair(KeyValuePair<string> p) =>
         new() { Key = p.Key, Value = p.Value, IsEnabled = p.IsEnabled };
+
+    private static FormDataField CopyFormField(FormDataField f) =>
+        new() { Key = f.Key, Value = f.Value, IsEnabled = f.IsEnabled, IsFile = f.IsFile };
 
     /// <summary>This repository persists via <c>collections.json</c> directly — the save endpoint's
     /// secret-stripping never sees it — so a plaintext <see cref="AuthConfig.CredentialSecret"/>

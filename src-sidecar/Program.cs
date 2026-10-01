@@ -234,6 +234,7 @@ builder.Services.AddSingleton<IAgentTool, SearchApiRequestsTool>();
 builder.Services.AddSingleton<IAgentTool, ListApiCollectionsTool>();
 builder.Services.AddSingleton<IAgentTool, GetApiRequestTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApiRequestChangeTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeCollectionVariableChangeTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApiRequestDeleteTool>();
 builder.Services.AddSingleton<IAgentTool, PrepareApiRequestExecutionTool>();
 builder.Services.AddSingleton<IAgentTool, ListSqlConnectionsTool>();

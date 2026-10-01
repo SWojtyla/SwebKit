@@ -203,4 +203,124 @@ public sealed class ApiClientAgentServiceTests : IDisposable
         Assert.Equal(["Tokens"], summary.FolderPaths);
         Assert.Equal(1, summary.RequestCount);
     }
+// ── SetCollectionVariableAsync (api-client-agent-variables) ────────────────
+
+    [Fact]
+    public async Task SetCollectionVariable_NewKey_AddsStaticVariable()
+    {
+        var collection = await _repo.AddCollectionAsync("Sign");
+
+        var result = await _service.SetCollectionVariableAsync(
+            collection.Id, "baseUrl", "https://dev-sign-api.eu");
+
+        Assert.True(result.IsSuccess);
+        var variable = Assert.Single(_repo.Collections.Single(c => c.Id == collection.Id).Variables);
+        Assert.Equal("baseUrl", variable.Key);
+        Assert.Equal("https://dev-sign-api.eu", variable.Value);
+        Assert.Null(variable.Generator);
+        Assert.True(variable.IsEnabled);
+    }
+
+    [Fact]
+    public async Task SetCollectionVariable_ExistingKey_UpdatesInPlace_CaseInsensitive()
+    {
+        var collection = await _repo.AddCollectionAsync("Sign");
+        collection.Variables.Add(new CollectionVariable { Key = "BASEURL", Value = "https://old.test" });
+
+        var result = await _service.SetCollectionVariableAsync(
+            collection.Id, "baseurl", "https://new.test");
+
+        Assert.True(result.IsSuccess);
+        var variables = _repo.Collections.Single(c => c.Id == collection.Id).Variables;
+        var variable = Assert.Single(variables);
+        Assert.Equal("BASEURL", variable.Key); // existing key casing preserved
+        Assert.Equal("https://new.test", variable.Value);
+    }
+
+    [Fact]
+    public async Task SetCollectionVariable_Generator_ClearsStaticValue()
+    {
+        var collection = await _repo.AddCollectionAsync("Sign");
+        collection.Variables.Add(new CollectionVariable { Key = "pkg", Value = "stale-guid" });
+
+        var result = await _service.SetCollectionVariableAsync(
+            collection.Id, "pkg", generator: VariableGeneratorKind.Guid);
+
+        Assert.True(result.IsSuccess);
+        var variable = _repo.Collections.Single(c => c.Id == collection.Id).Variables.Single();
+        Assert.Null(variable.Value);
+        Assert.NotNull(variable.Generator);
+        Assert.Equal(VariableGeneratorKind.Guid, variable.Generator!.Kind);
+    }
+
+    [Fact]
+    public async Task SetCollectionVariable_UnknownName_CreatesCollection()
+    {
+        var result = await _service.SetCollectionVariableAsync(
+            "Sign", "baseUrl", "https://dev-sign-api.eu");
+
+        Assert.True(result.IsSuccess);
+        var collection = Assert.Single(_repo.Collections);
+        Assert.Equal("Sign", collection.Name);
+        Assert.Single(collection.Variables);
+    }
+
+    [Fact]
+    public async Task SetCollectionVariable_GeneratedIdName_Fails()
+    {
+        var result = await _service.SetCollectionVariableAsync(
+            "0123456789abcdef0123456789abcdef", "k", "v");
+
+        Assert.False(result.IsSuccess);
+        Assert.Empty(_repo.Collections);
+    }
+
+    [Fact]
+    public async Task SetCollectionVariable_Disabled_KeepsVariableButDisables()
+    {
+        var collection = await _repo.AddCollectionAsync("Sign");
+
+        await _service.SetCollectionVariableAsync(collection.Id, "x", "1");
+        var result = await _service.SetCollectionVariableAsync(collection.Id, "x", "2", enabled: false);
+
+        Assert.True(result.IsSuccess);
+        var variable = _repo.Collections.Single(c => c.Id == collection.Id).Variables.Single();
+        Assert.False(variable.IsEnabled);
+        Assert.Equal("2", variable.Value);
+    }
+
+    [Fact]
+    public async Task SetCollectionVariable_BlankKey_Fails()
+    {
+        var collection = await _repo.AddCollectionAsync("Sign");
+
+        var result = await _service.SetCollectionVariableAsync(collection.Id, "", "v");
+
+        Assert.False(result.IsSuccess);
+        Assert.Empty(collection.Variables);
+    }
+
+    [Fact]
+    public async Task DuplicateRequest_CopiesFormDataAndFilePath()
+    {
+        var collection = await _repo.AddCollectionAsync("Sign");
+        var created = await _service.CreateRequestAsync(
+            collection.Id, null, "Upload", ApiRequestMethod.Post, "https://x.test/u",
+            new ApiRequestDetails
+            {
+                Body = new RequestBody
+                {
+                    Mode = RequestBodyMode.FormData,
+                    FormData = [new FormDataField { Key = "file", Value = "C:/t.pdf", IsFile = true }],
+                },
+            });
+
+        var dup = await _service.DuplicateRequestAsync(created.RequestId!);
+
+        Assert.True(dup.IsSuccess);
+        var copy = _repo.Collections.Single(c => c.Id == collection.Id).Nodes[1].Request!;
+        var field = Assert.Single(copy.Body.FormData);
+        Assert.True(field.IsFile);
+        Assert.Equal("C:/t.pdf", field.Value);
+    }
 }
