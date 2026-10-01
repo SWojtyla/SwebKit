@@ -1,10 +1,11 @@
-import { Wand2, Minimize2 } from "lucide-react";
+import { FolderOpen, Wand2, Minimize2 } from "lucide-react";
 import type {
     FormDataField,
     HttpRequestEntry,
     RequestBodyMode,
 } from "@/lib/types";
 import { tryPrettifyJson } from "@/lib/pretty-json";
+import { pickFilePath } from "@/lib/tauri-bridge";
 import { BodyCodeEditor } from "./BodyCodeEditor";
 import { VariableInput } from "../VariableInput";
 
@@ -200,6 +201,29 @@ export function BodyPanel({
                                 }
                                 metricsClassName="px-2 py-1 text-sm"
                             />
+                            {field.isFile && (
+                                <button
+                                    type="button"
+                                    title="Browse for a file"
+                                    aria-label={`Browse file for form field ${i + 1}`}
+                                    data-testid={`formdata-browse-${i}`}
+                                    className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                                    onClick={async () => {
+                                        const path = await pickFilePath(
+                                            "Select file to upload",
+                                        );
+                                        if (path) {
+                                            onChange(
+                                                updateFormField(request, i, {
+                                                    value: path,
+                                                }),
+                                            );
+                                        }
+                                    }}
+                                >
+                                    <FolderOpen className="h-3.5 w-3.5" />
+                                </button>
+                            )}
                             <button
                                 className="text-xs text-destructive"
                                 onClick={() =>

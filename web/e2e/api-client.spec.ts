@@ -1613,19 +1613,29 @@ test.describe("API Client", () => {
         const demoHandle = page.getByTestId("drag-handle-__demo__samples");
         await expect(demoHandle).toHaveAttribute("draggable", "false");
     });
-test('form-data body rows support text and file fields', async ({ page }) => {
+    test("form-data body rows support text and file fields", async ({
+        page,
+    }) => {
         await page.getByTestId("add-collection-button").click();
         await page.getByTestId("name-dialog-input").fill("FormData Collection");
         await page.getByTestId("name-dialog-confirm").click();
-        await page.getByTestId(/collection-root-/).first().click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
 
         await page.getByTestId("add-request-button").click();
         await page.getByTestId("name-dialog-input").fill("Upload");
         await page.getByTestId("name-dialog-confirm").click();
-        await page.getByTestId(/collection-node-Request-/).first().click();
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .first()
+            .click();
 
         await page.getByTestId("request-tab-body").click();
-        await page.getByTestId("request-body-mode-select").selectOption("FormData");
+        await page
+            .getByTestId("request-body-mode-select")
+            .selectOption("FormData");
 
         await page.getByTestId("add-formdata-field-button").click();
         await expect(page.getByTestId("formdata-row-0")).toBeVisible();
@@ -1634,18 +1644,33 @@ test('form-data body rows support text and file fields', async ({ page }) => {
         // text row: value placeholder, no filename semantics
         await expect(page.getByTestId("formdata-type-0")).toHaveValue("text");
 
-        // toggle to file: the input becomes a file-path field
+        // toggle to file: the input becomes a file-path field with a browse button
         await page.getByTestId("formdata-type-0").selectOption("file");
         await expect(page.getByTestId("formdata-value-0")).toHaveAttribute(
             "placeholder",
             /Path to file/,
         );
+        await expect(page.getByTestId("formdata-browse-0")).toBeVisible();
 
-        // toggle back to text restores the value placeholder
+        // Browse opens the OS picker (web fallback: file input → filechooser)
+        const chooserPromise = page.waitForEvent("filechooser");
+        await page.getByTestId("formdata-browse-0").click();
+        const chooser = await chooserPromise;
+        await chooser.setFiles({
+            name: "upload-e2e.txt",
+            mimeType: "text/plain",
+            buffer: Buffer.from("e2e"),
+        });
+        await expect(page.getByTestId("formdata-value-0")).toHaveValue(
+            "upload-e2e.txt",
+        );
+
+        // toggle back to text restores the value placeholder and drops browse
         await page.getByTestId("formdata-type-0").selectOption("text");
         await expect(page.getByTestId("formdata-value-0")).toHaveAttribute(
             "placeholder",
             "Value",
         );
+        await expect(page.getByTestId("formdata-browse-0")).toHaveCount(0);
     });
 });

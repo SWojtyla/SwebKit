@@ -32,7 +32,9 @@ value?, generator?, enabled)` — id-or-name resolution and auto-collection
   bare `KeyValuePair<string>` in `RequestBody.FormData`; when `IsFile` the value
   is a local path (post-`{{var}}` substitution) and the executor sends
   `ByteArrayContent` + filename so text and file parts can mix in one multipart.
-- `BodyPanel`: per-row Text/File toggle + path input.
+- `BodyPanel`: per-row Text/File toggle + path input + Browse button wired to
+  the native `pick_file` Tauri command (`pickFilePath` bridge; browser fallback
+  uses a hidden file input).
 - `propose_api_request_change`: `form_data` items accept `type: "text"|"file"`;
   description steers toward `propose_collection_variable_change` + capture_rules
   chaining instead of deferring to the user.
@@ -73,8 +75,8 @@ value?, generator?, enabled)` — id-or-name resolution and auto-collection
 - `dotnet test` Sidecar: 842 passed, 2 flaky SB park/restore timing failures
   (pass in isolation; unrelated area).
 - `vitest`: 798 passed · `tsc --noEmit` clean · eslint clean.
-- e2e `api-client.spec.ts`: new form-data text/file toggle test passes.
+- e2e `api-client.spec.ts`: new form-data test passes — text/file toggle,
+  browse button via `filechooser`, placeholder switch.
 - Aikido: findings are all false positives for a REST client (user-chosen file
   paths and request URLs are the feature; interpolated summary strings are not
   SQL).
-

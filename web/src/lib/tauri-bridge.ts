@@ -26,6 +26,27 @@ export async function writeClipboard(text: string): Promise<void> {
 
 // ── File Dialogs ─────────────────────────────────────────────────────────────
 
+/**
+ * Opens the OS file picker and returns the selected path only — no content read.
+ * Used for fields the *sidecar* reads at execution time (multipart file parts,
+ * binary bodies), where the frontend only needs the path string.
+ * Browser fallback resolves the file name only (browsers can't see real paths).
+ */
+export async function pickFilePath(title?: string): Promise<string | null> {
+    if (isTauri()) {
+        return invoke<string | null>("pick_file", {
+            title: title ?? null,
+        });
+    }
+    return new Promise((resolve) => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.onchange = () => resolve(input.files?.[0]?.name ?? null);
+        input.oncancel = () => resolve(null);
+        input.click();
+    });
+}
+
 export async function pickFileWithContent(
     title?: string,
 ): Promise<{ path: string; content: string } | null> {
