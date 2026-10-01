@@ -10,7 +10,9 @@ namespace SwebKit.Agents.Tests;
 internal sealed class FakeApiClientAgentService : IApiClientAgentService
 {
     public (string CollectionId, string? FolderPath, string Name, ApiRequestMethod Method, string Url)? LastCreate { get; private set; }
+    public ApiRequestDetails? LastCreateDetails { get; private set; }
     public (string RequestId, string? Name, ApiRequestMethod? Method, string? Url)? LastUpdate { get; private set; }
+    public ApiRequestDetails? LastUpdateDetails { get; private set; }
     public string? LastDuplicateRequestId { get; private set; }
     public (string RequestId, string? FolderPath, int? NewIndex)? LastMove { get; private set; }
     public string? LastDeleteRequestId { get; private set; }
@@ -26,15 +28,17 @@ internal sealed class FakeApiClientAgentService : IApiClientAgentService
     public Task<ApiRequestSnapshot?> GetRequestAsync(string requestId, CancellationToken ct = default) =>
         Task.FromResult(SnapshotToReturn);
 
-    public Task<ApiClientMutationResult> CreateRequestAsync(string collectionId, string? folderPath, string name, ApiRequestMethod method, string url, CancellationToken ct = default)
+    public Task<ApiClientMutationResult> CreateRequestAsync(string collectionId, string? folderPath, string name, ApiRequestMethod method, string url, ApiRequestDetails? details = null, CancellationToken ct = default)
     {
         LastCreate = (collectionId, folderPath, name, method, url);
+        LastCreateDetails = details;
         return Task.FromResult(NextResult);
     }
 
-    public Task<ApiClientMutationResult> UpdateRequestAsync(string requestId, string? name = null, ApiRequestMethod? method = null, string? url = null, CancellationToken ct = default)
+    public Task<ApiClientMutationResult> UpdateRequestAsync(string requestId, string? name = null, ApiRequestMethod? method = null, string? url = null, ApiRequestDetails? details = null, CancellationToken ct = default)
     {
         LastUpdate = (requestId, name, method, url);
+        LastUpdateDetails = details;
         return Task.FromResult(NextResult);
     }
 
@@ -66,6 +70,17 @@ internal sealed class FakeApiClientAgentService : IApiClientAgentService
 
     public Task<IReadOnlyList<ApiCollectionSummary>> GetCollectionsAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<ApiCollectionSummary>>(CollectionsToReturn);
+}
+
+/// <summary>Minimal in-memory credential store for asserting where auth secrets land.</summary>
+internal sealed class FakeCredentialStore : ICredentialStore
+{
+    private readonly Dictionary<string, string> _secrets = [];
+
+    public void Save(string key, string secret) => _secrets[key] = secret;
+    public string? Get(string key) => _secrets.TryGetValue(key, out var v) ? v : null;
+    public void Delete(string key) => _secrets.Remove(key);
+    public IReadOnlyList<string> ListKeys(string prefix = "") => _secrets.Keys.Where(k => k.StartsWith(prefix)).ToList();
 }
 
 public class ApiClientActionExecutorTests
@@ -117,6 +132,102 @@ public class ApiClientActionExecutorTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(("c1", "Auth", "Get token", ApiRequestMethod.Post, "https://api.example.com/token"), apiClient.LastCreate);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_Create_ForwardsFullRequestDetails_FromPayload()
+    {
+        var apiClient = new FakeApiClientAgentService();
+        var executor = new ApiClientActionExecutor(apiClient);
+        var action = ActionWithPayload(AgentActionType.CreateRequest, "Collection c1", new
+        {
+            operation = "create",
+            collection_id = "c1",
+            name = "Get token",
+            method = "Post",
+            url = "https://api.example.com/token",
+            headers = new[] { new { key = "Accept", value = "application/json" } },
+            query_params = new[] { new { key = "v", value = "2" } },
+            body_mode = "json",
+            body = """{"user":"{{username}}"}""",
+            capture_rules = new[]
+            {
+                new { target_variable = "token", source = "bodyJsonPath", json_path = "$.access_token" },
+            },
+        });
+
+        var result = await executor.ApplyAsync(action, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var details = Assert.IsType<ApiRequestDetails>(apiClient.LastCreateDetails);
+        var header = Assert.Single(details.Headers!);
+        Assert.Equal("Accept", header.Key);
+        Assert.Equal("application/json", header.Value);
+        Assert.Equal("v", Assert.Single(details.QueryParams!).Key);
+        Assert.Equal(RequestBodyMode.Json, details.Body!.Mode);
+        Assert.Equal("""{"user":"{{username}}"}""", details.Body.RawContent);
+        Assert.Equal("application/json", details.Body.ContentType);
+        var rule = Assert.Single(details.CaptureRules!);
+        Assert.Equal("token", rule.TargetVariable);
+        Assert.Equal(CaptureSource.BodyJsonPath, rule.Source);
+        Assert.Equal("$.access_token", rule.JsonPath);
+        Assert.Equal("collection", rule.TargetScope);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_Create_CredentialSecret_IsStoredInCredentialStore_NotInAuthConfig()
+    {
+        var apiClient = new FakeApiClientAgentService();
+        var credentials = new FakeCredentialStore();
+        var executor = new ApiClientActionExecutor(apiClient, credentials);
+        var action = ActionWithPayload(AgentActionType.CreateRequest, "Collection c1", new
+        {
+            operation = "create",
+            collection_id = "c1",
+            name = "Secure call",
+            auth = new { type = "bearerToken", credential_secret = "hunter2" },
+        });
+
+        var result = await executor.ApplyAsync(action, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var auth = apiClient.LastCreateDetails!.Auth!;
+        Assert.Equal(AuthType.BearerToken, auth.Type);
+        Assert.StartsWith("sw-secret:", auth.CredentialKey);
+        // collections.json only ever sees the generated key — the plaintext lives in the OS store.
+        Assert.Equal("hunter2", credentials.Get(auth.CredentialKey!));
+        Assert.Null(auth.CredentialSecret);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_Update_ForwardsDetailFields_FromPayload()
+    {
+        var apiClient = new FakeApiClientAgentService();
+        var executor = new ApiClientActionExecutor(apiClient);
+        var action = ActionWithPayload(AgentActionType.UpdateRequest, "Request 'Old' (r1)", new
+        {
+            operation = "update",
+            request_id = "r1",
+            capture_rules = new[]
+            {
+                new { target_variable = "etag", source = "responseHeader", header_name = "ETag" },
+            },
+            auth = new { type = "apiKey", api_key_param_name = "X-Api-Key", credential_key = "sw-secret:existing" },
+        });
+
+        var result = await executor.ApplyAsync(action, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var details = Assert.IsType<ApiRequestDetails>(apiClient.LastUpdateDetails);
+        var rule = Assert.Single(details.CaptureRules!);
+        Assert.Equal("etag", rule.TargetVariable);
+        Assert.Equal(CaptureSource.ResponseHeader, rule.Source);
+        Assert.Equal("ETag", rule.HeaderName);
+        Assert.Equal(AuthType.ApiKey, details.Auth!.Type);
+        Assert.Equal("X-Api-Key", details.Auth.ApiKeyParamName);
+        // A referenced existing key is passed through untouched — no new secret is minted.
+        Assert.Equal("sw-secret:existing", details.Auth.CredentialKey);
+        Assert.Null(details.Headers); // absent means "leave untouched", not "clear"
     }
 
     [Fact]

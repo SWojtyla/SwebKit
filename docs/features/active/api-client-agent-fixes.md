@@ -72,13 +72,24 @@ Three reported problems, one missing feature:
       `isExpanded: true`) now join `expandedIds` on first sight — previously only
       collection roots were added on update, so imported paths stayed collapsed.
       User-collapsed folders keep their state via a seen-ids ref.
+- [x] `propose_api_request_change`: full request surface on create/update —
+      headers, query params, bodies (json/xml/text/form-data/binary), auth
+      (bearer/apiKey/basic/oauth2/inherited), GraphQL documents, WebSocket
+      subprotocol, and `capture_rules` for request chaining (extract →
+      `{{variable}}` → reference in a later request). `credential_secret` is
+      parked in the OS credential store under a generated `sw-secret:` key at
+      apply time; the collection file only ever holds the key.
+      `IApiClientAgentService` create/update take an `ApiRequestDetails` bag;
+      `get_api_request` now reports capture rules.
 
 ## Test plan
 
 - `dotnet test tests/SwebKit.Agents.Tests` — create-by-name, auto-create
-  collection + folder path, list tool output. (374 passed)
-- `dotnet test tests/SwebKit.Core.Tests` — `ImportCurl` already covered. (948
-  passed)
+  collection + folder path, list tool output, request-details parsing and
+  credential-secret parking in the executor. (377 passed)
+- `dotnet test tests/SwebKit.Core.Tests` — `ImportCurl` plus
+  `ApiRequestDetails` persistence/replace semantics and credential-secret
+  stripping. (951 passed)
 - `dotnet test tests/SwebKit.Sidecar.Tests` — endpoint happy + failure paths.
   (843 passed)
 - `cd web && npm run build && npx vitest run` — build clean, 798 tests passed.

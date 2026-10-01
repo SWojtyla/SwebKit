@@ -160,6 +160,15 @@ public sealed class GetApiRequestTool : IAgentTool
             body_content_type = snapshot.BodyContentType,
             body_preview = snapshot.BodyPreview,
             auth_type = snapshot.AuthType,
+            capture_rules = snapshot.CaptureRules.Select(r => new
+            {
+                target_variable = r.TargetVariable,
+                target_scope = r.TargetScope,
+                source = r.Source.ToString(),
+                json_path = r.JsonPath,
+                header_name = r.HeaderName,
+                enabled = r.IsEnabled,
+            }),
             updated_at = snapshot.UpdatedAt.ToString("yyyy-MM-dd HH:mm UTC"),
         };
 
@@ -183,7 +192,12 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
     }
 
     public string Name => "propose_api_request_change";
-    public string Description => "Propose a change to API requests (create, update, duplicate, or move). Returns a pending action for user confirmation. No changes are applied until confirmed.";
+    public string Description =>
+        "Propose a change to API Client requests (create, update, duplicate, or move). Returns a pending action for user confirmation — nothing is applied until confirmed. " +
+        "Create and update accept the full request surface, not just name+URL: headers and query_params ([{key,value,enabled}]); a body via body_mode + body/body_content_type/form_data/file_path; auth (bearerToken, apiKey, basic, oauth2, inherited, none); capture_rules that extract response values into variables for request chaining; and GraphQL documents via method GraphQl + graphql_query/variables/operation. " +
+        "Every string field may contain {{variable}} references, resolved at send time from collection/environment variables — use them for chaining: have one request's capture_rules write {{token}} from the login response body (e.g. source bodyJsonPath, json_path '$.access_token'), then reference {{token}} in the next request's headers or auth. " +
+        "Secrets go in auth.credential_secret (stored in the OS credential store on confirm, never in the collection file) or auth.credential_key to reference an existing sw-secret:* key — credential_key also accepts a {{variable}} reference so a captured token can act as the bearer secret. " +
+        "For update, any field not supplied is left unchanged; a supplied list replaces the existing one entirely.";
     public ToolKind Kind => ToolKind.Mutate;
     public ToolRisk Risk => ToolRisk.Low;
 
@@ -214,16 +228,131 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
             },
             "method": {
                 "type": "string",
-                "enum": ["Get", "Post", "Put", "Patch", "Delete", "Head", "Options"],
-                "description": "HTTP method (for create, update)."
+                "enum": ["Get", "Post", "Put", "Patch", "Delete", "Head", "Options", "GraphQl", "WebSocket"],
+                "description": "Request method (for create, update). GraphQl and WebSocket use their own payload fields instead of a body."
             },
             "url": {
                 "type": "string",
-                "description": "Request URL (for create, update)."
+                "description": "Request URL (for create, update). May contain {{variables}}."
             },
             "new_index": {
                 "type": "integer",
                 "description": "Target position for move (0-based)."
+            },
+            "headers": {
+                "type": "array",
+                "description": "HTTP headers (for create, update). Replaces the whole list on update.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string" },
+                        "value": { "type": "string", "description": "May contain {{variables}}." },
+                        "enabled": { "type": "boolean" }
+                    },
+                    "required": ["key"]
+                }
+            },
+            "query_params": {
+                "type": "array",
+                "description": "Query parameters (for create, update). Replaces the whole list on update.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string" },
+                        "value": { "type": "string", "description": "May contain {{variables}}." },
+                        "enabled": { "type": "boolean" }
+                    },
+                    "required": ["key"]
+                }
+            },
+            "body_mode": {
+                "type": "string",
+                "enum": ["none", "json", "xml", "text", "formData", "binary"],
+                "description": "Body mode (for create, update). Pairs with body / form_data / file_path."
+            },
+            "body": {
+                "type": "string",
+                "description": "Raw body content for json/xml/text modes. May contain {{variables}}."
+            },
+            "body_content_type": {
+                "type": "string",
+                "description": "Content-Type for the raw body; defaults per body_mode (application/json, application/xml, text/plain)."
+            },
+            "form_data": {
+                "type": "array",
+                "description": "Form fields when body_mode is formData. May contain {{variables}} in values.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string" },
+                        "value": { "type": "string" },
+                        "enabled": { "type": "boolean" }
+                    },
+                    "required": ["key"]
+                }
+            },
+            "file_path": {
+                "type": "string",
+                "description": "Local file path for binary uploads (body_mode = binary)."
+            },
+            "auth": {
+                "type": "object",
+                "description": "Auth config (for create, update). Omit to inherit from folder/collection. Never put a plaintext secret in credential_key — use credential_secret.",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": ["none", "inherited", "bearerToken", "apiKey", "basic", "oauth2"]
+                    },
+                    "credential_key": {
+                        "type": "string",
+                        "description": "Existing credential-store key (sw-secret:*) to reuse, or a {{variable}} reference resolving to the secret (e.g. a token captured by another request's capture_rules)."
+                    },
+                    "credential_secret": {
+                        "type": "string",
+                        "description": "Plaintext secret (token/password/api key/client secret). Stored in the OS credential store under a generated key on confirm — never written into the collection file."
+                    },
+                    "api_key_param_name": { "type": "string", "description": "Header or query-param name for apiKey auth." },
+                    "api_key_location": { "type": "string", "enum": ["header", "queryParam"] },
+                    "basic_username": { "type": "string" },
+                    "oauth2_client_id": { "type": "string" },
+                    "oauth2_grant_type": { "type": "string", "enum": ["clientCredentials", "authorizationCode"] },
+                    "oauth2_token_url": { "type": "string" },
+                    "oauth2_auth_url": { "type": "string", "description": "Authorization endpoint (authorizationCode grant only)." },
+                    "oauth2_scopes": { "type": "string", "description": "Space-separated scopes." }
+                },
+                "required": ["type"]
+            },
+            "capture_rules": {
+                "type": "array",
+                "description": "Post-response capture rules (for create, update) — the request-chaining mechanism. Each rule extracts a value from the response and stores it in a variable that later requests reference as {{variable}}.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "target_variable": { "type": "string", "description": "Variable key the captured value is stored under." },
+                        "target_scope": { "type": "string", "description": "'collection' (default) stores it as a collection variable; any other value is treated as an environment name." },
+                        "source": { "type": "string", "enum": ["bodyJsonPath", "responseHeader", "statusCode"], "description": "What to extract from. Default bodyJsonPath." },
+                        "json_path": { "type": "string", "description": "JSONPath into the response body, e.g. '$.access_token' (source = bodyJsonPath)." },
+                        "header_name": { "type": "string", "description": "Response header name (source = responseHeader)." },
+                        "enabled": { "type": "boolean" }
+                    },
+                    "required": ["target_variable"]
+                }
+            },
+            "graphql_query": {
+                "type": "string",
+                "description": "GraphQL query/mutation document (method = GraphQl)."
+            },
+            "graphql_variables": {
+                "type": "string",
+                "description": "GraphQL variables as a JSON string (method = GraphQl)."
+            },
+            "graphql_operation": {
+                "type": "string",
+                "description": "Operation name to run when the document defines several (method = GraphQl)."
+            },
+            "ws_sub_protocol": {
+                "type": "string",
+                "description": "WebSocket subprotocol sent in the upgrade header (method = WebSocket)."
             }
         },
         "required": ["operation"],
@@ -284,6 +413,7 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
                 target = $"Collection {match?.Name ?? collectionRef}" + (folderPath is not null ? $"/{folderPath}" : "");
                 summary = $"Create request '{name}' ({method} {url})";
                 preview = $"Name: {name}\nMethod: {method}\nURL: {url}\nLocation: {target}"
+                    + DetailLines(arguments)
                     + (willCreate.Count > 0 ? $"\nWill be created: {string.Join("; ", willCreate)}" : "");
                 break;
             }
@@ -303,6 +433,9 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
                 if (arguments.TryGetProperty("name", out var n) && n.GetString() is { } newName) changes.Add($"name: {snapshot.Name} → {newName}");
                 if (arguments.TryGetProperty("method", out var m) && Enum.TryParse<ApiRequestMethod>(m.GetString(), out var newMethod)) changes.Add($"method: {snapshot.Method} → {newMethod}");
                 if (arguments.TryGetProperty("url", out var u) && u.GetString() is { } newUrl) changes.Add($"url: {snapshot.Url} → {newUrl}");
+                foreach (var (prop, label) in DetailLabels)
+                    if (arguments.TryGetProperty(prop, out _))
+                        changes.Add($"{label}: (replaced)");
 
                 summary = $"Update request '{snapshot.Name}': {string.Join(", ", changes)}";
                 preview = $"Changes:\n{string.Join("\n", changes)}";
@@ -374,6 +507,48 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
             expires_at = action.ExpiresAt.ToString("yyyy-MM-dd HH:mm UTC"),
             message = "Action proposed. User must confirm before it is applied.",
         });
+    }
+
+    /// <summary>Detail fields the confirmation card summarizes beyond name/method/url —
+    /// (payload property, human label) pairs shared by the create and update previews.</summary>
+    private static readonly (string Prop, string Label)[] DetailLabels =
+    [
+        ("headers", "headers"),
+        ("query_params", "query params"),
+        ("body_mode", "body"),
+        ("auth", "auth"),
+        ("capture_rules", "capture rules"),
+        ("graphql_query", "GraphQL document"),
+        ("ws_sub_protocol", "WebSocket subprotocol"),
+    ];
+
+    /// <summary>Builds the extra preview lines describing which detail fields a proposal carries,
+    /// so the confirm card shows e.g. "capture rules: 2" rather than looking like a bare URL
+    /// request. Never echoes secret values — auth is described by type only.</summary>
+    private static string DetailLines(JsonElement arguments)
+    {
+        var lines = new List<string>();
+        if (TryGetArray(arguments, "headers", out var headers)) lines.Add($"Headers: {headers.GetArrayLength()}");
+        if (TryGetArray(arguments, "query_params", out var qp)) lines.Add($"Query params: {qp.GetArrayLength()}");
+        if (arguments.TryGetProperty("body_mode", out var bm) && bm.GetString() is { } bodyMode) lines.Add($"Body: {bodyMode}");
+        if (arguments.TryGetProperty("auth", out var auth) && auth.TryGetProperty("type", out var at)) lines.Add($"Auth: {at.GetString()}");
+        if (TryGetArray(arguments, "capture_rules", out var captures))
+        {
+            var targets = captures.EnumerateArray()
+                .Select(r => r.TryGetProperty("target_variable", out var tv) ? tv.GetString() : null)
+                .Where(t => t is not null);
+            lines.Add($"Capture rules: {captures.GetArrayLength()}{(targets.Any() ? $" → {{{{{string.Join("}}, {{", targets)}}}}}" : "")}");
+        }
+        if (arguments.TryGetProperty("graphql_query", out _)) lines.Add("GraphQL document provided");
+        if (arguments.TryGetProperty("ws_sub_protocol", out var ws)) lines.Add($"WebSocket subprotocol: {ws.GetString()}");
+
+        return lines.Count == 0 ? "" : "\n" + string.Join("\n", lines);
+    }
+
+    private static bool TryGetArray(JsonElement arguments, string property, out JsonElement array)
+    {
+        array = default;
+        return arguments.TryGetProperty(property, out array) && array.ValueKind == JsonValueKind.Array;
     }
 
     /// <summary>Path prefixes of <paramref name="folderPath"/> with no existing folder, e.g. a path

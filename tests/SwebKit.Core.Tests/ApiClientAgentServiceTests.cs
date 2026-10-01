@@ -1,3 +1,4 @@
+using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
 using SwebKit.Core.Services;
@@ -110,6 +111,81 @@ public sealed class ApiClientAgentServiceTests : IDisposable
         Assert.False(result.IsSuccess);
         Assert.Contains("not found", result.ErrorMessage);
         Assert.Empty(_repo.Collections);
+    }
+
+    [Fact]
+    public async Task CreateRequest_WithDetails_PersistsHeadersBodyAuthAndCaptureRules()
+    {
+        var collection = await _repo.AddCollectionAsync("Auth API");
+
+        var result = await _service.CreateRequestAsync(
+            collection.Id, null, "Get token", ApiRequestMethod.Post, "https://x.test/token",
+            new ApiRequestDetails
+            {
+                Headers = [new KeyValuePair<string> { Key = "Accept", Value = "application/json" }],
+                QueryParams = [new KeyValuePair<string> { Key = "v", Value = "2" }],
+                Body = new RequestBody { Mode = RequestBodyMode.Json, RawContent = """{"u":"{{user}}"}""", ContentType = "application/json" },
+                Auth = new AuthConfig { Type = AuthType.BearerToken, CredentialKey = "{{token}}" },
+                CaptureRules =
+                [
+                    new CaptureRule { TargetVariable = "token", Source = CaptureSource.BodyJsonPath, JsonPath = "$.access_token" },
+                ],
+            });
+
+        Assert.True(result.IsSuccess);
+        var request = _repo.Collections.Single(c => c.Id == collection.Id).Nodes[0].Request!;
+        Assert.Equal("Accept", Assert.Single(request.Headers).Key);
+        Assert.Equal("v", Assert.Single(request.QueryParams).Key);
+        Assert.Equal(RequestBodyMode.Json, request.Body.Mode);
+        Assert.Equal("""{"u":"{{user}}"}""", request.Body.RawContent);
+        Assert.Equal(AuthType.BearerToken, request.Auth!.Type);
+        Assert.Equal("{{token}}", request.Auth.CredentialKey);
+        var rule = Assert.Single(request.CaptureRules);
+        Assert.Equal("token", rule.TargetVariable);
+        Assert.False(string.IsNullOrEmpty(rule.Id)); // each rule gets a stable id
+    }
+
+    [Fact]
+    public async Task CreateRequest_AuthWithCredentialSecret_NeverPersistsThePlaintext()
+    {
+        var collection = await _repo.AddCollectionAsync("Auth API");
+
+        await _service.CreateRequestAsync(
+            collection.Id, null, "r", ApiRequestMethod.Get, "https://x.test",
+            new ApiRequestDetails
+            {
+                Auth = new AuthConfig { Type = AuthType.BearerToken, CredentialKey = "sw-secret:k", CredentialSecret = "hunter2" },
+            });
+
+        var request = _repo.Collections.Single(c => c.Id == collection.Id).Nodes[0].Request!;
+        Assert.Null(request.Auth!.CredentialSecret);
+    }
+
+    [Fact]
+    public async Task UpdateRequest_WithDetails_ReplacesOnlyProvidedFields()
+    {
+        var collection = await _repo.AddCollectionAsync("Auth API");
+        await _service.CreateRequestAsync(
+            collection.Id, null, "r", ApiRequestMethod.Get, "https://x.test",
+            new ApiRequestDetails
+            {
+                Headers = [new KeyValuePair<string> { Key = "X-Keep", Value = "1" }],
+                CaptureRules = [new CaptureRule { TargetVariable = "a" }],
+            });
+        var requestId = _repo.Collections.Single(c => c.Id == collection.Id).Nodes[0].Request!.Id;
+
+        var result = await _service.UpdateRequestAsync(
+            requestId,
+            details: new ApiRequestDetails
+            {
+                // Capture rules replaced; headers left untouched.
+                CaptureRules = [new CaptureRule { TargetVariable = "b", Source = CaptureSource.StatusCode }],
+            });
+
+        Assert.True(result.IsSuccess);
+        var request = _repo.Collections.Single(c => c.Id == collection.Id).Nodes[0].Request!;
+        Assert.Equal("X-Keep", Assert.Single(request.Headers).Key);
+        Assert.Equal("b", Assert.Single(request.CaptureRules).TargetVariable);
     }
 
     [Fact]

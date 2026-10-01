@@ -22,7 +22,30 @@ public sealed class ApiRequestSnapshot
     public string? BodyContentType { get; init; }
     public string? BodyPreview { get; init; }
     public string? AuthType { get; init; }
+    /// <summary>Response-capture rules on the request — the chaining mechanism that writes
+    /// response values (body JSONPath, headers, status) into <c>{{variables}}</c>.</summary>
+    public IReadOnlyList<CaptureRule> CaptureRules { get; init; } = [];
     public DateTimeOffset UpdatedAt { get; init; }
+}
+
+/// <summary>
+/// Optional request details beyond the identity/method/URL triplet. On create, every provided
+/// value lands on the new request; on update, a non-<c>null</c> field replaces the existing
+/// value wholesale (lists are not merged). <see cref="AuthConfig.CredentialSecret"/> must
+/// never arrive on <see cref="Auth"/> — callers resolve plaintext secrets into a
+/// credential-store key first.
+/// </summary>
+public sealed class ApiRequestDetails
+{
+    public IReadOnlyList<KeyValuePair<string>>? Headers { get; init; }
+    public IReadOnlyList<KeyValuePair<string>>? QueryParams { get; init; }
+    public RequestBody? Body { get; init; }
+    public AuthConfig? Auth { get; init; }
+    public IReadOnlyList<CaptureRule>? CaptureRules { get; init; }
+    public string? GraphQlQuery { get; init; }
+    public string? GraphQlVariables { get; init; }
+    public string? GraphQlSelectedOperation { get; init; }
+    public string? WsSubProtocol { get; init; }
 }
 
 /// <summary>
@@ -94,14 +117,18 @@ public interface IApiClientAgentService
         string name,
         ApiRequestMethod method,
         string url,
+        ApiRequestDetails? details = null,
         CancellationToken ct = default);
 
-    /// <summary>Updates an existing request's name, method, URL, headers, query params, or body.</summary>
+    /// <summary>Updates an existing request's name, method, URL, and any provided
+    /// <paramref name="details"/> fields (headers, query params, body, auth, capture rules,
+    /// protocol payloads). A <c>null</c> detail field leaves the existing value untouched.</summary>
     Task<ApiClientMutationResult> UpdateRequestAsync(
         string requestId,
         string? name = null,
         ApiRequestMethod? method = null,
         string? url = null,
+        ApiRequestDetails? details = null,
         CancellationToken ct = default);
 
     /// <summary>Duplicates an existing request with "(copy)" suffix.</summary>

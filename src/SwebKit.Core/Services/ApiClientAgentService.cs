@@ -78,6 +78,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         string name,
         ApiRequestMethod method,
         string url,
+        ApiRequestDetails? details = null,
         CancellationToken ct = default)
     {
         var (collection, origin, linkedRootId) = await ResolveCollectionAsync(collectionIdOrName, ct);
@@ -102,6 +103,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
+        ApplyDetails(request, details);
 
         var node = new ApiCollectionNode
         {
@@ -142,6 +144,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         string? name = null,
         ApiRequestMethod? method = null,
         string? url = null,
+        ApiRequestDetails? details = null,
         CancellationToken ct = default)
     {
         var (collection, origin, linkedRootId) = await FindCollectionByRequestAsync(requestId, ct);
@@ -155,6 +158,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         if (name is not null) { node.Request.Name = name; node.Name = name; }
         if (method is not null) node.Request.Method = method.Value;
         if (url is not null) node.Request.Url = url;
+        ApplyDetails(node.Request, details);
         node.Request.UpdatedAt = DateTimeOffset.UtcNow;
 
         await PersistAsync(collection, origin, linkedRootId, ct);
@@ -457,6 +461,74 @@ public sealed class ApiClientAgentService : IApiClientAgentService
     private static bool LooksLikeGeneratedId(string value) =>
         value.Length == 32 && value.All(Uri.IsHexDigit);
 
+    /// <summary>Applies the optional detail fields onto a request — non-null fields replace
+    /// existing values, with lists swapping wholesale rather than merging so "clear the headers"
+    /// is expressible as an empty list. Null fields are left untouched (create starts from
+    /// defaults anyway).</summary>
+    private static void ApplyDetails(HttpRequestEntry request, ApiRequestDetails? details)
+    {
+        if (details is null) return;
+
+        if (details.Headers is not null)
+            request.Headers = details.Headers.Select(CopyPair).ToList();
+        if (details.QueryParams is not null)
+            request.QueryParams = details.QueryParams.Select(CopyPair).ToList();
+        if (details.Body is not null)
+            request.Body = new RequestBody
+            {
+                Mode = details.Body.Mode,
+                RawContent = details.Body.RawContent,
+                ContentType = details.Body.ContentType,
+                FormData = details.Body.FormData.Select(CopyPair).ToList(),
+                FilePath = details.Body.FilePath,
+            };
+        if (details.Auth is not null)
+            request.Auth = StripCredentialSecret(details.Auth);
+        if (details.CaptureRules is not null)
+            request.CaptureRules = details.CaptureRules
+                .Select(r => new CaptureRule
+                {
+                    Id = string.IsNullOrEmpty(r.Id) ? Guid.NewGuid().ToString("N") : r.Id,
+                    TargetVariable = r.TargetVariable,
+                    TargetScope = r.TargetScope,
+                    Source = r.Source,
+                    JsonPath = r.JsonPath,
+                    HeaderName = r.HeaderName,
+                    IsEnabled = r.IsEnabled,
+                })
+                .ToList();
+        if (details.GraphQlQuery is not null)
+            request.GraphQlQuery = details.GraphQlQuery;
+        if (details.GraphQlVariables is not null)
+            request.GraphQlVariables = details.GraphQlVariables;
+        if (details.GraphQlSelectedOperation is not null)
+            request.GraphQlSelectedOperation = details.GraphQlSelectedOperation;
+        if (details.WsSubProtocol is not null)
+            request.WsSubProtocol = details.WsSubProtocol;
+    }
+
+    private static KeyValuePair<string> CopyPair(KeyValuePair<string> p) =>
+        new() { Key = p.Key, Value = p.Value, IsEnabled = p.IsEnabled };
+
+    /// <summary>This repository persists via <c>collections.json</c> directly — the save endpoint's
+    /// secret-stripping never sees it — so a plaintext <see cref="AuthConfig.CredentialSecret"/>
+    /// must not survive onto the entity regardless of what the caller passed.</summary>
+    private static AuthConfig StripCredentialSecret(AuthConfig auth) => new()
+    {
+        Type = auth.Type,
+        CredentialKey = auth.CredentialKey,
+        CredentialSecret = null,
+        ApiKeyParamName = auth.ApiKeyParamName,
+        ApiKeyLocation = auth.ApiKeyLocation,
+        BasicUsername = auth.BasicUsername,
+        OAuth2ClientId = auth.OAuth2ClientId,
+        OAuth2GrantType = auth.OAuth2GrantType,
+        OAuth2TokenUrl = auth.OAuth2TokenUrl,
+        OAuth2AuthUrl = auth.OAuth2AuthUrl,
+        OAuth2Scopes = auth.OAuth2Scopes,
+        OAuth2TokenCredentialKey = auth.OAuth2TokenCredentialKey,
+    };
+
     /// <summary>Returns the folder node for <paramref name="folderPath"/>, creating each
     /// missing segment along the way (same '/'-separated shape <see cref="FindFolder"/> reads).</summary>
     private static ApiCollectionNode EnsureFolderPath(List<ApiCollectionNode> nodes, string folderPath)
@@ -626,6 +698,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
                 ? request.Body.RawContent[..200] + "…"
                 : request.Body.RawContent,
             AuthType = request.Auth?.Type.ToString() ?? collection.DefaultAuth?.Type.ToString(),
+            CaptureRules = request.CaptureRules.ToList(),
             UpdatedAt = request.UpdatedAt,
         };
     }
