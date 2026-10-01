@@ -1,6 +1,6 @@
 # API Client agent fixes + cURL import
 
-State: Review
+State: Done
 
 ## Goal
 
@@ -65,12 +65,23 @@ Three reported problems, one missing feature:
 - [x] Web: `AgentMarkdown` styling pass; user bubble to `bg-secondary`.
 - [x] Tests: `ApiClientActionExecutorTests` fake update + new cases; sidecar
       import-curl endpoint test; Playwright spec for the dialog.
+- [x] `vite.config.ts`: ignore `.e2e-appdata*/` in `server.watch` — the e2e
+      sidecar's writes under `web/` forced full page reloads mid-test (wiped
+      in-memory tab state, `ERR_ABORTED` on in-flight `goto`).
+- [x] `CollectionTree`: folders created after mount (cURL/agent imports carry
+      `isExpanded: true`) now join `expandedIds` on first sight — previously only
+      collection roots were added on update, so imported paths stayed collapsed.
+      User-collapsed folders keep their state via a seen-ids ref.
 
 ## Test plan
 
 - `dotnet test tests/SwebKit.Agents.Tests` — create-by-name, auto-create
-  collection + folder path, list tool output.
-- `dotnet test tests/SwebKit.Core.Tests` — `ImportCurl` already covered.
+  collection + folder path, list tool output. (374 passed)
+- `dotnet test tests/SwebKit.Core.Tests` — `ImportCurl` already covered. (948
+  passed)
 - `dotnet test tests/SwebKit.Sidecar.Tests` — endpoint happy + failure paths.
-- `cd web && npm run build && npx vitest run`.
-- `cd web && npx playwright test e2e/api-client.spec.ts` (+ new curl-import case).
+  (843 passed)
+- `cd web && npm run build && npx vitest run` — build clean, 798 tests passed.
+- `cd web && npx playwright test e2e/api-client.spec.ts` — 38/38 passed,
+  including the three new cURL cases (happy path into new collection + nested
+  folder, malformed command, demo-mode disabled).

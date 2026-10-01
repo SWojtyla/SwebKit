@@ -120,7 +120,25 @@ export function CollectionTree({
     const renameInputRef = useRef<HTMLInputElement | null>(null);
     const listRef = useRef<HTMLDivElement | null>(null);
 
+    const knownNodeIds = useRef<Set<string>>(new Set());
     useEffect(() => {
+        // A folder that arrives expanded and was never seen before (imported or
+        // agent-created path segments carry isExpanded: true) enters the live
+        // expanded set. Ids already known stay user-controlled, so collapsing a
+        // folder isn't undone by the next unrelated collections update. The ref
+        // bookkeeping happens outside the updater — StrictMode double-invokes
+        // updaters, which would mark ids known on a discarded pass.
+        const toExpand = new Set<string>();
+        const visit = (nodes: ApiCollectionNode[]) => {
+            for (const n of nodes) {
+                if (!knownNodeIds.current.has(n.id)) {
+                    knownNodeIds.current.add(n.id);
+                    if (n.type === "Folder" && n.isExpanded) toExpand.add(n.id);
+                }
+                if (n.type === "Folder") visit(n.children);
+            }
+        };
+        collections.forEach((c) => visit(c.nodes));
         setExpandedIds((prev) => {
             const next = new Set(prev);
             let changed = false;
@@ -130,6 +148,12 @@ export function CollectionTree({
                     changed = true;
                 }
             });
+            for (const id of toExpand) {
+                if (!next.has(id)) {
+                    next.add(id);
+                    changed = true;
+                }
+            }
             return changed ? next : prev;
         });
     }, [collections]);

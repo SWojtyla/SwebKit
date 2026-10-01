@@ -461,6 +461,17 @@ The virtualized Redis tree has the sibling trap: a namespace row starts collapse
 key under it has no DOM row at all — scrolling can never reach it. Always go through
 `scrollToRedisKey` in `helpers.ts`, which expands all namespaces first.
 
+### The e2e sidecar's appdata writes trigger Vite full reloads
+
+`SWEBKIT_APPDATA_ROOT` sits under `web/`, so every `PUT /api/config/collections`
+(and any other sidecar write) lands inside Vite's watched tree. Each write fired
+a full page reload mid-test: in-memory UI state (open tabs, dialog contents)
+vanished, the tree reloaded from disk so assertions half-passed, and a reload
+racing `page.goto` surfaced as `net::ERR_ABORTED`. `vite.config.ts` now sets
+`server.watch.ignored: ["**/.e2e-appdata*/**"]` — keep that pattern matching
+whatever `PLAYWRIGHT_APPDATA_ROOT` overrides point inside `web/`, and prefer
+pointing overrides outside the watched root entirely.
+
 ### `webServer.command` runs through cmd.exe on Windows
 
 POSIX-isms in `playwright.config.ts` fail or misbehave: `rm -rf` does not exist, and
