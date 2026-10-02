@@ -10,8 +10,8 @@ interface NamespaceSelectorProps {
     scopes: AksNamespaceScope[];
     /** Resolved picks across contexts. */
     selected: NsSelection[];
-    /** The primary context — its picks encode bare (legacy URL shape) in the hidden select. */
-    primaryContext: string | null;
+    /** The default context — its picks encode bare (legacy URL shape) in the hidden select. */
+    defaultContext: string | null;
     isLoading?: boolean;
     /**
      * What the button shows while `isLoading` — e.g. "Switching to staging…" during a context
@@ -37,7 +37,7 @@ function selKey(context: string, namespace: string): string {
 export function NamespaceSelector({
     scopes,
     selected,
-    primaryContext,
+    defaultContext,
     isLoading,
     loadingLabel,
     error,
@@ -155,14 +155,14 @@ export function NamespaceSelector({
     // `ctx:ns` for attached contexts. `ctx` may itself contain `:` (EKS ARNs) — namespaces
     // never do, so onChange splits at the LAST colon.
     const selectValue = selected.map((s) =>
-        s.context === primaryContext
+        s.context === defaultContext
             ? s.namespace
             : `${s.context}:${s.namespace}`,
     );
     const parseSelectValue = (value: string): NsSelection => {
         const colon = value.lastIndexOf(":");
         if (colon === -1)
-            return { context: primaryContext ?? "", namespace: value };
+            return { context: defaultContext ?? "", namespace: value };
         return {
             context: value.slice(0, colon),
             namespace: value.slice(colon + 1),
@@ -211,7 +211,7 @@ export function NamespaceSelector({
                         <optgroup key={scope.context} label={scope.context}>
                             <option
                                 value={
-                                    scope.context === primaryContext
+                                    scope.context === defaultContext
                                         ? "*"
                                         : `${scope.context}:*`
                                 }
@@ -222,7 +222,7 @@ export function NamespaceSelector({
                                 <option
                                     key={ns}
                                     value={
-                                        scope.context === primaryContext
+                                        scope.context === defaultContext
                                             ? ns
                                             : `${scope.context}:${ns}`
                                     }
@@ -305,13 +305,13 @@ export function NamespaceSelector({
                                 </button>
                             )}
                         </div>
-                        {!multiContext && primaryContext && (
+                        {!multiContext && defaultContext && (
                             <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
                                 <span
                                     className="truncate"
                                     data-testid="aks-namespace-context"
                                 >
-                                    {primaryContext} ›
+                                    {defaultContext} ›
                                 </span>
                                 <span>
                                     {scopes[0]?.namespaces?.length ?? 0} total

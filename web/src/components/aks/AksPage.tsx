@@ -79,7 +79,7 @@ function AksPageContent() {
         "aks-page",
         "Aks",
         () => ({
-            context: ws.currentContext,
+            context: ws.defaultContext,
             contexts: ws.selectedContexts,
             namespaces: ws.selectedNamespaces.map(
                 (s) => `${s.context}:${s.namespace}`,
@@ -87,7 +87,7 @@ function AksPageContent() {
             activeTab: ws.activeTab,
             podCount: ws.allPods?.length ?? 0,
             pods: (ws.allPods ?? []).slice(0, 30).map((p) => ({
-                context: p.context ?? ws.currentContext,
+                context: p.context ?? ws.defaultContext,
                 namespace: p.namespace,
                 name: p.name,
                 phase: p.phase,
@@ -98,7 +98,7 @@ function AksPageContent() {
             podOverflow: Math.max(0, (ws.allPods?.length ?? 0) - 30),
             selectedPod: ws.selectedPod
                 ? {
-                      context: ws.selectedPod.context ?? ws.currentContext,
+                      context: ws.selectedPod.context ?? ws.defaultContext,
                       namespace: ws.selectedPod.namespace,
                       name: ws.selectedPod.name,
                       phase: ws.selectedPod.phase,
@@ -109,7 +109,7 @@ function AksPageContent() {
                 : null,
         }),
         [
-            ws.currentContext,
+            ws.defaultContext,
             ws.selectedContexts,
             ws.selectedNamespaces,
             ws.activeTab,
@@ -128,26 +128,19 @@ function AksPageContent() {
                 <span className="text-sm font-medium">Context:</span>
                 <ContextSelector
                     contexts={ws.contexts}
-                    currentContext={ws.currentContext}
                     selectedContexts={ws.selectedContexts}
-                    onChange={ws.handleContextChange}
-                    onToggleAttached={ws.toggleAttachedContext}
-                    isLoading={ws.contextLoading}
-                    pendingContext={ws.pendingContext}
+                    onToggle={ws.toggleContext}
+                    onSelectOnly={(ctx) => ws.selectContexts([ctx])}
                 />
 
                 <span className="text-sm font-medium">Namespace:</span>
                 <NamespaceSelector
                     scopes={ws.nsScopes}
                     selected={ws.selectedNamespaces}
-                    primaryContext={ws.currentContext}
+                    defaultContext={ws.defaultContext}
                     onChange={ws.setSelectedNamespaces}
-                    isLoading={ws.contextLoading || ws.nsLoading}
-                    loadingLabel={
-                        ws.contextLoading
-                            ? `Switching to ${ws.pendingContext ?? "…"}`
-                            : "Loading namespaces…"
-                    }
+                    isLoading={ws.nsLoading}
+                    loadingLabel="Loading namespaces…"
                     error={ws.nsError}
                     disabledReason={
                         ws.activeTab === "gatewayclasses"
@@ -165,15 +158,7 @@ function AksPageContent() {
                     />
                 )}
 
-                {ws.contextLoading ? (
-                    <div
-                        className="flex items-center gap-1.5 text-xs text-primary"
-                        data-testid="aks-loading-indicator"
-                    >
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Switching context…
-                    </div>
-                ) : ws.nsLoading ? (
+                {ws.nsLoading ? (
                     <div
                         className="flex items-center gap-1.5 text-xs text-muted-foreground"
                         data-testid="aks-ns-loading-indicator"
@@ -399,19 +384,9 @@ function AksPageContent() {
             >
                 <div className="flex min-w-0 flex-1 flex-col">
                     <div className="flex-1 overflow-auto">
-                        {ws.contextLoading ? (
-                            // queryTargets is held empty while the POST is in flight, so the
-                            // previous cluster's rows are gone already — this is the stage label.
-                            <div
-                                className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground"
-                                data-testid="aks-switching-state"
-                            >
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Switching to {ws.pendingContext ?? "…"}
-                            </div>
-                        ) : ws.profileLoaded &&
-                          !ws.currentContext &&
-                          !ws.isDemoMode ? (
+                        {ws.profileLoaded &&
+                        !ws.defaultContext &&
+                        !ws.isDemoMode ? (
                             <EmptyState
                                 icon={Ship}
                                 title="No AKS cluster configured"
@@ -437,9 +412,9 @@ function AksPageContent() {
                                 className="flex h-full items-center justify-center text-sm text-muted-foreground"
                                 data-testid="aks-empty-state"
                             >
-                                {ws.currentContext
-                                    ? "Select a namespace to view resources"
-                                    : "Select a context to get started"}
+                                {ws.selectedContexts.length === 0
+                                    ? "Select a context to get started"
+                                    : "Select a namespace to view resources"}
                             </div>
                         ) : (
                             <>
@@ -560,7 +535,7 @@ function AksPageContent() {
                                         onPodConsumed={() => ws.setPodKey(null)}
                                         context={
                                             ws.selectedPod?.context ??
-                                            ws.currentContext
+                                            ws.defaultContext
                                         }
                                         kubeconfig={ws.kubeconfigPath}
                                         pods={ws.allPods}
@@ -584,7 +559,7 @@ function AksPageContent() {
                             namespace={ws.shellPod.namespace}
                             pod={ws.shellPod.name}
                             container={ws.shellPod.containers[0] ?? null}
-                            context={ws.shellPod.context ?? ws.currentContext}
+                            context={ws.shellPod.context ?? ws.defaultContext}
                             kubeconfig={ws.kubeconfigPath}
                             onClose={() => ws.setShellPod(null)}
                         />

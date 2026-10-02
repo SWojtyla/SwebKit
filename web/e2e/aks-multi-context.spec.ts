@@ -4,10 +4,10 @@ import { sidecarPort } from "./test-config";
 
 const sidecarUrl = `http://127.0.0.1:${sidecarPort}`;
 
-// Multi-context workspace: attach a second demo cluster beside the primary, browse the
-// merged view, and verify every surface keeps the row's cluster identity. The demo
-// profile's primary context is aks-ecommerce-dev; aks-ecommerce-staging is attached
-// via the picker's checkbox (never promoted — promotion is a profile mutation).
+// Multi-context workspace: the context picker is a plain multi-select — every
+// checked cluster feeds the merged view, none is privileged. The demo profile's
+// configured context is aks-ecommerce-dev (auto-selected on first visit);
+// aks-ecommerce-staging joins via the picker's checkbox.
 
 async function attachStaging(page: import("@playwright/test").Page) {
     await page.getByTestId("aks-context-select").click();
@@ -47,7 +47,7 @@ async function attachStaging(page: import("@playwright/test").Page) {
     // `ctxs` URL write re-renders the row, which outlives check()'s post-click
     // verification. Click + auto-waiting assertion instead.
     const checkbox = page.getByTestId(
-        "aks-context-attach-aks-ecommerce-staging",
+        "aks-context-check-aks-ecommerce-staging",
     );
     await checkbox.click();
     await expect(checkbox).toBeChecked();
@@ -64,15 +64,15 @@ test.describe("AKS multi-context", () => {
         await setDemoMode(page, false);
     });
 
-    test("attaching a context adds it to the URL and badges the picker", async ({
+    test("selecting a context adds it to the URL and counts the picker", async ({
         page,
     }) => {
         await attachStaging(page);
 
-        await expect(page.getByTestId("aks-context-attached-count")).toHaveText(
-            "+1",
+        await expect(page.getByTestId("aks-context-select")).toContainText(
+            "2 contexts",
         );
-        await expect(page).toHaveURL(/ctxs=aks-ecommerce-staging/);
+        await expect(page).toHaveURL(/ctxs=[^&]*aks-ecommerce-staging/);
     });
 
     test("the namespace picker groups selections per cluster", async ({
@@ -93,7 +93,7 @@ test.describe("AKS multi-context", () => {
         page,
     }) => {
         await attachStaging(page);
-        // Each attached cluster's init seeds its kubeconfig namespace hint — staging's is
+        // Each cluster's init seeds its kubeconfig namespace hint — staging's is
         // "ecommerce" — so both clusters feed rows without any manual namespace pick.
         await expect(page.getByTestId("aks-namespace-dropdown")).toContainText(
             "namespaces",
@@ -112,7 +112,7 @@ test.describe("AKS multi-context", () => {
         ).toBeVisible();
     });
 
-    test("a deep link restores the attached context and its namespaces", async ({
+    test("a deep link restores the selected contexts and their namespaces", async ({
         page,
     }) => {
         await attachStaging(page);
@@ -121,8 +121,8 @@ test.describe("AKS multi-context", () => {
 
         await page.reload();
 
-        await expect(page.getByTestId("aks-context-attached-count")).toHaveText(
-            "+1",
+        await expect(page.getByTestId("aks-context-select")).toContainText(
+            "2 contexts",
         );
         await page.getByTestId("aks-tab-pods").click();
         await expect(page.getByTestId("pods-sort-context")).toBeVisible();
@@ -148,13 +148,13 @@ test.describe("AKS multi-context", () => {
         await expect(
             page.getByTestId("pods-context-error-aks-ecommerce-staging"),
         ).toBeVisible();
-        // The primary cluster's rows are unaffected by the second cluster's failure.
+        // The other cluster's rows are unaffected by the second cluster's failure.
         await expect(
             page.getByTestId("pods-table-body").locator("tr").first(),
         ).toBeVisible();
     });
 
-    test("an action on a secondary-cluster row names that cluster in the confirm bar", async ({
+    test("an action on a second-cluster row names that cluster in the confirm bar", async ({
         page,
     }) => {
         await attachStaging(page);
@@ -175,7 +175,7 @@ test.describe("AKS multi-context", () => {
         await page.getByTestId("aks-confirm-cancel").click();
     });
 
-    test("detaching the context removes the Context column", async ({
+    test("deselecting the extra context removes the Context column", async ({
         page,
     }) => {
         await attachStaging(page);
@@ -184,15 +184,60 @@ test.describe("AKS multi-context", () => {
 
         await page.getByTestId("aks-context-select").click();
         const checkbox = page.getByTestId(
-            "aks-context-attach-aks-ecommerce-staging",
+            "aks-context-check-aks-ecommerce-staging",
         );
         await checkbox.click();
         await expect(checkbox).not.toBeChecked();
         await page.keyboard.press("Escape");
 
-        await expect(
-            page.getByTestId("aks-context-attached-count"),
-        ).toHaveCount(0);
+        await expect(page.getByTestId("aks-context-select")).toContainText(
+            "aks-ecommerce-dev",
+        );
         await expect(page.getByTestId("pods-sort-context")).toHaveCount(0);
+    });
+
+    test("the configured context can be deselected like any other", async ({
+        page,
+    }) => {
+        await attachStaging(page);
+
+        await page.getByTestId("aks-context-select").click();
+        const devCheckbox = page.getByTestId(
+            "aks-context-check-aks-ecommerce-dev",
+        );
+        await expect(devCheckbox).toBeChecked();
+        await expect(devCheckbox).toBeEnabled();
+        await devCheckbox.click();
+        await expect(devCheckbox).not.toBeChecked();
+        await page.keyboard.press("Escape");
+
+        // Only staging is selected now — the URL carries the whole set and the
+        // namespace picker groups under staging alone.
+        await expect(page).toHaveURL(
+            /ctxs=aks-ecommerce-staging(?!.*aks-ecommerce-dev)/,
+        );
+        await page.getByTestId("aks-namespace-dropdown").click();
+        await expect(
+            page.getByTestId("aks-ns-group-aks-ecommerce-staging"),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId("aks-ns-group-aks-ecommerce-dev"),
+        ).toHaveCount(0);
+    });
+
+    test("select-only narrows the view to a single context", async ({
+        page,
+    }) => {
+        await attachStaging(page);
+
+        await page.getByTestId("aks-context-select").click();
+        await page
+            .getByTestId("aks-context-only-aks-ecommerce-staging")
+            .click();
+
+        await expect(page.getByTestId("aks-context-select")).toContainText(
+            "aks-ecommerce-staging",
+        );
+        await expect(page).toHaveURL(/ctxs=aks-ecommerce-staging(?:&|$)/);
     });
 });

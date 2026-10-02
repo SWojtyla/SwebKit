@@ -46,15 +46,15 @@ export const networkTabIds = new Set<string>(networkTabs.map((t) => t.id));
 
 /**
  * One namespace pick inside one selected context. `context` is the resolved kubeconfig
- * context name — never the URL's "bare means primary" form.
+ * context name — never the URL's "bare means default" form.
  */
 export interface NsSelection {
     context: string;
     namespace: string;
 }
 
-/** A parsed detail/log target that may originate from a non-primary cluster.
- * `context` null means "the primary context" (legacy bare keys decode that way). */
+/** A parsed detail/log target.
+ * `context` null means "the configured/default context" (legacy bare keys decode that way). */
 export interface ScopedKey {
     context: string | null;
     ns: string;
@@ -80,19 +80,19 @@ export function parseKey(
 }
 
 /**
- * Scoped resource identity: `ns/name` for the primary context (identical to the
+ * Scoped resource identity: `ns/name` for the configured context (identical to the
  * pre-multi-context format, so existing deep links keep working) or `ctx:ns/name`
- * for a secondary context. Every segment is URI-encoded, so a context name containing
+ * for any other context. Every segment is URI-encoded, so a context name containing
  * `:` or `/` (EKS ARNs do) stays unambiguous.
  */
 export function makeScopedKey(
     context: string | null | undefined,
-    primaryContext: string | null,
+    defaultContext: string | null,
     ns: string,
     name: string,
 ): string {
     const base = makeKey(ns, name);
-    return context && context !== primaryContext
+    return context && context !== defaultContext
         ? `${encodeURIComponent(context)}:${base}`
         : base;
 }
@@ -113,11 +113,11 @@ export function parseScopedKey(key: string | null): ScopedKey | null {
 export function makeYamlKey(
     kind: string,
     context: string | null | undefined,
-    primaryContext: string | null,
+    defaultContext: string | null,
     ns: string,
     name: string,
 ): string {
-    return `${kind}:${makeScopedKey(context, primaryContext, ns, name)}`;
+    return `${kind}:${makeScopedKey(context, defaultContext, ns, name)}`;
 }
 
 export function parseYamlKey(key: string | null): {
@@ -141,14 +141,14 @@ export function parseYamlKey(key: string | null): {
 }
 
 /**
- * `ns` param codec. Comma-separated picks; a bare name belongs to the primary context
- * (byte-identical to the pre-multi-context format — `ns=ecommerce` links still work),
- * a secondary context's pick is `ctx:ns` with both parts URI-encoded. `*` means "all
- * namespaces of its context"; a legacy bare `*` covers the primary context.
+ * `ns` param codec. Comma-separated picks; a bare name belongs to the configured
+ * context (byte-identical to the pre-multi-context format — `ns=ecommerce` links still
+ * work), any other context's pick is `ctx:ns` with both parts URI-encoded. `*` means
+ * "all namespaces of its context"; a legacy bare `*` covers the configured context.
  */
 export function parseNamespaceSelection(
     value: string | null,
-    primaryContext: string | null,
+    defaultContext: string | null,
 ): NsSelection[] {
     if (!value) return [];
     return value
@@ -158,7 +158,7 @@ export function parseNamespaceSelection(
             const colon = entry.indexOf(":");
             if (colon === -1)
                 return {
-                    context: primaryContext ?? "",
+                    context: defaultContext ?? "",
                     namespace: entry === "*" ? "*" : decodeURIComponent(entry),
                 };
             return {
@@ -170,12 +170,12 @@ export function parseNamespaceSelection(
 
 export function encodeNamespaceSelection(
     sel: NsSelection[],
-    primaryContext: string | null,
+    defaultContext: string | null,
 ): string | null {
     if (sel.length === 0) return null;
     return sel
         .map((s) =>
-            !s.context || s.context === primaryContext
+            !s.context || s.context === defaultContext
                 ? s.namespace === "*"
                     ? "*"
                     : encodeURIComponent(s.namespace)
@@ -184,7 +184,11 @@ export function encodeNamespaceSelection(
         .join(",");
 }
 
-/** `ctxs` param: the attached (non-primary) contexts, comma-separated and URI-encoded. */
+/**
+ * `ctxs` param: every selected context, comma-separated and URI-encoded.
+ * An absent param means "the default selection" (the configured context alone);
+ * a present-but-empty param is an explicit "nothing selected".
+ */
 export function parseContextParam(value: string | null): string[] {
     if (!value) return [];
     return value.split(",").filter(Boolean).map(decodeURIComponent);
@@ -223,13 +227,13 @@ export function parseLogsParam(
 
 export function makeLogsParam(
     pods: { context?: string | null; namespace: string; name: string }[],
-    primaryContext: string | null,
+    defaultContext: string | null,
 ): string {
     return pods
         .map((p) =>
             makeScopedKey(
                 p.context ?? null,
-                primaryContext,
+                defaultContext,
                 p.namespace,
                 p.name,
             ),
@@ -292,27 +296,25 @@ export interface AksClusterValue {
      * empty picker saying "No namespaces found" — indistinguishable from an empty cluster.
      */
     nsError: string | null;
-    contextLoading: boolean;
-    /** Context being switched to while the POST is in flight, for "Switching to X…" labels. */
-    pendingContext: string | null;
     contexts: KubeContextInfo[] | undefined;
-    /** The primary context — the configured profile context (or the kubeconfig's current one).
-     * Actions and agent tools default here; secondary contexts are explicit. */
-    currentContext: string | null;
-    /** Every context the workspace queries — primary first, then attached. */
+    /**
+     * The configured profile context (or the kubeconfig's current one / demo default).
+     * Not a privileged "primary" — it only decodes legacy bare URL keys, seeds the initial
+     * selection, and serves as the fallback for rows/actions without an explicit context.
+     */
+    defaultContext: string | null;
+    /** Every context the workspace queries, in `ctxs` URL-param order. */
     selectedContexts: string[];
-    /** Non-primary contexts attached via the picker (mirrors the `ctxs` URL param). */
-    attachedContexts: string[];
     /** Per-context namespace scope for the picker: list + loading + per-context error. */
     nsScopes: AksNamespaceScope[];
-    /** Attach/detach a secondary context. No-op for the primary — that goes through
-     * `handleContextChange` (a real context switch). */
-    toggleAttachedContext: (context: string) => void;
+    /** Add/remove a context from the selection — works on every context, configured or not. */
+    toggleContext: (context: string) => void;
+    /** Replace the whole selection (command-palette context jump). */
+    selectContexts: (contexts: string[]) => void;
     /** True once the profile query has resolved — gates the first-run "not configured" state. */
     profileLoaded: boolean;
     isDemoMode: boolean;
     testResult: { connected: boolean; error?: string } | undefined;
-    handleContextChange: (context: string, defaultNamespace?: string) => void;
     /** Kubeconfig path from the active profile, passed to native commands (pod shell, port-forward). */
     kubeconfigPath: string | null;
     isProduction: boolean;
@@ -451,8 +453,10 @@ export type AksWorkspaceContextValue = AksClusterValue &
 export const AUTO_REFRESH_PREF = "aks-auto-refresh";
 export const REFRESH_INTERVAL_PREF = "aks-refresh-interval";
 export const DEFAULT_REFRESH_SECONDS = 10;
-/** Persisted secondary contexts, restored on the next visit (the `ctxs` URL param wins). */
-export const ATTACHED_CONTEXTS_PREF = "aks-attached-contexts";
+/** Persisted context selection, restored on the next visit (the `ctxs` URL param wins). */
+export const SELECTED_CONTEXTS_PREF = "aks-selected-contexts";
+/** Pre-multi-select pref key — held the attached-only set, still read once for migration. */
+export const LEGACY_ATTACHED_CONTEXTS_PREF = "aks-attached-contexts";
 const SELECTED_NS_PREF_PREFIX = "aks-selected-ns";
 
 /** Per-cluster storage key: each kube context remembers its own last-selected namespace(s). */

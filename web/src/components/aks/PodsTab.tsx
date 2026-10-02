@@ -211,8 +211,8 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
             targets
                 .filter(
                     (t) =>
-                        t.context === cluster.currentContext ||
-                        !cluster.currentContext,
+                        t.context === cluster.defaultContext ||
+                        !cluster.defaultContext,
                 )
                 .map((t) => t.ns)
                 .join(",") || "*";
@@ -223,13 +223,13 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
                     source: "AksPodRestartRate",
                     aksPodParams: {
                         namespace: nsTokens,
-                        kubeconfigContext: cluster.currentContext ?? "",
+                        kubeconfigContext: cluster.defaultContext ?? "",
                         restartThreshold: 5,
                     },
                 },
             },
         });
-    }, [navigate, targets, cluster.currentContext]);
+    }, [navigate, targets, cluster.defaultContext]);
 
     const watchPod = useCallback(
         (pod: PodInfo) => {
@@ -241,13 +241,13 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
                         aksPodParams: {
                             namespace: pod.namespace,
                             kubeconfigContext:
-                                pod.context ?? cluster.currentContext ?? "",
+                                pod.context ?? cluster.defaultContext ?? "",
                         },
                     },
                 },
             });
         },
-        [navigate, cluster.currentContext],
+        [navigate, cluster.defaultContext],
     );
 
     const buildMenu = useCallback(

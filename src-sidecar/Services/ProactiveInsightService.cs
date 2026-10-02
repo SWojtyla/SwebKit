@@ -28,7 +28,7 @@ public sealed record ProactiveInsightReadyEvent(
     /// fetching the persisted report.</summary>
     int AccessGapCount = 0);
 
-public enum ProactiveInsightStage { Started, Skipped, Failed, Queued }
+public enum ProactiveInsightStage { Started, Skipped, Failed }
 
 /// <summary>Lifecycle event for a background proactive investigation — without it every
 /// early-return gate in <see cref="ProactiveInsightService"/> was a silent drop, so a fired
@@ -232,8 +232,7 @@ public sealed class ProactiveInsightService
                 return; // rule was deleted between firing and now — nothing to correlate against
             }
 
-            var mode = rule.EffectiveAiInvestigationMode;
-            if (mode == AiInvestigationMode.Off)
+            if (!rule.AiInvestigationEnabled)
             {
                 _logger.LogInformation(
                     "Skipped proactive insight for rule {RuleId} ({RuleName}) — AI investigation is disabled on this rule.",
@@ -269,237 +268,13 @@ public sealed class ProactiveInsightService
                 return;
             }
 
-            // The report/session id is derivable before anything runs — stamping it into the run's
-            // ambient selection is what links each parked proposal back to this report
-            // (monitoring-closed-loop 1c). Manual mode uses the same id for its queued record,
-            // so triggering it later fills the same card instead of creating a second one.
-            var sessionId = $"proactive-{evt.RuleId}-{evt.FiredAt.ToUnixTimeMilliseconds()}";
-
-            // Manual mode (ai-reports-kanban): prepare everything that needs no model — the
-            // deterministic probe output becomes the queued report's stored context — and stop
-            // before a single token is spent. The user fires the investigation from the board.
-            if (mode == AiInvestigationMode.Manual)
-            {
-                await QueuePreparedInsightAsync(evt, start.Value, effectiveContext, match, sessionId);
-                return;
-            }
-
-            var autoReport = new ProactiveInsightReport
-            {
-                RuleId = evt.RuleId,
-                RuleName = evt.RuleName,
-                FiredAt = evt.FiredAt,
-                AlertMessage = evt.Message,
-                AlertDetail = evt.Detail,
-                Source = evt.Source,
-                AlertSeverity = evt.Severity,
-                CreatedAt = DateTimeOffset.UtcNow,
-            };
-            await RunInvestigationCoreAsync(evt, rule, start.Value, effectiveContext, match, sessionId, autoReport, preparedProbeJson: null);
-        }
-        catch (Exception ex)
-        {
-            _openFiringEpisodes.TryRemove(evt.RuleId, out _); // a failed run must not suppress retries
-            _logger.LogWarning(ex, "Proactive insight investigation failed for rule {RuleId} ({RuleName})", evt.RuleId, evt.RuleName);
-            RaiseStatus(evt, ProactiveInsightStage.Failed, ex.Message);
-        }
-        finally
-        {
-            Volatile.Write(ref _busy, 0);
-        }
-    }
-
-    /// <summary>Manual mode's firing path: run the deterministic <c>investigate_workspace_issue</c>
-    /// probe (a normal tool call — zero model tokens) and park a <see cref="InsightReportStatus.Queued"/>
-    /// report carrying the alert, the topology match summary and the probe output. The expensive part —
-    /// the model-driven investigation — waits for <see cref="RunQueuedInsightAsync"/>.</summary>
-    private async Task QueuePreparedInsightAsync(
-        AlertFiredEvent evt,
-        (WorkspaceResourceArea Area, string Hint, string? Context) start,
-        string? effectiveContext,
-        (WorkspaceMap Map, WorkspaceResourceNode Node)? match,
-        string sessionId)
-    {
-        var probeArgs = BuildArgs(new
-        {
-            area = start.Area.ToString(),
-            resource_hint = start.Hint,
-            context = effectiveContext,
-            map_id = match?.Map.Id,
-        });
-
-        string? probeJson;
-        string? probeError = null;
-        try
-        {
-            probeJson = await _toolRegistry.ExecuteAsync(
-                "investigate_workspace_issue", probeArgs, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            // A failed probe still queues — the card says what went wrong and the eventual
-            // investigation re-probes live anyway, so prepare failure shouldn't lose the firing.
-            probeJson = null;
-            probeError = ex.Message;
-            _logger.LogWarning(ex, "Prepared-context probe failed for rule {RuleId} ({RuleName})", evt.RuleId, evt.RuleName);
-        }
-
-        var report = new ProactiveInsightReport
-        {
-            Id = sessionId,
-            SessionId = sessionId,
-            RuleId = evt.RuleId,
-            RuleName = evt.RuleName,
-            FiredAt = evt.FiredAt,
-            AlertMessage = evt.Message,
-            AlertDetail = evt.Detail,
-            Source = evt.Source,
-            AlertSeverity = evt.Severity,
-            Status = InsightReportStatus.Queued,
-            ReportJson = probeJson,
-            PreparedAt = DateTimeOffset.UtcNow,
-            PreparedContextSummary = probeError is null
-                ? $"Probed {DescribeStart(start, effectiveContext)}" +
-                  (match is not null ? $" via map \"{match.Value.Map.Name}\"" : " (no map match — the run will correlate workspace-wide)")
-                : $"Probe of {DescribeStart(start, effectiveContext)} failed: {probeError}",
-            CreatedAt = DateTimeOffset.UtcNow,
-        };
-
-        // A denied probe is visible evidence for the queued card too — same parse the
-        // auto path applies to its fallback probe result.
-        if (probeJson is not null &&
-            AccessGapParser.TryParse("investigate_workspace_issue", probeArgs, probeJson, out var gap))
-            report.AccessGaps = [gap];
-
-        try
-        {
-            await _reports.UpsertAsync(report);
-        }
-        catch (Exception ex)
-        {
-            _openFiringEpisodes.TryRemove(evt.RuleId, out _); // nothing queued — let the next firing retry
-            _logger.LogWarning(ex, "Failed to persist queued insight for rule {RuleId} ({RuleName})", evt.RuleId, evt.RuleName);
-            RaiseStatus(evt, ProactiveInsightStage.Failed, "couldn't persist the prepared insight");
-            return;
-        }
-
-        RaiseStatus(evt, ProactiveInsightStage.Queued, "context prepared — run the investigation when you're ready");
-    }
-
-    /// <summary>Outcome of <see cref="RunQueuedInsightAsync"/> — the endpoint maps these to
-    /// 202 / 404 / 409. The run itself is fire-and-forget like the auto path: progress reaches
-    /// the UI over the normal InsightStatus/InsightReady SSE events.</summary>
-    public enum QueuedRunOutcome { Started, NotFound, NotQueued, Busy }
-
-    /// <summary>Manual trigger (ai-reports-kanban): kicks off the model-driven investigation for a
-    /// queued report. The same single-flight gate as the auto path applies — a busy pipeline
-    /// returns <see cref="QueuedRunOutcome.Busy"/> instead of silently queueing a second run.</summary>
-    public async Task<QueuedRunOutcome> RunQueuedInsightAsync(string id)
-    {
-        var report = await _reports.GetByIdAsync(id);
-        if (report is null) return QueuedRunOutcome.NotFound;
-        if (report.Status != InsightReportStatus.Queued) return QueuedRunOutcome.NotQueued;
-        if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0) return QueuedRunOutcome.Busy;
-
-        var flightId = Interlocked.Increment(ref _nextFlightId);
-        var task = Task.Run(() => RunQueuedCoreAsync(report));
-        _inFlight[flightId] = task;
-        _ = task.ContinueWith(
-            completed => _inFlight.TryRemove(flightId, out _),
-            CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-        return QueuedRunOutcome.Started;
-    }
-
-    /// <summary>Runs the investigation for a queued report: rebuilds the firing event from the
-    /// persisted fields, re-derives the starting resource from the *current* rule (edits since
-    /// the firing are respected), and feeds the stored probe output to the fallback path so a
-    /// failed tool loop still drafts from the prepared context instead of re-probing.</summary>
-    private async Task RunQueuedCoreAsync(ProactiveInsightReport report)
-    {
-        var evt = new AlertFiredEvent(
-            report.RuleId,
-            report.RuleName,
-            report.Source ?? AlertRuleSource.AksPodHealth,
-            report.AlertSeverity ?? AlertSeverity.Warning,
-            report.AlertMessage ?? string.Empty,
-            report.AlertDetail ?? string.Empty,
-            report.FiredAt,
-            ProfileName: string.Empty);
-
-        try
-        {
             RaiseStatus(evt, ProactiveInsightStage.Started);
 
-            var rule = await _rules.GetByIdAsync(report.RuleId);
-            var start = rule is null ? null : FindStartingResource(rule);
+            // The report/session id is derivable before anything runs — stamping it into the run's
+            // ambient selection is what links each parked proposal back to this report
+            // (monitoring-closed-loop 1c).
+            var sessionId = $"proactive-{evt.RuleId}-{evt.FiredAt.ToUnixTimeMilliseconds()}";
 
-            var config = _profiles.Config;
-            var effectiveContext = start?.Context
-                ?? (start?.Area == WorkspaceResourceArea.Aks ? config.AksConfig?.KubeconfigContext : null);
-            var match = start is null
-                ? null
-                : WorkspaceMapLookup.FindNode(config.EffectiveMaps(), start.Value.Area, start.Value.Hint, effectiveContext);
-
-            await RunInvestigationCoreAsync(
-                evt, rule, start, effectiveContext, match, report.SessionId, report,
-                preparedProbeJson: report.ReportJson);
-        }
-        catch (Exception ex)
-        {
-            _openFiringEpisodes.TryRemove(evt.RuleId, out _);
-            _logger.LogWarning(ex, "Manual investigation failed for report {ReportId} (rule {RuleId})", report.Id, report.RuleId);
-            RaiseStatus(evt, ProactiveInsightStage.Failed, ex.Message);
-        }
-        finally
-        {
-            Volatile.Write(ref _busy, 0);
-        }
-    }
-
-    /// <summary>Kanban move for a persisted report (ai-reports-kanban). Valid transitions:
-    /// Ready↔Done plus Queued→Done (discard without investigating). Queued→Ready is not allowed —
-    /// the only way out of Queued is an actual run. Returns the updated report, null when the id
-    /// is unknown, or throws <see cref="InvalidOperationException"/> on a rejected transition.</summary>
-    public async Task<ProactiveInsightReport?> SetInsightStatusAsync(string id, InsightReportStatus status)
-    {
-        var report = await _reports.GetByIdAsync(id);
-        if (report is null) return null;
-
-        var allowed = (report.Status, status) switch
-        {
-            _ when report.Status == status => true,
-            (InsightReportStatus.Queued, InsightReportStatus.Done) => true,
-            (InsightReportStatus.Ready, InsightReportStatus.Done) => true,
-            (InsightReportStatus.Done, InsightReportStatus.Ready) => true,
-            _ => false,
-        };
-        if (!allowed)
-            throw new InvalidOperationException(
-                $"Can't move a {report.Status} report to {status} — queued reports become Ready only by running the investigation.");
-
-        report.Status = status;
-        await _reports.UpsertAsync(report);
-        return report;
-    }
-
-    /// <summary>The shared investigation body for the auto and manual-run paths: tool loop (or
-    /// single-shot fallback drafted from the probe — the stored prepared probe when the caller
-    /// already ran one), report fill, chat seed, persist, InsightReady. <paramref name="rule"/> is
-    /// null when the queued report's rule was deleted — the run then skips the live tool loop and
-    /// drafts from the stored probe alone.</summary>
-    private async Task RunInvestigationCoreAsync(
-        AlertFiredEvent evt,
-        MonitoringAlertRule? rule,
-        (WorkspaceResourceArea Area, string Hint, string? Context)? start,
-        string? effectiveContext,
-        (WorkspaceMap Map, WorkspaceResourceNode Node)? match,
-        string sessionId,
-        ProactiveInsightReport report,
-        string? preparedProbeJson)
-    {
-        RaiseStatus(evt, ProactiveInsightStage.Started);
-
-        {
             // Collect every action this run parks (matching by origin session — the single-flight
             // gate means at most one run is live, but the id check keeps this correct even if
             // that ever relaxes). Each one also raises PendingActionProposed immediately so the
@@ -527,35 +302,39 @@ public sealed class ProactiveInsightService
             // (the model picks its own read-only evidence path across the workspace). When it
             // can't produce a result — budget exceeded, empty response — fall back to the Module 4
             // single-shot topology probe + model-drafted structured report so an alert still yields
-            // an insight. A queued report whose rule can no longer be resolved skips the live loop
-            // entirely and drafts from its stored prepared probe.
+            // an insight.
             ProactiveInvestigationResult? result = null;
-            if (start is not null)
+            if (_actionCoordinator is not null)
+                _actionCoordinator.ActionRegistered += OnActionRegistered;
+            try
+            {
+                result = await _investigationRunner.InvestigateAsync(
+                    evt, DescribeStart(start.Value, effectiveContext), match?.Map, CancellationToken.None,
+                    allowAutofixProposals: rule.AutoFixProposalsEnabled, sessionId: sessionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Model-driven investigation for rule {RuleId} ({RuleName}) failed — falling back to the single-shot path.",
+                    evt.RuleId, evt.RuleName);
+            }
+            finally
             {
                 if (_actionCoordinator is not null)
-                    _actionCoordinator.ActionRegistered += OnActionRegistered;
-                try
-                {
-                    result = await _investigationRunner.InvestigateAsync(
-                        evt, DescribeStart(start.Value, effectiveContext), match?.Map, CancellationToken.None,
-                        allowAutofixProposals: rule?.AutoFixProposalsEnabled ?? false, sessionId: sessionId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex,
-                        "Model-driven investigation for rule {RuleId} ({RuleName}) failed — falling back to the single-shot path.",
-                        evt.RuleId, evt.RuleName);
-                }
-                finally
-                {
-                    if (_actionCoordinator is not null)
-                        _actionCoordinator.ActionRegistered -= OnActionRegistered;
-                }
+                    _actionCoordinator.ActionRegistered -= OnActionRegistered;
             }
 
             string summary;
             string reportJson;
             IReadOnlyList<string>? evidence = null;
+            var report = new ProactiveInsightReport
+            {
+                RuleId = evt.RuleId,
+                RuleName = evt.RuleName,
+                FiredAt = evt.FiredAt,
+                AlertMessage = evt.Message,
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
             if (result is not null)
             {
                 summary = result.Hypothesis;
@@ -572,38 +351,22 @@ public sealed class ProactiveInsightService
             }
             else
             {
-                // Reuse the prepared probe captured at firing time when there is one — it is the
-                // exact context the queued card advertised, and it saves a redundant live probe.
-                if (preparedProbeJson is not null)
+                var probeArgs = BuildArgs(new
                 {
-                    reportJson = preparedProbeJson;
-                }
-                else if (start is not null)
-                {
-                    var probeArgs = BuildArgs(new
-                    {
-                        area = start.Value.Area.ToString(),
-                        resource_hint = start.Value.Hint,
-                        context = effectiveContext,
-                        map_id = match?.Map.Id,
-                    });
-                    reportJson = await _toolRegistry.ExecuteAsync(
-                        "investigate_workspace_issue",
-                        probeArgs,
-                        CancellationToken.None);
+                    area = start.Value.Area.ToString(),
+                    resource_hint = start.Value.Hint,
+                    context = effectiveContext,
+                    map_id = match?.Map.Id,
+                });
+                reportJson = await _toolRegistry.ExecuteAsync(
+                    "investigate_workspace_issue",
+                    probeArgs,
+                    CancellationToken.None);
 
-                    // The fallback probe is a tool call like any other — if it was denied, the
-                    // report still gets its access gap even though no model loop collected it.
-                    if (AccessGapParser.TryParse("investigate_workspace_issue", probeArgs, reportJson, out var probeGap))
-                        report.AccessGaps = [probeGap];
-                }
-                else
-                {
-                    _openFiringEpisodes.TryRemove(evt.RuleId, out _);
-                    RaiseStatus(evt, ProactiveInsightStage.Failed,
-                        "the rule no longer maps to a workspace resource and no prepared context was stored");
-                    return;
-                }
+                // The fallback probe is a tool call like any other — if it was denied, the
+                // report still gets its access gap even though no model loop collected it.
+                if (AccessGapParser.TryParse("investigate_workspace_issue", probeArgs, reportJson, out var probeGap))
+                    report.AccessGaps = [probeGap];
 
                 // Same structured contract the runner emits — the model drafts it from the
                 // precomputed probe JSON instead of a live tool loop, so a fallback report fills
@@ -631,7 +394,6 @@ public sealed class ProactiveInsightService
             report.Hypothesis = summary;
             report.ReportJson = reportJson;
             report.PendingActionIds = [.. proposedActionIds];
-            report.Status = InsightReportStatus.Ready;
 
             _chatService.SeedProactiveInsightSession(sessionId, evt.RuleName, evt.Message, FormatReportMarkdown(report));
 
@@ -647,6 +409,16 @@ public sealed class ProactiveInsightService
             }
 
             InsightReady?.Invoke(new ProactiveInsightReadyEvent(evt.RuleId, evt.FiredAt, evt.RuleName, summary, sessionId, evidence, report.AccessGaps.Count));
+        }
+        catch (Exception ex)
+        {
+            _openFiringEpisodes.TryRemove(evt.RuleId, out _); // a failed run must not suppress retries
+            _logger.LogWarning(ex, "Proactive insight investigation failed for rule {RuleId} ({RuleName})", evt.RuleId, evt.RuleName);
+            RaiseStatus(evt, ProactiveInsightStage.Failed, ex.Message);
+        }
+        finally
+        {
+            Volatile.Write(ref _busy, 0);
         }
     }
 

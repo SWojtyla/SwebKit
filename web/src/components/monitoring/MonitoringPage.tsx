@@ -3,10 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, AlertCircle, Loader2, Sparkles, X } from "lucide-react";
 import { SkeletonRows } from "@/components/shared/Skeleton";
-import {
-    firedEventToHistoryEntry,
-    effectiveAiInvestigationMode,
-} from "../../lib/api";
+import { firedEventToHistoryEntry } from "../../lib/api";
 import type {
     AlertSignalStatus,
     MonitoringAlertRule,
@@ -27,8 +24,6 @@ import {
     useMonitoringHistory,
     useMonitoringInsights,
     useDeleteMonitoringInsight,
-    useRunMonitoringInsight,
-    useUpdateInsightStatus,
     useOpenInsightChat,
     useMuteMonitoringRule,
     useMonitoringStream,
@@ -71,8 +66,6 @@ export function MonitoringPage() {
         error: insightsError,
     } = useMonitoringInsights();
     const deleteInsight = useDeleteMonitoringInsight();
-    const runInsight = useRunMonitoringInsight();
-    const updateInsightStatus = useUpdateInsightStatus();
     const openInsightChat = useOpenInsightChat();
     const createRule = useCreateMonitoringRule();
     const updateRule = useUpdateMonitoringRule();
@@ -212,12 +205,6 @@ export function MonitoringPage() {
         (evt) => {
             const key = `${evt.ruleId}|${evt.firedAt}`;
             setInsightStatuses((s) => ({ ...s, [key]: evt }));
-            // A manual-mode firing persists a Queued report before this event —
-            // refresh the board so the card is there when the user looks.
-            if (evt.stage === "Queued")
-                queryClient.invalidateQueries({
-                    queryKey: ["monitoring", "insights"],
-                });
         },
         // Recovery signal (monitoring-closed-loop 4a): an Ok tick can't clear a Firing dot on
         // its own — it might just be "nothing new transitioned". alertResolved is the engine's
@@ -246,7 +233,7 @@ export function MonitoringPage() {
                 source: r.source,
                 severity: r.severity,
                 enabled: r.enabled,
-                aiInvestigation: effectiveAiInvestigationMode(r),
+                aiInvestigation: r.aiInvestigationEnabled,
                 status: statuses[r.id] ?? null,
                 lastFiredAt: r.lastFiredAt ?? null,
             })),
@@ -316,7 +303,9 @@ export function MonitoringPage() {
         );
         const liveRows = liveEvents
             .map(firedEventToHistoryEntry)
-            .filter((e) => !persistedKeys.has(`${e.ruleId}|${e.at}|${e.kind}`));
+            .filter(
+                (e) => !persistedKeys.has(`${e.ruleId}|${e.at}|${e.kind}`),
+            );
         return [...liveRows, ...history].sort(
             (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
         );
@@ -383,15 +372,6 @@ export function MonitoringPage() {
         .reverse()
         .slice(0, 5);
 
-    // Queued cards with a live investigation render a spinner — keyed
-    // ruleId|firedAt, the same identity the status events carry. The full map,
-    // not the display-capped list — a running card past the cap still spins.
-    const runningInsightKeys = new Set(
-        Object.values(insightStatuses)
-            .filter((s) => s.stage === "Started")
-            .map((s) => `${s.ruleId}|${s.firedAt}`),
-    );
-
     return (
         <div className="flex h-full flex-col" data-testid="monitoring-page">
             <div className="border-b px-6 py-3">
@@ -428,23 +408,11 @@ export function MonitoringPage() {
                                             {st.ruleName}
                                         </span>
                                         {" — "}
-                                        {st.stage === "Started" ? (
-                                            "AI investigation running…"
-                                        ) : st.stage === "Queued" ? (
-                                            <button
-                                                className="text-left text-primary hover:underline"
-                                                onClick={() =>
-                                                    setActiveTab("reports")
-                                                }
-                                            >
-                                                context prepared — investigate
-                                                it from AI Reports
-                                            </button>
-                                        ) : st.stage === "Skipped" ? (
-                                            `AI investigation skipped${st.reason ? `: ${st.reason}` : ""}`
-                                        ) : (
-                                            `AI investigation failed${st.reason ? `: ${st.reason}` : ""}`
-                                        )}
+                                        {st.stage === "Started"
+                                            ? "AI investigation running…"
+                                            : st.stage === "Skipped"
+                                              ? `AI investigation skipped${st.reason ? `: ${st.reason}` : ""}`
+                                              : `AI investigation failed${st.reason ? `: ${st.reason}` : ""}`}
                                     </span>
                                 </div>
                                 {st.stage !== "Started" && (
@@ -512,28 +480,26 @@ export function MonitoringPage() {
             </div>
 
             <div className="flex gap-1 border-b px-6">
-                {(["rules", "history", "ops", "reports"] as const).map(
-                    (tab) => (
-                        <button
-                            key={tab}
-                            data-testid={`monitoring-tab-${tab}`}
-                            onClick={() => setActiveTab(tab)}
-                            className={`px-4 py-2 text-sm font-medium transition-colors ${
-                                activeTab === tab
-                                    ? "border-b-2 border-primary text-primary"
-                                    : "text-muted-foreground hover:text-foreground"
-                            }`}
-                        >
-                            {tab === "rules"
-                                ? `Alert Rules (${rules.length})`
-                                : tab === "history"
-                                  ? `Alert History (${mergedHistory.length})`
-                                  : tab === "ops"
-                                    ? "Ops"
-                                    : `AI Reports (${insightReports.length})`}
-                        </button>
-                    ),
-                )}
+                {(["rules", "history", "ops", "reports"] as const).map((tab) => (
+                    <button
+                        key={tab}
+                        data-testid={`monitoring-tab-${tab}`}
+                        onClick={() => setActiveTab(tab)}
+                        className={`px-4 py-2 text-sm font-medium transition-colors ${
+                            activeTab === tab
+                                ? "border-b-2 border-primary text-primary"
+                                : "text-muted-foreground hover:text-foreground"
+                        }`}
+                    >
+                        {tab === "rules"
+                            ? `Alert Rules (${rules.length})`
+                            : tab === "history"
+                              ? `Alert History (${mergedHistory.length})`
+                              : tab === "ops"
+                                ? "Ops"
+                                : `AI Reports (${insightReports.length})`}
+                    </button>
+                ))}
             </div>
 
             <div className="flex-1 overflow-auto p-6">
@@ -623,18 +589,8 @@ export function MonitoringPage() {
                         onSelect={(id) => updateParams({ report: id })}
                         onDiscuss={discussReport}
                         onDelete={deleteReport}
-                        onRun={(r) => runInsight.mutate(r.id)}
-                        onSetStatus={(r, status) =>
-                            updateInsightStatus.mutate({
-                                id: r.id,
-                                status,
-                            })
-                        }
-                        runningKeys={runningInsightKeys}
                         discussPending={openInsightChat.isPending}
                         deletePending={deleteInsight.isPending}
-                        statusPending={updateInsightStatus.isPending}
-                        runPending={runInsight.isPending}
                     />
                 )}
             </div>

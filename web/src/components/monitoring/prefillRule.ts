@@ -22,7 +22,6 @@ export function buildPrefilledRuleDraft(
         intervalSeconds: 60,
         cooldownMinutes: 5,
         aiInvestigationEnabled: true,
-        aiInvestigationMode: "Auto",
         autoFixProposalsEnabled: false,
         ...prefill,
     };

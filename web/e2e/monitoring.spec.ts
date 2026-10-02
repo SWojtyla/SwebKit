@@ -275,7 +275,7 @@ test.describe("Monitoring", () => {
         await expect(page.getByTestId("alert-rule-dialog")).toBeVisible();
         await expect(
             page.getByTestId("alert-rule-ai-investigation"),
-        ).toHaveValue("Auto");
+        ).toBeChecked();
         await page.getByTestId("alert-rule-dialog-cancel").click();
 
         await expect(
@@ -291,9 +291,7 @@ test.describe("Monitoring", () => {
 
         await row.locator("[data-testid^='monitoring-rule-edit-']").click();
         await expect(page.getByTestId("alert-rule-dialog")).toBeVisible();
-        await page
-            .getByTestId("alert-rule-ai-investigation")
-            .selectOption("Off");
+        await page.getByTestId("alert-rule-ai-investigation").uncheck();
         await page.getByTestId("alert-rule-dialog-save").click();
 
         await expect(
@@ -508,9 +506,7 @@ test.describe("Monitoring", () => {
             .locator("[data-testid^='monitoring-history-snooze-']")
             .click();
         await page
-            .locator(
-                "[data-testid^='monitoring-history-snooze-'][data-testid$='-1h']",
-            )
+            .locator("[data-testid^='monitoring-history-snooze-'][data-testid$='-1h']")
             .click();
         await expect(page.getByTestId(rowTestId)).not.toBeVisible();
     });
@@ -538,7 +534,9 @@ test.describe("Monitoring", () => {
         ).toBeVisible();
 
         await page.getByTestId(`monitoring-rule-mute-${ruleId}`).click();
-        await page.getByTestId(`monitoring-rule-mute-${ruleId}-unmute`).click();
+        await page
+            .getByTestId(`monitoring-rule-mute-${ruleId}-unmute`)
+            .click();
         await expect(
             row.getByTestId(`monitoring-rule-muted-badge-${ruleId}`),
         ).toHaveCount(0);
@@ -1068,206 +1066,5 @@ test.describe("Monitoring", () => {
         await expect(
             page.getByTestId("contextual-assistant-messages"),
         ).toContainText("bad rollout with an invalid vault host");
-    });
-
-    // ── AI Reports kanban (ai-reports-kanban) ─────────────────────────────────
-    // The board groups reports by status. Queued cards hold the prepared context
-    // bundle (no tokens spent yet) and expose Investigate / Discard; Ready↔Done
-    // moves go through PATCH /api/monitoring/insights/{id}.
-
-    const queuedReport = {
-        id: "queued-report-1",
-        sessionId: "queued-report-1",
-        ruleId: "rule-manual",
-        ruleName: "Pod crash loop",
-        firedAt: "2026-08-03T13:00:00Z",
-        alertMessage: "pod api-7c9f restarted 12 times",
-        alertDetail: "Restart count exceeded threshold",
-        alertSeverity: "Critical",
-        status: "Queued",
-        preparedContextSummary: "Probed Aks/prod via map 'Default'",
-        reportJson: JSON.stringify({ probe: { pod: "api-7c9f" } }),
-        createdAt: "2026-08-03T13:00:01Z",
-    };
-
-    /** Stateful stub: `reports` is the board's server state; route handlers mutate it. */
-    function mockKanbanBoard(page: Page, reports: Record<string, unknown>[]) {
-        return page.route("**/api/monitoring/insights", async (route) => {
-            if (route.request().method() !== "GET") return route.fallback();
-            await route.fulfill({
-                status: 200,
-                contentType: "application/json",
-                body: JSON.stringify(reports),
-            });
-        });
-    }
-
-    test("the board groups reports into Queued, Ready and Done columns", async ({
-        page,
-    }) => {
-        const done = { ...cannedReport, id: "done-report-1", status: "Done" };
-        await mockKanbanBoard(page, [queuedReport, cannedReport, done]);
-        await page.goto("/monitoring?tab=reports");
-
-        await expect(
-            page.getByTestId("ai-reports-col-queued-count"),
-        ).toHaveText("1");
-        await expect(page.getByTestId("ai-reports-col-ready-count")).toHaveText(
-            "1",
-        );
-        await expect(page.getByTestId("ai-reports-col-done-count")).toHaveText(
-            "1",
-        );
-
-        const card = page.getByTestId(`ai-report-row-${queuedReport.id}`);
-        await expect(
-            page.getByTestId("ai-reports-col-queued").locator(card),
-        ).toBeVisible();
-        await expect(card).toContainText("Pod crash loop");
-        await expect(
-            page.getByTestId(`ai-report-alert-severity-${queuedReport.id}`),
-        ).toHaveText("Critical");
-        await expect(card).toContainText("Probed Aks/prod");
-        await expect(
-            page.getByTestId(`ai-report-run-${queuedReport.id}`),
-        ).toBeVisible();
-        await expect(
-            page.getByTestId(`ai-report-discard-${queuedReport.id}`),
-        ).toBeVisible();
-    });
-
-    test("a queued card's detail shows the prepared context and Investigate fires the run endpoint", async ({
-        page,
-    }) => {
-        await mockKanbanBoard(page, [queuedReport]);
-        let runCalled = false;
-        await page.route(
-            `**/api/monitoring/insights/${queuedReport.id}/run`,
-            async (route) => {
-                if (route.request().method() !== "POST")
-                    return route.fallback();
-                runCalled = true;
-                await route.fulfill({ status: 202, body: "{}" });
-            },
-        );
-
-        await page.goto("/monitoring?tab=reports");
-        await page.getByTestId(`ai-report-row-${queuedReport.id}`).click();
-
-        await expect(page.getByTestId("queued-report-detail")).toBeVisible();
-        await expect(page.getByTestId("queued-report-name")).toHaveText(
-            "Pod crash loop",
-        );
-        await expect(page.getByTestId("queued-report-detail")).toContainText(
-            "pod api-7c9f restarted 12 times",
-        );
-        await expect(page.getByTestId("queued-report-probe")).toContainText(
-            "api-7c9f",
-        );
-
-        await page.getByTestId("queued-report-run").click();
-        await expect.poll(() => runCalled).toBe(true);
-        await expect(
-            page.locator("[data-testid^='notification-toast-']").first(),
-        ).toContainText("Investigation started");
-    });
-
-    test("Discard sends the Done status and the card leaves Queued", async ({
-        page,
-    }) => {
-        const reports: Record<string, unknown>[] = [{ ...queuedReport }];
-        await mockKanbanBoard(page, reports);
-        await page.route(
-            `**/api/monitoring/insights/${queuedReport.id}`,
-            async (route) => {
-                if (route.request().method() !== "PATCH")
-                    return route.fallback();
-                const body = route.request().postDataJSON() as {
-                    status: string;
-                };
-                reports[0] = { ...queuedReport, status: body.status };
-                await route.fulfill({
-                    status: 200,
-                    contentType: "application/json",
-                    body: JSON.stringify(reports[0]),
-                });
-            },
-        );
-
-        await page.goto("/monitoring?tab=reports");
-        await page.getByTestId(`ai-report-discard-${queuedReport.id}`).click();
-
-        await expect(
-            page.getByTestId("ai-reports-col-queued-count"),
-        ).toHaveText("0");
-        await expect(page.getByTestId("ai-reports-col-done-count")).toHaveText(
-            "1",
-        );
-        await expect(
-            page
-                .getByTestId("ai-reports-col-done")
-                .getByTestId(`ai-report-row-${queuedReport.id}`),
-        ).toBeVisible();
-    });
-
-    test("Mark done moves a Ready card to Done; Move to Ready brings it back", async ({
-        page,
-    }) => {
-        const reports: Record<string, unknown>[] = [{ ...cannedReport }];
-        await mockKanbanBoard(page, reports);
-        await page.route(
-            `**/api/monitoring/insights/${cannedReport.id}`,
-            async (route) => {
-                if (route.request().method() !== "PATCH")
-                    return route.fallback();
-                const body = route.request().postDataJSON() as {
-                    status: string;
-                };
-                reports[0] = { ...cannedReport, status: body.status };
-                await route.fulfill({
-                    status: 200,
-                    contentType: "application/json",
-                    body: JSON.stringify(reports[0]),
-                });
-            },
-        );
-
-        await page.goto("/monitoring?tab=reports");
-        await page.getByTestId(`ai-report-done-${cannedReport.id}`).click();
-        await expect(page.getByTestId("ai-reports-col-done-count")).toHaveText(
-            "1",
-        );
-
-        await page.getByTestId(`ai-report-reopen-${cannedReport.id}`).click();
-        await expect(page.getByTestId("ai-reports-col-ready-count")).toHaveText(
-            "1",
-        );
-        await expect(page.getByTestId("ai-reports-col-done-count")).toHaveText(
-            "0",
-        );
-    });
-
-    test("opening a card replaces the board with a full-width detail; Back and Escape return", async ({
-        page,
-    }) => {
-        await mockKanbanBoard(page, [queuedReport, cannedReport]);
-        await page.goto("/monitoring?tab=reports");
-
-        await expect(page.getByTestId("ai-reports-col-queued")).toBeVisible();
-        await page.getByTestId(`ai-report-row-${cannedReport.id}`).click();
-
-        await expect(page.getByTestId("ai-report-detail")).toBeVisible();
-        await expect(page.getByTestId("ai-reports-col-queued")).toHaveCount(0);
-        await expect(page.getByTestId("ai-report-back")).toBeVisible();
-
-        await page.keyboard.press("Escape");
-        await expect(page.getByTestId("ai-reports-col-queued")).toBeVisible();
-        await expect(page.getByTestId("ai-report-detail")).toHaveCount(0);
-
-        await page.getByTestId(`ai-report-row-${queuedReport.id}`).click();
-        await expect(page.getByTestId("queued-report-detail")).toBeVisible();
-        await page.getByTestId("ai-report-back").click();
-        await expect(page.getByTestId("ai-reports-col-queued")).toBeVisible();
-        await expect(page.getByTestId("queued-report-detail")).toHaveCount(0);
     });
 });

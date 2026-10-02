@@ -9,11 +9,12 @@ cluster's namespaces, and browse all selected clusters in one merged resource vi
 a Pods tab showing pods from prod-eu and staging side by side, each row tagged with
 its cluster, each action routed back to the cluster the row came from.
 
-The profile's configured context (`aksConfig.kubeconfigContext`) remains the
-**primary** context: context switching keeps today's semantics (POST
-`/api/aks/context` + connection test + persisted profile), and agent tools continue
-to default to it. Additional contexts are _attached_ for browsing — they live in URL
-state + view preferences, never in the profile.
+There is **no primary context**. The picker is a plain multi-select: every checked
+context feeds the merged view equally, and any of them — including the configured
+one — can be deselected like the rest (minimum one stays checked). The profile's
+configured context (`aksConfig.kubeconfigContext`) survives only as the **default**:
+it seeds the initial selection, decodes legacy bare URL tokens, and remains the
+target agent tools fall back to when no context is passed.
 
 ## Why this is cheaper than it looks
 
@@ -42,12 +43,12 @@ UI, not new architecture:
 **Workspace state / URL:**
 
 - New `ctxs` search param: comma-separated `encodeURIComponent` context names —
-  the _attached_ secondary contexts. Primary comes from the profile as today and is
-  always implicit in the view. Persist the set in a view pref
-  (`aks-selected-contexts`) so it survives navigation.
+  the **whole selection** (including the configured context). An absent `ctxs`
+  falls back to `[configured]`; persisted in the `aks-selected-contexts` view pref
+  so it survives navigation.
 - `ns` param becomes composite: `enc(ctx):enc(ns)` per entry, `enc(ctx):*` for
   "all namespaces in that cluster", entries joined with `,`. **Back-compat:**
-  entries without a `:` bind to the primary context — old deep links and pinned
+  entries without a `:` bind to the configured default context — old deep links and pinned
   resources keep working. `parseNamespaces`/`encodeNamespaces`/
   `parseKey`/`makeKey` gain the ctx segment (`ctx:ns/name` for `pod`/`yaml`/
   `helm`/`container`/`logsNs` params).
@@ -56,12 +57,13 @@ UI, not new architecture:
 
 **Pickers:**
 
-- `ContextSelector` → multi-select dropdown (checkbox list reusing the
-  NamespaceSelector interaction pattern): primary row badged "primary",
-  secondary checkboxes toggle attachment. Switching _primary_ keeps today's
-  `handleContextChange` flow (POST, test, MRU, per-context ns restore). Toggling a
-  secondary context does **no** POST and no upfront connection test — failures
-  surface lazily on that context's namespace query.
+- `ContextSelector` → plain multi-select dropdown (checkbox list reusing the
+  NamespaceSelector interaction pattern): clicking a row or its checkbox toggles
+  membership; the trailing button (or Ctrl/Cmd+click) selects only that context.
+  The last checked context can't be deselected. Selection does **no** POST and no
+  upfront connection test — failures surface lazily on that context's namespace
+  query. The old primary-switch flow (`POST /api/aks/context` + connection test)
+  is gone from this surface.
 - `NamespaceSelector` → grouped list: one section per selected context with its
   own loading/error state (a 403 on one cluster must not blank the picker — reuse
   the `NamespacesWarning`/`nsError` pattern per context). Per-cluster "All" state;
@@ -98,8 +100,9 @@ UI, not new architecture:
 
 **Agent:**
 
-- Screen state publishes `contexts: string[]` + `primaryContext` alongside today's
-  `context` field; `AksToolContext` needs no change (tools already take `context`).
+- Screen state publishes `contexts: string[]` alongside today's `context` field
+  (the configured default — unchanged as the agent's fallback target);
+  `AksToolContext` needs no change (tools already take `context`).
 
 **Demo mode:**
 
@@ -114,12 +117,12 @@ UI, not new architecture:
   suspend/trigger/schedule, helm rollback, yaml validate+apply.
 - Mutation hooks take `vars.context` → append query param; invalidate keys stay
   prefix-based (already correct).
-- `ConfirmBar` messages name the cluster for non-primary targets:
-  "Delete pod `api-xyz` in **`prod-eu`**?"
+- `ConfirmBar` messages name the target cluster whenever it differs from the
+  configured default: "Delete pod `api-xyz` in **`prod-eu`**?"
 - Pod shell + port-forward pass the row's context (native layer already accepts
   it); port-forward session list shows the context.
 - YAML apply validates+applies to the row's own cluster.
-- Auto-refresh floor: when >1 context attached, minimum interval is 30s — N×M
+- Auto-refresh floor: when >1 context selected, minimum interval is 30s — N×M
   polling every 5–10s is real cost on big clusters.
 
 ## Non-goals
@@ -134,17 +137,17 @@ UI, not new architecture:
 ## Implementation tasks
 
 - [x] `aks-workspace-context.ts`: composite key codecs (`ctx:ns`, `ctx:ns/name`),
-      `ctxs` param parse/encode, back-compat bare-ns→primary
+      `ctxs` param parse/encode, back-compat bare-ns→default
 - [x] `useAks.ts`: `context` param on all resource hooks; `useAksScopedQueries`
       fan-out helper; `.context` stamping; mutation vars.context (phase 2)
 - [x] `AksEndpoints.cs`: `?context=` on all remaining handlers incl. log SSE
-- [x] `ContextSelector` multi-select + primary badge
+- [x] `ContextSelector` plain multi-select (no primary badge)
 - [x] `NamespaceSelector` per-context groups, composite tokens, per-context errors
-- [x] `AksWorkspaceContext`: attached-contexts state, per-context ns init/restore,
+- [x] `AksWorkspaceContext`: selection state, per-context ns init/restore,
       namespaceToken map, pass ctx through pod/yaml/helm/container/logs URL params
 - [x] `ResourceTable` Context column (multi-context only)
 - [x] All tabs + detail/log/yaml/analysis/port-forward surfaces carry row context
-- [x] Screen state: `contexts` + `primaryContext`
+- [x] Screen state: `contexts` alongside `context`
 - [x] Demo: per-context demo clients
 - [x] Phase 2: mutation endpoints + hooks + cluster-named ConfirmBar; shell/PF ctx
 - [x] Auto-refresh 30s floor for multi-context
@@ -153,28 +156,30 @@ UI, not new architecture:
 ## Test plan
 
 - `aks-workspace-context.test.ts` (new or extended): composite ns codec round-trip,
-  bare-ns→primary back-compat, `ctxs` param, `*` per-context tokens.
+  bare-ns→default back-compat, `ctxs` param, `*` per-context tokens.
 - `useAksScopedQueries` unit test: fan-out merge, `.context` stamping, per-context
   error isolation (one failing ctx leaves others' rows).
 - `AksEndpointsTests`: `?context=` resolves the right pooled client (fake pool
   keyed by context already exists — `GetAksClient(string?)` overload is stubbed
   per-test; extend fake to record requested contexts).
 - `DemoAksClient` per-context differentiation test.
-- e2e `aks-multi-context.spec.ts` (new): attach `aks-ecommerce-staging` alongside
-  primary dev context → grouped ns picker → merged pods show Context column →
+- e2e `aks-multi-context.spec.ts` (new): select `aks-ecommerce-staging` alongside
+  the configured dev context → grouped ns picker → merged pods show Context column →
   open pod detail on secondary row → deep link `?ctxs=&ns=` restores both →
   phase 2: delete on secondary row names that cluster in ConfirmBar.
-- Regression: `aks.spec.ts`, `aks-context-switch.spec.ts`, `aks-url-state.spec.ts`
-  must stay green unchanged (back-compat is the point).
+- Regression: `aks.spec.ts`, `aks-url-state.spec.ts` stay green unchanged;
+  `aks-context-switch.spec.ts` was rewritten for the multi-select model (picker,
+  per-context namespace memory, last-selected guard, first-run state) — the old
+  primary-switch assertions are obsolete by design.
 
 ## Validation results
 
 - `npx tsc --noEmit` / `eslint`: clean (pre-existing warnings only).
 - `vitest`: 791 passed — incl. `aks-workspace-context.test.ts` (22 codec tests:
-  composite round-trip, bare-ns→primary back-compat, `ctxs`, `*` tokens).
+  composite round-trip, bare-ns→default back-compat, `ctxs`, `*` tokens).
 - `dotnet test`: Sidecar 840, Kubernetes 167, Core 942 — incl. explicit-context
   routing tests on `GetAksClient(context)` (`RequestedContexts` assertions).
-- e2e `aks-multi-context.spec.ts`: 7/7 — attach/detach, grouped ns picker,
+- e2e `aks-multi-context.spec.ts`: 9/9 — select/deselect (incl. the configured context), grouped ns picker,
   Context column, deep-link restore, per-context error banner, cluster-named
   ConfirmBar on secondary rows.
 - e2e regressions green: `aks.spec.ts` 12/12, `aks-context-switch.spec.ts` 7/7,
@@ -193,10 +198,13 @@ UI, not new architecture:
 
 ## Decisions
 
-- **Primary stays primary.** Secondary contexts are URL/view-pref state, never
-  written to the profile — attaching a cluster must not mutate persisted config or
-  restore differently next launch. Agent tools, monitoring, and `/api/aks/context`
-  keep their single-configured-context semantics.
+- **No primary context.** The selection is one peer set held in URL/view-pref
+  state; the configured context is only the seed + legacy-token fallback + agent
+  default, never a privileged row in the UI. Deselecting the configured context is
+  a normal operation. The old click-to-switch-primary flow (POST
+  `/api/aks/context`, connection test, "Switching to…" state) was removed from the
+  picker — which cluster the profile points at is now a Settings concern, since
+  view membership no longer implies it.
 - **Client-side fan-out over aggregate endpoints.** N `useQueries` with per-context
   keys gives free per-cluster caching, partial-failure isolation, and identical
   shapes — a `/api/aks/multi` endpoint would duplicate every handler's
@@ -204,8 +212,8 @@ UI, not new architecture:
 - **Row `.context` stamped client-side**, not added to shared `AksModels` — those
   models feed monitoring/demo/agent paths that don't need the field; the type
   addition lives in `web/src/lib/types.ts` as optional.
-- **Lazy failure for secondary contexts.** No upfront connection test on attach —
+- **Lazy failure for any context.** No upfront connection test on selection —
   the namespace query's existing error surface shows per-cluster 403/timeout
-  inline; attaching a dead cluster never blocks the view.
+  inline; selecting a dead cluster never blocks the view.
 - **Auto-refresh floor 30s in multi-context.** Traffic scales with
   contexts × namespaces; a floor beats discovering the cost on a 200-ns cluster.

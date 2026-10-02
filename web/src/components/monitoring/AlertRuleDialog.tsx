@@ -6,16 +6,11 @@ import type {
     MonitoringAlertRule,
     AlertRuleSource,
     AlertSeverity,
-    AiInvestigationMode,
     AksPodAlertParams,
     ServiceBusAlertParams,
     RedisAlertParams,
 } from "../../lib/api";
-import {
-    getServiceBusNamespaces,
-    getRedisCaches,
-    effectiveAiInvestigationMode,
-} from "../../lib/api";
+import { getServiceBusNamespaces, getRedisCaches } from "../../lib/api";
 import { useAksContexts, useAksNamespaces, useProfile } from "../../lib/hooks";
 import { isAlertRuleComplete } from "./alertRuleValidation";
 
@@ -57,7 +52,6 @@ const empty = (): MonitoringAlertRule => ({
         clientCountLowerBound: 1,
     },
     aiInvestigationEnabled: true,
-    aiInvestigationMode: "Auto",
     autoFixProposalsEnabled: false,
 });
 
@@ -521,50 +515,34 @@ export function AlertRuleDialog({
                     )}
 
                     <div className="rounded-md border p-3">
-                        <div className="text-sm">
-                            <span className="font-medium">
-                                AI investigation
+                        <label className="flex items-start gap-2 text-sm">
+                            <input
+                                type="checkbox"
+                                checked={draft.aiInvestigationEnabled}
+                                onChange={(e) =>
+                                    set({
+                                        aiInvestigationEnabled:
+                                            e.target.checked,
+                                    })
+                                }
+                                className="mt-0.5"
+                                data-testid="alert-rule-ai-investigation"
+                            />
+                            <span>
+                                <span className="font-medium">
+                                    AI investigation
+                                </span>
+                                <span className="mt-0.5 block text-xs text-muted-foreground">
+                                    When this alert fires, the agent
+                                    investigates related workspace resources and
+                                    posts an insight you can open in chat.
+                                    Requires an active agent profile with tool
+                                    calling, and the alert's resource added to
+                                    the Map (Settings → Map).
+                                </span>
                             </span>
-                            <span className="mt-0.5 block text-xs text-muted-foreground">
-                                When this alert fires, the agent investigates
-                                related workspace resources and posts a report
-                                you can open in chat. Requires an active agent
-                                profile with tool calling.
-                            </span>
-                        </div>
-                        <select
-                            value={effectiveAiInvestigationMode(draft)}
-                            onChange={(e) => {
-                                const mode = e.target
-                                    .value as AiInvestigationMode;
-                                set({
-                                    aiInvestigationMode: mode,
-                                    // Keep the legacy flag consistent so older
-                                    // builds reading this file behave the same.
-                                    aiInvestigationEnabled: mode !== "Off",
-                                });
-                            }}
-                            className="mt-2 w-full rounded-md border bg-card px-3 py-2 text-sm"
-                            data-testid="alert-rule-ai-investigation"
-                        >
-                            <option value="Auto">
-                                Auto — investigate every firing (spends tokens)
-                            </option>
-                            <option value="Manual">
-                                Manual — prepare context, you trigger the
-                                investigation
-                            </option>
-                            <option value="Off">Off</option>
-                        </select>
-                        {effectiveAiInvestigationMode(draft) === "Manual" && (
-                            <p className="mt-1.5 text-xs text-muted-foreground">
-                                A firing prepares the context (alert, map match,
-                                resource probe — no tokens spent) and parks a
-                                card in AI Reports → Queued. You click
-                                Investigate when you want the full run.
-                            </p>
-                        )}
-                        {effectiveAiInvestigationMode(draft) !== "Off" && (
+                        </label>
+                        {draft.aiInvestigationEnabled && (
                             <label className="mt-2 flex items-start gap-2 border-t pt-3 text-sm">
                                 <input
                                     type="checkbox"

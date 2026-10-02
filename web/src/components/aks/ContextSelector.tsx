@@ -1,38 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KubeContextInfo } from "@/lib/types";
-import { loadViewPreference } from "@/lib/stores/panel-preferences";
-import { Check, Loader2 } from "lucide-react";
+import { CheckSquare, Square } from "lucide-react";
 
 interface ContextSelectorProps {
     contexts: KubeContextInfo[] | undefined;
-    /** The primary context — actions and agent tools route here. */
-    currentContext: string | null;
-    /** Every selected context (primary + attached). */
+    /** Every selected context — the merged view queries all of them. */
     selectedContexts: string[];
-    isLoading?: boolean;
-    /** Context the switch is targeting, so the button can say "Switching to X…" rather
-     * than just sitting disabled with the old context's name still showing. */
-    pendingContext?: string | null;
-    /** Promote a context to primary — a real context switch (POST /api/aks/context). */
-    onChange: (context: string, defaultNamespace?: string) => void;
-    /** Attach/detach a secondary context — no POST, just a read fan-out scope change. */
-    onToggleAttached: (context: string) => void;
+    /** Add/remove a context from the selection. */
+    onToggle: (context: string) => void;
+    /** Replace the selection with this context alone. */
+    onSelectOnly: (context: string) => void;
 }
 
 /**
- * Multi-context picker. Clicking a row promotes that context to primary (the single
- * configured context the actions default to); the checkbox attaches a context as a
- * secondary read source without touching the profile. The button shows the primary plus
- * a "+N" badge while extra clusters are attached.
+ * Multi-select context picker: every checked context feeds the merged view and gets
+ * its own namespace group in the namespace picker. There is no "primary" — clicking a
+ * row toggles it like the checkbox does; Ctrl/Cmd+click (or the dot button) selects
+ * just that one.
  */
 export function ContextSelector({
     contexts,
-    currentContext,
     selectedContexts,
-    isLoading,
-    pendingContext,
-    onChange,
-    onToggleAttached,
+    onToggle,
+    onSelectOnly,
 }: ContextSelectorProps) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState("");
@@ -62,22 +52,17 @@ export function ContextSelector({
     );
 
     const sortedFiltered = useMemo(() => {
-        // Current first, then most-recently-used — persisted by the workspace on each
-        // successful switch — then alphabetical.
-        const mru = loadViewPreference<string[]>("aks-context-mru", []);
-        const mruRank = new Map(mru.map((name, i) => [name, i]));
+        // Selected first (so what's in view is visible at a glance), then alphabetical.
+        const selected = new Set(selectedContexts);
         return [...filtered].sort((a, b) => {
-            const aCurrent = a.name === currentContext;
-            const bCurrent = b.name === currentContext;
-            if (aCurrent && !bCurrent) return -1;
-            if (!aCurrent && bCurrent) return 1;
-            const aMru = mruRank.get(a.name) ?? Number.MAX_SAFE_INTEGER;
-            const bMru = mruRank.get(b.name) ?? Number.MAX_SAFE_INTEGER;
-            if (aMru !== bMru) return aMru - bMru;
+            const aSel = selected.has(a.name);
+            const bSel = selected.has(b.name);
+            if (aSel && !bSel) return -1;
+            if (!aSel && bSel) return 1;
             return a.name.localeCompare(b.name);
         });
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- re-sort on open so persisted MRU is re-read
-    }, [filtered, currentContext, open]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- re-sort on open so selection changes re-order
+    }, [filtered, selectedContexts, open]);
 
     const [prevNav, setPrevNav] = useState({ search, open });
     if (prevNav.search !== search || prevNav.open !== open) {
@@ -89,12 +74,6 @@ export function ContextSelector({
         setOpen(false);
         setSearch("");
         buttonRef.current?.focus();
-    };
-
-    const pick = (ctx: KubeContextInfo) => {
-        if (ctx.name !== currentContext)
-            onChange(ctx.name, ctx.namespace ?? undefined);
-        close();
     };
 
     const onKeyDown = (e: React.KeyboardEvent) => {
@@ -110,22 +89,23 @@ export function ContextSelector({
             setHighlight((h) => Math.max(h - 1, 0));
         } else if (e.key === "Enter" && sortedFiltered[highlight]) {
             e.preventDefault();
-            pick(sortedFiltered[highlight]);
+            onToggle(sortedFiltered[highlight].name);
         }
     };
 
-    const attachedCount = selectedContexts.length - (currentContext ? 1 : 0);
-    const display = isLoading
-        ? `Switching to ${pendingContext ?? "…"}`
-        : currentContext || "Select context...";
+    const display =
+        selectedContexts.length === 0
+            ? "Select contexts…"
+            : selectedContexts.length === 1
+              ? selectedContexts[0]
+              : `${selectedContexts.length} contexts`;
 
     return (
         <div ref={ref} className="relative" onKeyDown={onKeyDown}>
             <button
                 ref={buttonRef}
                 type="button"
-                onClick={() => !isLoading && setOpen((v) => !v)}
-                disabled={isLoading}
+                onClick={() => setOpen((v) => !v)}
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 title={display}
@@ -133,18 +113,7 @@ export function ContextSelector({
                 data-testid="aks-context-select"
             >
                 <span className="flex min-w-0 items-center gap-1.5">
-                    {isLoading && (
-                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                    )}
                     <span className="truncate">{display}</span>
-                    {attachedCount > 0 && (
-                        <span
-                            className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-xs font-medium text-primary"
-                            data-testid="aks-context-attached-count"
-                        >
-                            +{attachedCount}
-                        </span>
-                    )}
                 </span>
                 <span className="text-muted-foreground">
                     {open ? "▲" : "▼"}
@@ -178,10 +147,11 @@ export function ContextSelector({
                             </div>
                         )}
                         {sortedFiltered.map((ctx, i) => {
-                            const isPrimary = ctx.name === currentContext;
-                            const isAttached = selectedContexts.includes(
+                            const isSelected = selectedContexts.includes(
                                 ctx.name,
                             );
+                            const isLastSelected =
+                                isSelected && selectedContexts.length === 1;
                             const subtitle =
                                 ctx.cluster || ctx.namespace
                                     ? `${ctx.cluster ?? ""}${ctx.cluster && ctx.namespace ? " · " : ""}${ctx.namespace ? `ns: ${ctx.namespace}` : ""}`
@@ -191,44 +161,34 @@ export function ContextSelector({
                                     key={ctx.name}
                                     id={`aks-context-option-row-${i}`}
                                     role="option"
-                                    aria-selected={isPrimary}
-                                    onClick={() => pick(ctx)}
+                                    aria-selected={isSelected}
+                                    onClick={() =>
+                                        !isLastSelected && onToggle(ctx.name)
+                                    }
                                     onMouseEnter={() => setHighlight(i)}
-                                    className={`w-full cursor-pointer rounded px-2 py-1.5 text-left text-sm hover:bg-accent ${isPrimary ? "bg-accent/50 font-medium" : ""} ${i === highlight ? "bg-accent/40" : ""}`}
+                                    className={`w-full cursor-pointer rounded px-2 py-1.5 text-left text-sm hover:bg-accent ${i === highlight ? "bg-accent/40" : ""}`}
                                     data-testid={`aks-context-option-${ctx.name}`}
                                 >
                                     <div className="flex items-center gap-2">
                                         <input
                                             type="checkbox"
-                                            checked={isAttached || isPrimary}
-                                            disabled={isPrimary}
+                                            checked={isSelected}
+                                            disabled={isLastSelected}
                                             title={
-                                                isPrimary
-                                                    ? "Primary context is always selected"
-                                                    : isAttached
-                                                      ? "Detach this cluster"
-                                                      : "Attach this cluster to the merged view"
+                                                isLastSelected
+                                                    ? "At least one cluster must stay selected"
+                                                    : isSelected
+                                                      ? "Remove this cluster from the view"
+                                                      : "Add this cluster to the view"
                                             }
                                             onClick={(e) => e.stopPropagation()}
-                                            onChange={() =>
-                                                onToggleAttached(ctx.name)
-                                            }
+                                            onChange={() => onToggle(ctx.name)}
                                             className="h-4 w-4"
-                                            data-testid={`aks-context-attach-${ctx.name}`}
+                                            data-testid={`aks-context-check-${ctx.name}`}
                                         />
                                         <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2 truncate">
-                                                <span className="truncate">
-                                                    {ctx.name}
-                                                </span>
-                                                {isPrimary && (
-                                                    <span
-                                                        className="shrink-0 rounded bg-primary/15 px-1 py-0.5 text-[10px] font-medium text-primary"
-                                                        data-testid="aks-context-primary-badge"
-                                                    >
-                                                        primary
-                                                    </span>
-                                                )}
+                                            <div className="truncate">
+                                                {ctx.name}
                                             </div>
                                             {subtitle && (
                                                 <div className="truncate text-xs text-muted-foreground">
@@ -236,19 +196,33 @@ export function ContextSelector({
                                                 </div>
                                             )}
                                         </div>
-                                        {isPrimary ? (
-                                            <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
-                                        ) : (
-                                            <span className="h-3.5 w-3.5 shrink-0" />
-                                        )}
+                                        <button
+                                            type="button"
+                                            title={`View only ${ctx.name}`}
+                                            aria-label={`Select only ${ctx.name}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onSelectOnly(ctx.name);
+                                                close();
+                                            }}
+                                            className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                                            data-testid={`aks-context-only-${ctx.name}`}
+                                        >
+                                            {isSelected &&
+                                            selectedContexts.length === 1 ? (
+                                                <CheckSquare className="h-3.5 w-3.5 text-primary" />
+                                            ) : (
+                                                <Square className="h-3.5 w-3.5" />
+                                            )}
+                                        </button>
                                     </div>
                                 </div>
                             );
                         })}
                     </div>
                     <div className="border-t px-2 py-1.5 text-[11px] text-muted-foreground">
-                        Checkbox merges a cluster into the view · clicking a row
-                        makes it primary
+                        Checked clusters feed the merged view · the button on
+                        the right selects only that cluster
                     </div>
                 </div>
             )}
