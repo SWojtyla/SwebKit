@@ -6,21 +6,21 @@
 .DESCRIPTION
     This is the middle ground between run-dev.ps1 (source + HMR + Tauri window)
     and build-msi.ps1 (full installer, minutes per iteration): it exercises the
-    exact two artifacts the MSI ships —
+    exact two artifacts the MSI ships -
 
       * the production frontend bundle (web\dist, built by vite, not served by
         the dev server), and
       * the published sidecar executable (src-tauri\binaries\sidecar\SwebKit.Sidecar.exe,
         self-contained, Release)
 
-    — wired to each other and served at http://127.0.0.1:<Port>. Both are rebuilt
+    - wired to each other and served at http://127.0.0.1:<Port>. Both are rebuilt
     from scratch on every run; there is no "reuse what's there" path by default,
     because a stale bundle silently testing yesterday's code is the failure mode
     this script exists to prevent.
 
     Two things differ from the packaged app by necessity: the sidecar port is
     fixed (Tauri normally assigns a free one over IPC, which needs no browser
-    equivalent — so it is inlined into the bundle as VITE_SIDECAR_URL instead),
+    equivalent - so it is inlined into the bundle as VITE_SIDECAR_URL instead),
     and Tauri-native features (secret storage, native dialogs, shell) are
     unavailable outside the webview. Everything that talks to the sidecar over
     HTTP behaves identically.

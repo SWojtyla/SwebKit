@@ -20,7 +20,7 @@ describe("apiFetch error mapping", () => {
             ),
         );
 
-        const err = await apiFetch("/x").catch((e) => e);
+        const err = await apiFetch<never>("/x").catch((e: ApiError) => e);
 
         expect(err).toBeInstanceOf(ApiError);
         expect(err.message).toBe("Service Bus request failed");
@@ -36,7 +36,7 @@ describe("apiFetch error mapping", () => {
             vi.fn(async () => new Response("boom", { status: 500 })),
         );
 
-        const err = await apiFetch("/x").catch((e) => e);
+        const err = await apiFetch<never>("/x").catch((e: ApiError) => e);
 
         expect(err).toBeInstanceOf(ApiError);
         expect(err.message).toBe("boom");
@@ -54,7 +54,7 @@ describe("apiFetch error mapping", () => {
             ),
         );
 
-        const err = await apiFetch("/x").catch((e) => e);
+        const err = await apiFetch<never>("/x").catch((e: ApiError) => e);
 
         expect(err.message).toBe("Bad things happened");
     });

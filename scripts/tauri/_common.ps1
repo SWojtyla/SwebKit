@@ -5,7 +5,7 @@
 #
 # Nothing here has side effects on import; it only defines functions. The two
 # build steps live here (rather than being copy-pasted per script) because
-# build-msi.ps1 and test-frontend.ps1 must produce *identical* artifacts — the
+# build-msi.ps1 and test-frontend.ps1 must produce *identical* artifacts - the
 # whole point of test-frontend.ps1 is that what you test is what the MSI ships.
 
 # No Set-StrictMode here on purpose: dot-sourcing runs in the *caller's* scope, so
@@ -157,7 +157,7 @@ function Build-Frontend {
 .DESCRIPTION
     That folder is gitignored and starts empty. tauri.conf.json bundles it as a
     resource, so if it is stale or empty the installer still builds fine and the
-    installed app dies at startup with "Sidecar binary not found" — hence the
+    installed app dies at startup with "Sidecar binary not found" - hence the
     explicit existence check at the end.
 
     Self-contained by default: end users are not expected to have the .NET
