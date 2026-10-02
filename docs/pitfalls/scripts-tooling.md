@@ -21,6 +21,19 @@ $e = $null; [void][System.Management.Automation.Language.Parser]::ParseFile('scr
 
 Run that in `powershell.exe`, not `pwsh`.
 
+## Native stderr aborts scripts in the VS Code PowerShell terminal
+
+In Windows PowerShell 5.1, a native tool's stderr becomes `ErrorRecord`s whenever it is redirected
+(`2>&1`) or the host has no real console (the VS Code PowerShell extension, ISE). Under
+`$ErrorActionPreference = 'Stop'`, which every script here sets, the first stderr line throws
+`NativeCommandError` and kills a build that would have succeeded. `cargo` writes every `Compiling`
+line to stderr, and vite writes its chunk-size warning there, so `build-msi.ps1` died mid-build
+from the VS Code terminal while working fine from `cmd`.
+
+**Run native tools through `Invoke-Native`** (`scripts/tauri/_common.ps1`). It lifts `Stop`
+locally, merges stderr into the output as plain text, and judges success only by `$LASTEXITCODE`.
+Don't call `npm`/`dotnet`/`cargo` bare from a script that sets `Stop`.
+
 ## `npm run build` type-checks test files, vitest does not
 
 `npm run build` is `tsc -b && vite build`, and `web/tsconfig.json` includes all of `src/`, so

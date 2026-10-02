@@ -53,7 +53,21 @@ function Invoke-Native {
         # Out-Host, not bare invocation: a native command's stdout would otherwise
         # land in the *pipeline* of whichever function called this, so a helper
         # that returns a path (Publish-Sidecar) would return the build log too.
-        & $FilePath @Arguments | Out-Host
+        #
+        # The exit code is the only success signal. Windows PowerShell 5.1 turns
+        # native stderr into ErrorRecords in non-console hosts (the VS Code
+        # PowerShell extension, ISE), and under the caller's
+        # ErrorActionPreference=Stop the first stderr line - vite's chunk-size
+        # warning, every cargo "Compiling" line - would abort a healthy build.
+        # So stderr is merged into stdout as plain text with Stop lifted locally.
+        $previousPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            & $FilePath @Arguments 2>&1 | ForEach-Object {
+                if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_ }
+            } | Out-Host
+        }
+        finally { $ErrorActionPreference = $previousPreference }
         if ($LASTEXITCODE -ne 0) {
             throw "$FilePath $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
         }

@@ -263,7 +263,11 @@ Assert-Tool -Name 'npm'    -InstallHint 'Install Node.js 20+ from https://nodejs
 # the real error prints before anything is spawned.
 Push-Location $repoRoot
 try {
-    $sdkVersion = dotnet --version 2>&1
+    # Stop lifted around the call: in 5.1 `2>&1` under Stop throws on the first
+    # stderr line, which would replace the readable SDK error with a stack trace.
+    $ErrorActionPreference = 'Continue'
+    $sdkVersion = (dotnet --version 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) {
         throw "No compatible .NET SDK for this repo (global.json):`n$sdkVersion"
     }
@@ -328,14 +332,12 @@ if (-not $needsInstall -and (Test-Path $repoLock)) {
 }
 if ($needsInstall) {
     Write-Step 'Frontend dependencies out of date - running npm install...'
-    Push-Location $webDir
     try {
-        npm install
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "npm install failed (exit $LASTEXITCODE) - the frontend may not start"
-        }
+        Invoke-Native -FilePath 'npm' -Arguments @('install') -WorkingDirectory $webDir
     }
-    finally { Pop-Location }
+    catch {
+        Write-Warning "$($_.Exception.Message) - the frontend may not start"
+    }
 }
 
 # 2. Vite - VITE_SIDECAR_URL is baked into the bundle vite serves, so it must
