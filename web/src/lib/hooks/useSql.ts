@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiSend } from "../api";
+import { describeApiError, apiFetch, apiSend } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
 import { mergeObjectColumns } from "../sql-declared";
 import type {
+    ConnectionTestResult,
   SavedSqlQuery,
   SqlCompletionContext,
   SqlDataCompareResult,
@@ -24,7 +25,7 @@ import type {
 export function useSqlTestConnection(connectionId: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["sql", connectionId, "test"],
-    queryFn: ({ signal }) => apiFetch<{ connected: boolean; error?: string }>(`/api/sql/${connectionId}/test`, { signal }),
+    queryFn: ({ signal }) => apiFetch<ConnectionTestResult>(`/api/sql/${connectionId}/test`, { signal }),
     enabled: !!connectionId && (options?.enabled ?? true),
     retry: false,
   });
@@ -35,7 +36,7 @@ export function useSqlTestConnection(connectionId: string | null, options?: { en
 export function useSqlAdHocTest() {
   return useMutation({
     mutationFn: (vars: { server: string; database?: string | null }) =>
-      apiSend<{ connected: boolean; error?: string }>("/api/sql/test", "POST", vars),
+      apiSend<ConnectionTestResult>("/api/sql/test", "POST", vars),
   });
 }
 
@@ -81,7 +82,7 @@ export function useRunSqlQuery(connectionId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["sql", "history"] });
     },
-    onError: (error) => notify("error", "Query failed", String(error)),
+    onError: (error) => notify("error", "Query failed", describeApiError(error)),
   });
 }
 
@@ -188,7 +189,7 @@ export function useSaveSqlQuery() {
       qc.invalidateQueries({ queryKey: ["sql", "queries"] });
       notify("success", "Query saved", `"${saved.name}" is in your saved queries.`);
     },
-    onError: (error) => notify("error", "Couldn't save query", String(error)),
+    onError: (error) => notify("error", "Couldn't save query", describeApiError(error)),
   });
 }
 
@@ -201,7 +202,7 @@ export function useDeleteSqlQuery() {
       qc.invalidateQueries({ queryKey: ["sql", "queries"] });
       notify("success", "Query deleted");
     },
-    onError: (error) => notify("error", "Couldn't delete query", String(error)),
+    onError: (error) => notify("error", "Couldn't delete query", describeApiError(error)),
   });
 }
 
@@ -224,7 +225,7 @@ export function useClearSqlHistory() {
       qc.invalidateQueries({ queryKey: ["sql", "history"] });
       notify("success", "History cleared");
     },
-    onError: (error) => notify("error", "Couldn't clear history", String(error)),
+    onError: (error) => notify("error", "Couldn't clear history", describeApiError(error)),
   });
 }
 
@@ -265,7 +266,7 @@ export function useSqlDataCompare() {
       targetDatabase?: string | null;
       maxDiffRows?: number;
     }) => apiSend<SqlDataCompareResult>("/api/sql/compare/data", "POST", vars),
-    onError: (error) => notify("error", "Data compare failed", String(error)),
+    onError: (error) => notify("error", "Data compare failed", describeApiError(error)),
   });
 }
 
@@ -278,6 +279,6 @@ export function useSqlSchemaCompare() {
       sourceDatabase?: string | null;
       targetDatabase?: string | null;
     }) => apiSend<SqlSchemaCompareResult>("/api/sql/compare/schema", "POST", vars),
-    onError: (error) => notify("error", "Schema compare failed", String(error)),
+    onError: (error) => notify("error", "Schema compare failed", describeApiError(error)),
   });
 }

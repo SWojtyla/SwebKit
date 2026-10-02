@@ -20,7 +20,25 @@ export interface KubeContextInfo {
     isCurrent: boolean;
 }
 
-export interface DeploymentInfo {
+/**
+ * One (context, namespace-scope) pair the AKS workspace queries — the fan-out unit
+ * for multi-context browsing. `ns` is the per-context token ("*" or "a,b").
+ */
+export interface AksQueryTarget {
+    context: string;
+    ns: string;
+}
+
+/**
+ * Client-side stamp applied by the scoped fan-out in `useAks.ts` — the API does
+ * not send this. Identity in a merged multi-context view is (context, namespace,
+ * name), and every mutation/detail surface routes on it.
+ */
+export interface AksScopedRow {
+    context?: string;
+}
+
+export interface DeploymentInfo extends AksScopedRow {
     name: string;
     namespace: string;
     replicas: number;
@@ -31,7 +49,7 @@ export interface DeploymentInfo {
     selectorLabels: Record<string, string>;
 }
 
-export interface PodInfo {
+export interface PodInfo extends AksScopedRow {
     name: string;
     namespace: string;
     phase: string;
@@ -50,7 +68,7 @@ export interface PodInfo {
     readyDisplay: string;
 }
 
-export interface KubernetesEvent {
+export interface KubernetesEvent extends AksScopedRow {
     name: string;
     namespace: string;
     type: string;
@@ -62,7 +80,7 @@ export interface KubernetesEvent {
     count: number;
 }
 
-export interface ServiceInfo {
+export interface ServiceInfo extends AksScopedRow {
     name: string;
     namespace: string;
     type: string;
@@ -81,7 +99,7 @@ export interface ServicePortInfo {
     nodePort: number | null;
 }
 
-export interface HelmReleaseInfo {
+export interface HelmReleaseInfo extends AksScopedRow {
     name: string;
     namespace: string;
     chart: string | null;
@@ -92,7 +110,7 @@ export interface HelmReleaseInfo {
     updated: string | null;
 }
 
-export interface SecretInfo {
+export interface SecretInfo extends AksScopedRow {
     name: string;
     namespace: string;
     type: string;
@@ -100,7 +118,7 @@ export interface SecretInfo {
     labels: Record<string, string>;
 }
 
-export interface ConfigMapInfo {
+export interface ConfigMapInfo extends AksScopedRow {
     name: string;
     namespace: string;
     /**
@@ -114,7 +132,7 @@ export interface ConfigMapInfo {
     labels: Record<string, string>;
 }
 
-export interface StatefulSetInfo {
+export interface StatefulSetInfo extends AksScopedRow {
     name: string;
     namespace: string;
     replicas: number;
@@ -125,7 +143,7 @@ export interface StatefulSetInfo {
     selectorLabels: Record<string, string>;
 }
 
-export interface HpaInfo {
+export interface HpaInfo extends AksScopedRow {
     name: string;
     namespace: string;
     targetKind: string;
@@ -141,7 +159,7 @@ export interface HpaInfo {
     isScalingDisabled: boolean;
 }
 
-export interface CronJobInfo {
+export interface CronJobInfo extends AksScopedRow {
     name: string;
     namespace: string;
     schedule: string | null;
@@ -154,7 +172,7 @@ export interface CronJobInfo {
 }
 
 /** A KEDA ScaledJob — job-based autoscaling that produces no HPA. */
-export interface ScaledJobInfo {
+export interface ScaledJobInfo extends AksScopedRow {
     name: string;
     namespace: string;
     isPaused: boolean;
@@ -163,7 +181,7 @@ export interface ScaledJobInfo {
     triggers: string[];
 }
 
-export interface IngressInfo {
+export interface IngressInfo extends AksScopedRow {
     name: string;
     namespace: string;
     ingressClass: string | null;
@@ -194,7 +212,7 @@ export interface HttpRouteParentStatus {
     reason: string | null;
 }
 
-export interface HttpRouteInfo {
+export interface HttpRouteInfo extends AksScopedRow {
     name: string;
     namespace: string;
     status: string;
@@ -211,7 +229,7 @@ export interface EnvoyHighlight {
     value: string;
 }
 
-export interface EnvoyResourceInfo {
+export interface EnvoyResourceInfo extends AksScopedRow {
     kind: string;
     name: string;
     namespace: string;
@@ -220,7 +238,7 @@ export interface EnvoyResourceInfo {
     labels: Record<string, string>;
 }
 
-export interface GatewayInfo {
+export interface GatewayInfo extends AksScopedRow {
     name: string;
     namespace: string;
     gatewayClass: string;
@@ -230,7 +248,7 @@ export interface GatewayInfo {
     labels: Record<string, string>;
 }
 
-export interface GatewayClassInfo {
+export interface GatewayClassInfo extends AksScopedRow {
     name: string;
     controllerName: string;
     status: string;
@@ -251,7 +269,7 @@ export interface HelmValuesResponse {
     computedValues: string;
 }
 
-export interface JobInfo {
+export interface JobInfo extends AksScopedRow {
     name: string;
     namespace: string;
     status: string;
@@ -274,6 +292,14 @@ export interface ContainerDetail {
     imageTag: string | null;
     resources: ResourceRequirements;
     envVars: EnvVarDetail[];
+    /** containerPorts declared on the pod spec — offered as port-forward targets. */
+    ports: ContainerPortInfo[];
+}
+
+export interface ContainerPortInfo {
+    name: string | null;
+    port: number;
+    protocol: string;
 }
 
 export interface ResourceRequirements {
@@ -298,7 +324,7 @@ export interface EnvVarDetail {
     isResolved: boolean;
 }
 
-export interface PodMetricInfo {
+export interface PodMetricInfo extends AksScopedRow {
     podName: string;
     namespace: string;
     containers: PodMetricContainer[];

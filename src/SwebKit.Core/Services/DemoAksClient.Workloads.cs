@@ -362,6 +362,11 @@ public partial class DemoAksClient
                         SourceKey = "api-key",
                         IsResolved = false
                     }
+                ],
+                Ports =
+                [
+                    new ContainerPortInfo { Name = "http", Port = 8080, Protocol = "TCP" },
+                    new ContainerPortInfo { Name = "grpc", Port = 5001, Protocol = "TCP" }
                 ]
             },
             new()
@@ -374,6 +379,10 @@ public partial class DemoAksClient
                     CpuRequest = "10m", MemoryRequest = "40Mi",
                     CpuLimit = "200m", MemoryLimit = "256Mi"
                 },
+                Ports =
+                [
+                    new ContainerPortInfo { Name = "http-envoy-prom", Port = 15090, Protocol = "TCP" }
+                ],
                 EnvVars =
                 [
                     new EnvVarDetail { Name = "ISTIO_META_MESH_ID", Value = "cluster.local", Source = EnvVarSourceKind.Plain, IsResolved = true },

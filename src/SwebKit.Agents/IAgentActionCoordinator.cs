@@ -51,6 +51,11 @@ public enum AgentActionType
     /// <summary>Flush a Redis database — monitoring-closed-loop autofix proposal; applied by
     /// <c>RedisActionExecutor</c>. Payload: cache_id.</summary>
     FlushRedisDatabase,
+
+    /// <summary>Upsert a collection variable (value or generator like <c>guid</c>) —
+    /// api-client-agent-variables; applied by <c>ApiClientActionExecutor</c>. Payload:
+    /// collection_id, key, value, generator, enabled.</summary>
+    SetCollectionVariable,
 }
 
 /// <summary>

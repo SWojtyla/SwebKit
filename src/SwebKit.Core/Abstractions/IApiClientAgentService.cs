@@ -22,7 +22,30 @@ public sealed class ApiRequestSnapshot
     public string? BodyContentType { get; init; }
     public string? BodyPreview { get; init; }
     public string? AuthType { get; init; }
+    /// <summary>Response-capture rules on the request — the chaining mechanism that writes
+    /// response values (body JSONPath, headers, status) into <c>{{variables}}</c>.</summary>
+    public IReadOnlyList<CaptureRule> CaptureRules { get; init; } = [];
     public DateTimeOffset UpdatedAt { get; init; }
+}
+
+/// <summary>
+/// Optional request details beyond the identity/method/URL triplet. On create, every provided
+/// value lands on the new request; on update, a non-<c>null</c> field replaces the existing
+/// value wholesale (lists are not merged). <see cref="AuthConfig.CredentialSecret"/> must
+/// never arrive on <see cref="Auth"/> — callers resolve plaintext secrets into a
+/// credential-store key first.
+/// </summary>
+public sealed class ApiRequestDetails
+{
+    public IReadOnlyList<KeyValuePair<string>>? Headers { get; init; }
+    public IReadOnlyList<KeyValuePair<string>>? QueryParams { get; init; }
+    public RequestBody? Body { get; init; }
+    public AuthConfig? Auth { get; init; }
+    public IReadOnlyList<CaptureRule>? CaptureRules { get; init; }
+    public string? GraphQlQuery { get; init; }
+    public string? GraphQlVariables { get; init; }
+    public string? GraphQlSelectedOperation { get; init; }
+    public string? WsSubProtocol { get; init; }
 }
 
 /// <summary>
@@ -39,6 +62,22 @@ public sealed class ApiRequestSummary
     public required string? FolderPath { get; init; }
     public required ApiRequestMethod Method { get; init; }
     public required string Url { get; init; }
+}
+
+/// <summary>
+/// Structure of one collection as the agent sees it: identity plus enough shape
+/// (folder paths, request count) for the model to target a create/update without
+/// guessing IDs it was never shown.
+/// </summary>
+public sealed class ApiCollectionSummary
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public required string Origin { get; init; } // "local" or "linked"
+    public required string? LinkedRootId { get; init; }
+    /// <summary>Every folder path in the collection, '/'-separated (e.g. "Auth/OAuth").</summary>
+    public IReadOnlyList<string> FolderPaths { get; init; } = [];
+    public required int RequestCount { get; init; }
 }
 
 /// <summary>
@@ -64,21 +103,47 @@ public interface IApiClientAgentService
     /// <summary>Reads a single request by ID with secrets masked. Returns null if not found.</summary>
     Task<ApiRequestSnapshot?> GetRequestAsync(string requestId, CancellationToken ct = default);
 
-    /// <summary>Creates a new request in the specified collection (or root if folderPath is null).</summary>
+    /// <summary>
+    /// Creates a new request in the specified collection (or root if folderPath is null).
+    /// <paramref name="collectionIdOrName"/> resolves by ID first, then by exact name —
+    /// agent proposals routinely carry a name because that is all the read tools surface.
+    /// When nothing matches, a new local collection is created under that name; a value that
+    /// looks like a generated store ID (32 hex chars) still fails instead of creating a
+    /// collection named after a stale ID. Missing folder segments are created along the path.
+    /// </summary>
     Task<ApiClientMutationResult> CreateRequestAsync(
-        string collectionId,
+        string collectionIdOrName,
         string? folderPath,
         string name,
         ApiRequestMethod method,
         string url,
+        ApiRequestDetails? details = null,
         CancellationToken ct = default);
 
-    /// <summary>Updates an existing request's name, method, URL, headers, query params, or body.</summary>
+    /// <summary>
+    /// Upserts a collection variable by key (case-insensitive). <paramref name="generator"/>
+    /// installs a <see cref="VariableGeneratorDefinition"/> (e.g. <c>Guid</c> — regenerated per
+    /// send) and clears the static value; without it the variable becomes a static
+    /// <paramref name="value"/>. Same id-or-name resolution as
+    /// <see cref="CreateRequestAsync"/>: an unmatched name creates a local collection.
+    /// </summary>
+    Task<ApiClientMutationResult> SetCollectionVariableAsync(
+        string collectionIdOrName,
+        string key,
+        string? value = null,
+        VariableGeneratorKind? generator = null,
+        bool enabled = true,
+        CancellationToken ct = default);
+
+    /// <summary>Updates an existing request's name, method, URL, and any provided
+    /// <paramref name="details"/> fields (headers, query params, body, auth, capture rules,
+    /// protocol payloads). A <c>null</c> detail field leaves the existing value untouched.</summary>
     Task<ApiClientMutationResult> UpdateRequestAsync(
         string requestId,
         string? name = null,
         ApiRequestMethod? method = null,
         string? url = null,
+        ApiRequestDetails? details = null,
         CancellationToken ct = default);
 
     /// <summary>Duplicates an existing request with "(copy)" suffix.</summary>
@@ -107,8 +172,8 @@ public interface IApiClientAgentService
         string folderPath,
         CancellationToken ct = default);
 
-    /// <summary>Lists all collections with their origin (local/linked).</summary>
-    Task<IReadOnlyList<(string Id, string Name, string Origin, string? LinkedRootId)>> GetCollectionsAsync(CancellationToken ct = default);
+    /// <summary>Lists all collections with origin, folder structure, and request counts.</summary>
+    Task<IReadOnlyList<ApiCollectionSummary>> GetCollectionsAsync(CancellationToken ct = default);
 }
 
 /// <summary>

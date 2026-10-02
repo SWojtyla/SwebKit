@@ -52,9 +52,10 @@ test.describe("Agent", () => {
         // The empty state should disappear
         await expect(page.getByTestId("agent-empty")).not.toBeVisible();
 
-        // A user message should appear
+        // A user message should appear — assert on content, not a styling class
+        // (the bubble restyle in api-client-agent-fixes changed bg-primary → bg-primary/10).
         const messages = page.getByTestId("agent-messages");
-        await expect(messages.locator("div.bg-primary")).toBeVisible();
+        await expect(messages).toContainText("What is Kubernetes?");
     });
 
     test("shows loading indicator while waiting for response", async ({

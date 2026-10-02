@@ -3,7 +3,7 @@ import { useAksEnvoyResources } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksActions } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
-import type { EnvoyResourceInfo } from "@/lib/types";
+import type { AksQueryTarget, EnvoyResourceInfo } from "@/lib/types";
 
 /**
  * The "Envoy Gateway" tab: every CRD the gateway.envoyproxy.io API group
@@ -59,9 +59,20 @@ const columns: Column<EnvoyResourceInfo>[] = [
     },
 ];
 
-export function EnvoyTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
+export function EnvoyTab({
+    targets,
+    isMulti,
+    showContext,
+}: {
+    targets: AksQueryTarget[];
+    isMulti?: boolean;
+    showContext?: boolean;
+}) {
     const [plural, setPlural] = useState<EnvoyPlural>("backendtrafficpolicies");
-    const { data, isLoading, error } = useAksEnvoyResources(ns, plural);
+    const { data, isLoading, error, contextErrors } = useAksEnvoyResources(
+        targets,
+        plural,
+    );
     const ws = useAksActions();
 
     const kind = ENVOY_KINDS.find((k) => k.plural === plural)!;
@@ -80,10 +91,15 @@ export function EnvoyTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
                 // still needs a {ns} segment; the backend ignores it for
                 // cluster-scoped kinds.
                 onClick: () =>
-                    ws.openYaml(plural, r.name, r.namespace || ns),
+                    ws.openYaml(
+                        plural,
+                        r.name,
+                        r.namespace || "default",
+                        r.context,
+                    ),
             },
         ],
-        [ws, plural, ns],
+        [ws, plural],
     );
 
     const handleRowContextMenu = useCallback(
@@ -117,11 +133,18 @@ export function EnvoyTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
                 isLoading={isLoading}
                 error={error}
                 isMulti={isMulti}
+                showContext={showContext}
+                contextErrors={contextErrors}
                 testIdPrefix="envoy"
                 tableBodyTestId="envoy-table-body"
                 emptyMessage={`No ${kind.label} resources found — the Envoy Gateway CRDs may not be installed`}
                 onRowClick={(r) =>
-                    ws.openYaml(plural, r.name, r.namespace || ns)
+                    ws.openYaml(
+                        plural,
+                        r.name,
+                        r.namespace || "default",
+                        r.context,
+                    )
                 }
                 onRowContextMenu={handleRowContextMenu}
                 columns={columns}

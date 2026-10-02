@@ -39,7 +39,7 @@ import type {
     StorageBlobContent,
     StorageBlobItem,
 } from "@/lib/types";
-import { apiFetch } from "@/lib/api";
+import { describeApiError, apiFetch } from "@/lib/api";
 import { buildZip } from "@/lib/zip";
 import { downloadBlob, downloadText } from "@/lib/download";
 import { planBlobDownload } from "@/lib/storage-blob-download";
@@ -598,7 +598,7 @@ export function StoragePageProvider({
                 notify("success", "Download started", blobName);
             } catch (e) {
                 console.error("Download failed:", e);
-                notify("error", "Download failed", String(e));
+                notify("error", "Download failed", describeApiError(e));
             }
         },
         [fetchBlobContent, notify, selectedBlob],
@@ -654,7 +654,7 @@ export function StoragePageProvider({
                 }
             } catch (e) {
                 console.error("Batch download failed:", e);
-                notify("error", "Batch download failed", String(e));
+                notify("error", "Batch download failed", describeApiError(e));
             }
         },
         [fetchBlobContent, selectedContainer, notify],
@@ -700,7 +700,7 @@ export function StoragePageProvider({
                         setShowUpload(false);
                         setUploadOverwriteConfirm(null);
                     },
-                    onError: (e) => notify("error", "Upload failed", String(e)),
+                    onError: (e) => notify("error", "Upload failed", describeApiError(e)),
                 },
             );
         },
@@ -742,7 +742,7 @@ export function StoragePageProvider({
                 notify("success", "Metadata saved");
                 setMetadataEditing(false);
             },
-            onError: (e) => notify("error", "Metadata save failed", String(e)),
+            onError: (e) => notify("error", "Metadata save failed", describeApiError(e)),
         });
     }, [setMetadataMutate, metadataDraft, notify]);
 
@@ -774,7 +774,7 @@ export function StoragePageProvider({
                 },
                 onError: (e) => {
                     setCopyStatus(`Error: ${e}`);
-                    notify("error", "Copy failed", String(e));
+                    notify("error", "Copy failed", describeApiError(e));
                 },
             },
         );
@@ -813,7 +813,7 @@ export function StoragePageProvider({
                 },
                 onError: (e) => {
                     setCopyStatus(`Error: ${e}`);
-                    notify("error", "Copy failed", String(e));
+                    notify("error", "Copy failed", describeApiError(e));
                 },
             },
         );
@@ -833,7 +833,7 @@ export function StoragePageProvider({
                 notify("success", "Version restored", versionRestoreId);
                 setVersionRestoreId(null);
             },
-            onError: (e) => notify("error", "Restore failed", String(e)),
+            onError: (e) => notify("error", "Restore failed", describeApiError(e)),
         });
     }, [versionRestoreId, restoreVersionMutate, notify]);
 

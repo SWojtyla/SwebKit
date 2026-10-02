@@ -59,6 +59,7 @@ builder.Services.AddSingleton<SwebKit.Core.Services.PostmanCollectionImporter>()
 builder.Services.AddSingleton<SwebKit.Core.Services.SwebKitEnvironmentImporter>();
 builder.Services.AddSingleton<SwebKit.Core.Services.BrunoFolderImporter>();
 builder.Services.AddSingleton<SwebKit.Core.Services.CollectionImportService>();
+builder.Services.AddSingleton<SwebKit.Core.Services.ApiClientWorkflowService>();
 builder.Services.AddSingleton<IServiceBusClientFactory, ServiceBusClientFactory>();
 builder.Services.AddSingleton<IRedisClientFactory, RedisClientFactory>();
 builder.Services.AddSingleton<IStorageClientFactory, StorageClientFactory>();
@@ -230,8 +231,10 @@ builder.Services.AddSingleton<IAgentTool, GetStorageBlobPropertiesTool>();
 builder.Services.AddSingleton<IAgentTool, AnalyzeStorageHealthTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeCopyBlobTool>();
 builder.Services.AddSingleton<IAgentTool, SearchApiRequestsTool>();
+builder.Services.AddSingleton<IAgentTool, ListApiCollectionsTool>();
 builder.Services.AddSingleton<IAgentTool, GetApiRequestTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApiRequestChangeTool>();
+builder.Services.AddSingleton<IAgentTool, ProposeCollectionVariableChangeTool>();
 builder.Services.AddSingleton<IAgentTool, ProposeApiRequestDeleteTool>();
 builder.Services.AddSingleton<IAgentTool, PrepareApiRequestExecutionTool>();
 builder.Services.AddSingleton<IAgentTool, ListSqlConnectionsTool>();
@@ -430,6 +433,7 @@ app.UseExceptionHandler(ex =>
         // Azure.Identity is the one exception to "pass the message through": its
         // AuthenticationFailedException message is a multi-paragraph credential-chain dump carrying
         // tenant/client ids, so it gets a fixed replacement.
+        var classified = exception is not null ? ConnectionTestError.Classify(exception) : null;
         var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
         string message;
         if (statusCode == 500)
@@ -447,7 +451,7 @@ app.UseExceptionHandler(ex =>
                 Azure.Identity.AuthenticationFailedException => "Azure authentication failed. Sign in again (for example `az login`) and retry.",
                 // SDK messages can embed endpoints or connection config — the same sanitized
                 // classification the connection-test endpoints return.
-                _ when statusCode == 502 => ConnectionTestError.Describe(exception!),
+                _ when statusCode == 502 => classified!.Summary,
                 // A 401 reached via the classifier means the real credential failure is wrapped
                 // inside an SDK exception — use the fixed message, not that exception's Message.
                 // Direct UnauthorizedAccessException keeps its deliberate user-facing message.
@@ -458,7 +462,16 @@ app.UseExceptionHandler(ex =>
             };
         }
 
-        var payload = System.Text.Json.JsonSerializer.Serialize(new { error = message });
+        // `kind`/`detail`/`hint` make failures actionable in this technical app: the UI shows the
+        // classified kind and expandable scrubbed detail (exception type + message) instead of a
+        // bare "error". Detail is always scrubbed by the classifier — no secrets leave the process.
+        var payload = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            error = message,
+            kind = classified?.Kind,
+            detail = classified?.Detail,
+            hint = classified?.Hint,
+        });
         await context.Response.WriteAsync(payload);
     });
 });

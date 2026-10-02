@@ -7,1082 +7,1670 @@ import { setDemoMode, resetCollections } from "./helpers";
 const sidecarBaseUrl = `http://127.0.0.1:${process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198"}`;
 
 test.describe("API Client", () => {
-  test.beforeEach(async ({ page }) => {
-    await setDemoMode(page, false);
-    await resetCollections(page);
-    await page.goto("/api-client");
-  });
-
-  test.afterEach(async ({ page }) => {
-    await setDemoMode(page, false);
-  });
-
-  test("creates a collection, request, sends it and shows response", async ({ page }) => {
-    // Add collection via dialog
-    await page.getByTestId("add-collection-button").click();
-    await expect(page.getByTestId("name-dialog")).toBeVisible();
-    await page.getByTestId("name-dialog-input").fill("E2E Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    await page.getByTestId(/collection-root-/).first().waitFor();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    // Add request via dialog
-    await page.getByTestId("add-request-button").click();
-    await expect(page.getByTestId("name-dialog")).toBeVisible();
-    await page.getByTestId("name-dialog-input").fill("Health Check");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    const requestNode = page.getByTestId(/collection-node-Request-/).first();
-    await requestNode.waitFor();
-    await requestNode.click();
-
-    await page.getByTestId("request-url-input").fill(`${sidecarBaseUrl}/health`);
-    await page.getByTestId("request-send-button").click();
-
-    await expect(page.getByTestId("response-status")).toContainText("200", { timeout: 10_000 });
-    await expect(page.getByTestId("response-body")).toContainText("status");
-  });
-
-  test("adds and removes a header", async ({ page }) => {
-    // Add collection
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Header Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    // Add request
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Header Request");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    await page.getByTestId(/collection-node-Request-/).first().click();
-
-    // Switch to headers tab
-    await page.getByTestId("request-tab-headers").click();
-    await page.getByTestId("add-request-header-button").click();
-    await page.locator('[data-testid="request-header-row-0"] input[placeholder="Header"]').fill("X-Test");
-    await page.locator('[data-testid="request-header-row-0"] input[placeholder="Value"]').fill("value");
-
-    await expect(page.locator('[data-testid="request-header-row-0"] input[placeholder="Header"]')).toHaveValue("X-Test");
-  });
-
-  test("collection tree search filters nodes", async ({ page }) => {
-    // Add collection
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Searchable Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    // Add a request
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("FindMe Request");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    // Search should filter to show the request
-    await page.getByTestId("collection-search").fill("FindMe");
-    await expect(page.getByTestId(/collection-node-Request-/).first()).toBeVisible();
-
-    // Search with non-matching term should hide it
-    await page.getByTestId("collection-search").fill("NonExistent");
-    await expect(page.getByTestId(/collection-node-Request-/)).toHaveCount(0);
-
-    // Clear search
-    await page.getByTestId("collection-search").fill("");
-    await expect(page.getByTestId(/collection-node-Request-/).first()).toBeVisible();
-  });
-
-  test("inline rename via double-click", async ({ page }) => {
-    // Add collection
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Original Name");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    const collectionRoot = page.getByTestId(/collection-root-/).first();
-    await collectionRoot.waitFor();
-
-    // Double-click to rename
-    await collectionRoot.dblclick();
-
-    // The rename input appears inside the collection root element
-    const renameInput = collectionRoot.locator("input").first();
-    await renameInput.waitFor({ timeout: 5000 });
-    await renameInput.fill("Renamed Collection");
-    await page.keyboard.press("Enter");
-
-    await expect(page.getByTestId(/collection-root-/).first()).toContainText("Renamed Collection");
-  });
-
-  test("context menu appears on right-click", async ({ page }) => {
-    // Add collection
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Context Menu Test");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    const collectionRoot = page.getByTestId(/collection-root-/).first();
-    await collectionRoot.waitFor();
-    await collectionRoot.click();
-
-    // Right-click to open context menu
-    await collectionRoot.click({ button: "right" });
-    await expect(page.getByTestId("tree-context-menu")).toBeVisible();
-    await expect(page.getByTestId("ctx-add-request")).toBeVisible();
-    await expect(page.getByTestId("ctx-add-folder")).toBeVisible();
-    await expect(page.getByTestId("ctx-rename")).toBeVisible();
-    await expect(page.getByTestId("ctx-delete")).toBeVisible();
-
-    // Close by clicking elsewhere
-    await page.click("body", { position: { x: 0, y: 0 } });
-    await expect(page.getByTestId("tree-context-menu")).not.toBeVisible();
-  });
-
-  test("delete confirmation dialog works", async ({ page }) => {
-    // Add collection with unique name
-    const uniqueName = `Delete Test ${Date.now()}`;
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill(uniqueName);
-    await page.getByTestId("name-dialog-confirm").click();
-
-    // Filter so the virtualized tree renders our specific collection
-    await page.getByTestId("collection-search").fill(uniqueName);
-    const collectionRoot = page.getByTestId(/collection-root-/).filter({ hasText: uniqueName }).first();
-    await collectionRoot.waitFor();
-    await collectionRoot.scrollIntoViewIfNeeded();
-
-    // Right-click and delete
-    await collectionRoot.click({ button: "right" });
-    await page.getByTestId("ctx-delete").click();
-
-    // Confirm dialog should appear
-    await expect(page.getByTestId("confirm-dialog")).toBeVisible();
-
-    // Cancel
-    await page.getByTestId("confirm-dialog-cancel").click();
-    await expect(page.getByTestId("confirm-dialog")).not.toBeVisible();
-    await expect(collectionRoot).toBeVisible();
-
-    // Delete for real
-    await collectionRoot.scrollIntoViewIfNeeded();
-    await collectionRoot.click({ button: "right" });
-    await page.getByTestId("ctx-delete").click();
-    await page.getByTestId("confirm-dialog-confirm").click();
-
-    // Our specific collection should be gone
-    await expect(page.getByTestId(/collection-root-/).filter({ hasText: uniqueName })).toHaveCount(0);
-  });
-
-  test("request editor tabs switch between params, headers, body, auth", async ({ page }) => {
-    // Setup collection + request
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Tab Test Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Tab Test Request");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-node-Request-/).first().click();
-
-    // Default tab should be params
-    await expect(page.getByTestId("params-tab")).toBeVisible();
-
-    // Switch to headers
-    await page.getByTestId("request-tab-headers").click();
-    await expect(page.getByTestId("headers-tab")).toBeVisible();
-
-    // Switch to body
-    await page.getByTestId("request-tab-body").click();
-    await expect(page.getByTestId("body-tab")).toBeVisible();
-
-    // Switch to auth
-    await page.getByTestId("request-tab-auth").click();
-    await expect(page.getByTestId("auth-tab")).toBeVisible();
-  });
-
-  test("an auth secret can be revealed and hidden again", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Auth Reveal Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Auth Reveal Request");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-node-Request-/).first().click();
-
-    await page.getByTestId("request-tab-auth").click();
-    await page.getByTestId("auth-type-select").selectOption("BearerToken");
-
-    const token = page.getByTestId("auth-bearer-input");
-    await token.fill("{{AUTH_PI2_KEY}}");
-    // Masked by default — the value is there, the browser just will not show it.
-    await expect(token).toHaveAttribute("type", "password");
-    await expect(token).toHaveValue("{{AUTH_PI2_KEY}}");
-
-    // Revealed, the field becomes the variable-aware input, which is a plain text box.
-    await page.getByTestId("auth-bearer-input-reveal").click();
-    await expect(page.getByTestId("auth-bearer-input")).toHaveAttribute("type", "text");
-    await expect(page.getByTestId("auth-bearer-input")).toHaveValue("{{AUTH_PI2_KEY}}");
-
-    await page.getByTestId("auth-bearer-input-reveal").click();
-    await expect(page.getByTestId("auth-bearer-input")).toHaveAttribute("type", "password");
-  });
-
-  test("body pretty-print and minify work for JSON", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Body Format Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Body Format Request");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-node-Request-/).first().click();
-
-    // Go to body tab
-    await page.getByTestId("request-tab-body").click();
-    await page.getByTestId("request-body-mode-select").selectOption("Json");
-
-    // Enter minified JSON
-    const minified = '{"key":"value","nested":{"a":1}}';
-    await page.getByTestId("request-body-editor").fill(minified);
-
-    // Pretty print
-    await page.getByTestId("body-pretty-print").click();
-    const prettyValue = await page.getByTestId("request-body-editor").inputValue();
-    expect(prettyValue).toContain("\n");
-
-    // Minify back
-    await page.getByTestId("body-minify").click();
-    const minifiedValue = await page.getByTestId("request-body-editor").inputValue();
-    expect(minifiedValue).not.toContain("\n  ");
-  });
-
-  test("response viewer shows pretty-print and copy buttons", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Response Test Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Response Test Request");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-node-Request-/).first().click();
-
-    await page.getByTestId("request-url-input").fill(`${sidecarBaseUrl}/health`);
-    await page.getByTestId("request-send-button").click();
-
-    await expect(page.getByTestId("response-status")).toContainText("200", { timeout: 10_000 });
-
-    // Pretty print toggle should be available
-    await expect(page.getByTestId("response-pretty-toggle")).toBeVisible();
-    await expect(page.getByTestId("response-copy-body")).toBeVisible();
-
-    // cURL toggle should be available
-    await expect(page.getByTestId("response-curl-toggle")).toBeVisible();
-    await page.getByTestId("response-curl-toggle").click();
-    await expect(page.getByTestId("response-curl-panel")).toBeVisible();
-    await expect(page.getByTestId("response-curl-panel")).toContainText("curl");
-  });
-
-  test("environment variable source picker switches fields and lists configured key vaults", async ({ page }) => {
-    const uniqueVaultName = `Test Vault ${Date.now()}`;
-
-    // Settings text fields commit on blur, not per keystroke, so each edit is filled and
-    // then blurred. Saves are serialized by `useUpdateProfile`, so back-to-back edits no
-    // longer race — but waiting for each PUT still keeps the assertions below deterministic.
-    const saveProfile = () =>
-      page.waitForResponse((r) => r.url().includes("/api/config/profiles") && r.request().method() === "PUT");
-
-    // Configure a Key Vault in Settings so the picker has something to list.
-    await page.goto("/settings");
-    await expect(page.getByTestId("key-vaults-section")).toBeVisible();
-    const existingVaultCount = await page.locator('[data-testid^="kv-name-"]').count();
-    await Promise.all([saveProfile(), page.getByTestId("kv-add").click()]);
-
-    const vaultName = page.getByTestId(`kv-name-${existingVaultCount}`);
-    await vaultName.fill(uniqueVaultName);
-    await Promise.all([saveProfile(), vaultName.blur()]);
-
-    const vaultUrl = page.getByTestId(`kv-url-${existingVaultCount}`);
-    await vaultUrl.fill("https://test-vault.vault.azure.net/");
-    await Promise.all([saveProfile(), vaultUrl.blur()]);
-
-    // Reload and confirm the vault persisted before moving on, so the environment editor's fetch
-    // below can't race the save.
-    await page.reload();
-    await expect(page.getByTestId(`kv-name-${existingVaultCount}`)).toHaveValue(uniqueVaultName);
-
-    await page.goto("/api-client");
-    await page.getByTestId("env-manager-button").click();
-    await page.getByTestId("env-add-button").click();
-    await page.getByTestId("env-name-input").fill("Source Picker Test Env");
-    await page.getByTestId("env-add-variable").click();
-    await page.getByTestId("env-var-key-0").fill("apiKey");
-
-    // Plain (default): a single value input, no vault picker or preview button.
-    await expect(page.getByTestId("env-var-value-0")).toHaveAttribute("placeholder", "Value");
-    await expect(page.getByTestId("env-var-vault-0")).toHaveCount(0);
-    await expect(page.getByTestId("env-var-preview-btn-0")).toHaveCount(0);
-
-    // Windows Credential Store: a credential-key input.
-    await page.getByTestId("env-var-source-0").selectOption("WindowsCredentialStore");
-    await expect(page.getByTestId("env-var-value-0")).toHaveAttribute("placeholder", "Credential key");
-
-    // Azure Key Vault: the configured vault appears in the dropdown, plus a secret-name input and Preview.
-    await page.getByTestId("env-var-source-0").selectOption("AzureKeyVault");
-    await expect(page.getByTestId("env-var-value-0")).toHaveAttribute("placeholder", "Secret name");
-    await expect(page.getByTestId("env-var-vault-0")).toBeVisible();
-    await expect(page.getByTestId("env-var-vault-0").locator("option", { hasText: uniqueVaultName })).toHaveCount(1);
-    await expect(page.getByTestId("env-var-preview-btn-0")).toBeDisabled();
-
-    await page.getByTestId("env-var-value-0").fill("my-secret-name");
-    await expect(page.getByTestId("env-var-preview-btn-0")).toBeEnabled();
-
-    // Switching back to Plain restores the plain value input and hides the vault picker.
-    await page.getByTestId("env-var-source-0").selectOption("Plain");
-    await expect(page.getByTestId("env-var-value-0")).toHaveAttribute("placeholder", "Value");
-    await expect(page.getByTestId("env-var-vault-0")).toHaveCount(0);
-
-    // Removing the vault in Settings takes it out of the list.
-    await page.goto("/settings");
-    await expect(page.getByTestId("key-vaults-section")).toBeVisible();
-    const countBeforeRemove = await page.locator('[data-testid^="kv-name-"]').count();
-    await page.getByTestId(`kv-remove-${existingVaultCount}`).click();
-    await expect(page.locator('[data-testid^="kv-name-"]')).toHaveCount(countBeforeRemove - 1);
-  });
-
-  test("environment manager creates and edits environments", async ({ page }) => {
-    // Open environment manager
-    await page.getByTestId("env-manager-button").click();
-    await expect(page.getByTestId("env-manager")).toBeVisible();
-
-    // Add a new environment
-    await page.getByTestId("env-add-button").click();
-    await expect(page.getByTestId("env-editor")).toBeVisible();
-
-    // Edit name
-    await page.getByTestId("env-name-input").fill("Test Environment");
-
-    // Add a variable
-    await page.getByTestId("env-add-variable").click();
-    await page.getByTestId("env-var-key-0").fill("baseUrl");
-    await page.getByTestId("env-var-value-0").fill("http://localhost:5198");
-
-    // Save
-    await page.getByTestId("env-save-all").click();
-
-    // Environment selector should show the new environment
-    const envSelector = page.getByTestId("env-selector");
-    await expect(envSelector).toContainText("Test Environment");
-  });
-
-  test("deleting an environment requires confirmation (unit 4.3)", async ({ page }) => {
-    // Regression: environment delete previously removed the environment immediately with
-    // zero confirmation, unlike every other destructive flow in this feature.
-    await page.getByTestId("env-manager-button").click();
-    await page.getByTestId("env-add-button").click();
-    await page.getByTestId("env-name-input").fill("Delete Confirm Env");
-    await page.getByTestId("env-save-all").click();
-
-    await page.getByTestId("env-manager-button").click();
-    const envItem = page.locator('[data-testid^="env-item-"]').filter({ hasText: "Delete Confirm Env" });
-    await envItem.hover();
-    const deleteButton = envItem.locator('[data-testid^="env-delete-"]');
-
-    // Cancel leaves the environment in place.
-    await deleteButton.click();
-    await expect(page.getByTestId("confirm-dialog")).toBeVisible();
-    await page.getByTestId("confirm-dialog-cancel").click();
-    await expect(page.getByTestId("confirm-dialog")).not.toBeVisible();
-    await expect(envItem).toBeVisible();
-
-    // Confirm actually removes it.
-    await envItem.hover();
-    await deleteButton.click();
-    await page.getByTestId("confirm-dialog-confirm").click();
-    await expect(page.locator('[data-testid^="env-item-"]').filter({ hasText: "Delete Confirm Env" })).toHaveCount(0);
-  });
-
-  test("environment selector dropdown shows environments", async ({ page }) => {
-    // Open env manager and create an environment
-    await page.getByTestId("env-manager-button").click();
-    await page.getByTestId("env-add-button").click();
-    await page.getByTestId("env-name-input").fill("Selector Test Env");
-    await page.getByTestId("env-save-all").click();
-
-    // Selector should contain it
-    const envSelector = page.getByTestId("env-selector");
-    await expect(envSelector).toContainText("Selector Test Env");
-
-    // Select it
-    await envSelector.selectOption({ label: "Selector Test Env" });
-
-    // Active env name should show
-    await expect(page.getByTestId("active-env-name")).toContainText("Selector Test Env");
-  });
-
-  test("a collection-scoped environment is selectable from its own picker", async ({ page }) => {
-    // The regression this guards: the global picker lists only global environments, so an
-    // estate of entirely collection-scoped ones had nothing selectable anywhere while the
-    // project picker was hidden until a request tab happened to be open.
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Scoped Env Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    await page.getByTestId("env-manager-button").click();
-    await page.getByTestId("env-add-button").click();
-    await page.getByTestId("env-name-input").fill("Scoped Env");
-    await page.getByTestId("env-scope-select").selectOption({ label: "Scoped Env Collection" });
-    await page.getByTestId("env-save-all").click();
-
-    // Not offered by the global picker, because it is not global.
-    await expect(page.getByTestId("env-selector")).not.toContainText("Scoped Env");
-
-    // Selecting the collection in the tree is enough — no request needs to be open.
-    await page.getByTestId("collection-search").fill("Scoped Env Collection");
-    await page.getByTestId(/collection-root-/).filter({ hasText: "Scoped Env Collection" }).first().click();
-
-    const scoped = page.getByTestId("env-selector-scoped");
-    await expect(scoped).toBeEnabled();
-    await expect(scoped).toContainText("Scoped Env");
-    await scoped.selectOption({ label: "Scoped Env" });
-    await expect(page.getByTestId("active-env-name")).toContainText("Scoped Env");
-  });
-
-  test("collection variables editor works", async ({ page }) => {
-    // Create a collection
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Col Var Test Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    // Select it (filter so the virtualized tree renders it)
-    await page.getByTestId("collection-search").fill("Col Var Test Collection");
-    await page.getByTestId(/collection-root-/).filter({ hasText: "Col Var Test Collection" }).first().click();
-
-    // Open collection variables editor
-    await page.getByTestId("col-vars-button").click();
-    await expect(page.getByTestId("col-var-editor")).toBeVisible();
-
-    // Add a variable
-    await page.getByTestId("col-var-add").click();
-    await page.getByTestId("col-var-key-0").fill("apiKey");
-    await page.getByTestId("col-var-value-0").fill("test-key-123");
-
-    // Save
-    await page.getByTestId("col-var-save").click();
-
-    // Reopen to verify
-    await page.getByTestId("col-vars-button").click();
-    await expect(page.getByTestId("col-var-key-0")).toHaveValue("apiKey");
-    await expect(page.getByTestId("col-var-value-0")).toHaveValue("test-key-123");
-  });
-
-  test("Faker generator is a closed, self-explanatory category dropdown", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Generator Clarity Test Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    await page.getByTestId("collection-search").fill("Generator Clarity Test Collection");
-    await page.getByTestId(/collection-root-/).filter({ hasText: "Generator Clarity Test Collection" }).first().click();
-
-    await page.getByTestId("col-vars-button").click();
-    await expect(page.getByTestId("col-var-editor")).toBeVisible();
-
-    await page.getByTestId("col-var-add").click();
-    await page.getByTestId("col-var-key-0").fill("userEmail");
-    await page.getByTestId("col-var-source-0").selectOption("Generated");
-
-    // Every generator kind shows a plain-English explanation, not just a bare input.
-    await expect(page.getByTestId("col-var-0-generator-help")).toBeVisible();
-    await expect(page.getByTestId("col-var-0-generator-help")).toContainText(/random|UUID/i);
-
-    // Faker is a closed dropdown of exactly the categories the sidecar implements — not a
-    // free-text field a user could mistype a plausible-but-unsupported category into. There is
-    // no "Template" kind: it only duplicated {{variable}} substitution the URL/header/body
-    // fields already do directly, for a niche "name a composed value once" benefit nobody asked
-    // for — removed rather than kept as an option that needs its own explanation.
-    await page.getByTestId("col-var-0-generator-kind").selectOption("Faker");
-    const fakerInput = page.getByTestId("col-var-0-generator-input");
-    await expect(fakerInput).toHaveJSProperty("tagName", "SELECT");
-    const fakerOptionCount = await fakerInput.locator("option").count();
-    expect(fakerOptionCount).toBe(25);
-    await expect(page.getByTestId("col-var-0-generator-help")).toContainText("category you pick below");
-
-    const kindOptions = await page.getByTestId("col-var-0-generator-kind").locator("option").allTextContents();
-    expect(kindOptions).not.toContain("Template");
-  });
-
-  test("multi-tab: opening requests creates tabs and switching preserves state", async ({ page }) => {
-    // Create a collection with two requests
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Multi-Tab Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("First Request");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Second Request");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    // Creating requests auto-opens tabs, so we should already have 2 tabs
-    const tabItems = page.locator('[data-testid^="open-tab-"]');
-    await expect(tabItems).toHaveCount(2);
-    await expect(page.getByTestId("request-tab-strip")).toBeVisible();
-
-    // Set URL on second request (currently active tab from last creation)
-    await page.getByTestId("request-url-input").fill("http://127.0.0.1:5198/second");
-
-    // Switch to first tab — URL should be empty
-    await tabItems.filter({ hasText: "First Request" }).first().click();
-    await expect(page.getByTestId("request-url-input")).toHaveValue("");
-
-    // Set URL on first request
-    await page.getByTestId("request-url-input").fill("http://127.0.0.1:5198/first");
-
-    // Switch to second tab — URL should be preserved
-    await tabItems.filter({ hasText: "Second Request" }).first().click();
-    await expect(page.getByTestId("request-url-input")).toHaveValue("http://127.0.0.1:5198/second");
-
-    // Switch back to first tab — URL should also be preserved
-    await tabItems.filter({ hasText: "First Request" }).first().click();
-    await expect(page.getByTestId("request-url-input")).toHaveValue("http://127.0.0.1:5198/first");
-  });
-
-  test("multi-tab: closing a tab works", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Close Tab Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Closable Request");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    // Tab should be open
-    const tabItems = page.locator('[data-testid^="open-tab-"]');
-    await expect(tabItems).toHaveCount(1);
-
-    // Close it
-    await page.locator('[data-testid^="tab-close-"]').first().click();
-    await expect(tabItems).toHaveCount(0);
-    await expect(page.getByTestId("api-client-empty-editor")).toBeVisible();
-  });
-
-  test("GraphQL panel shows query and variables editors", async ({ page }) => {
-    // Create a collection and request
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("GraphQL Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("GraphQL Request");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    // Switch method to GraphQL
-    await page.getByTestId("request-method-select").selectOption("GraphQl");
-
-    // Should see GraphQL tab instead of Body
-    await expect(page.getByTestId("request-tab-graphql")).toBeVisible();
-    await expect(page.getByTestId("request-tab-body")).not.toBeVisible();
-
-    // Click GraphQL tab
-    await page.getByTestId("request-tab-graphql").click();
-    await expect(page.getByTestId("graphql-panel")).toBeVisible();
-
-    // Type a query
-    await page.getByTestId("graphql-query-input").fill("query { hello }");
-    await expect(page.getByTestId("graphql-query-input")).toHaveValue("query { hello }");
-
-    // Type variables
-    await page.getByTestId("graphql-variables-input").fill('{\n  "key": "value"\n}');
-    await expect(page.getByTestId("graphql-variables-input")).toHaveValue('{\n  "key": "value"\n}');
-  });
-
-  test("WebSocket panel shows connection controls and message log", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("WebSocket Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("WebSocket Request");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    // Switch method to WebSocket
-    await page.getByTestId("request-method-select").selectOption("WebSocket");
-
-    // Should see WebSocket tab instead of Body
-    await expect(page.getByTestId("request-tab-websocket")).toBeVisible();
-    await expect(page.getByTestId("request-tab-body")).not.toBeVisible();
-
-    // Click WebSocket tab
-    await page.getByTestId("request-tab-websocket").click();
-    await expect(page.getByTestId("websocket-panel")).toBeVisible();
-
-    // Should see connect button and status
-    await expect(page.getByTestId("ws-connect-button")).toBeVisible();
-    await expect(page.getByTestId("ws-status")).toContainText("Disconnected");
-
-    // Should see message log area
-    await expect(page.getByTestId("ws-messages")).toBeVisible();
-
-    // Should see saved messages section
-    await expect(page.getByTestId("ws-add-saved")).toBeVisible();
-  });
-
-  test("collection export dialog opens from context menu", async ({ page }) => {
-    // Create a collection
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Export Test Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    // Right-click on the collection to open context menu
-    const collectionNode = page.getByTestId(/collection-root-/).first();
-    await collectionNode.click({ button: "right" });
-
-    // Click Export in context menu
-    await page.getByTestId("ctx-export").click();
-
-    // Export dialog should be visible
-    await expect(page.getByTestId("collection-export-dialog")).toBeVisible();
-
-    // Should have format options
-    await expect(page.getByTestId("export-format-sweb")).toBeVisible();
-    await expect(page.getByTestId("export-format-postman")).toBeVisible();
-    await expect(page.getByTestId("export-format-json")).toBeVisible();
-
-    // Should have download button
-    await expect(page.getByTestId("export-download-button")).toBeVisible();
-
-    // Close dialog
-    await page.getByTestId("export-download-button").click();
-    await expect(page.getByTestId("collection-export-dialog")).not.toBeVisible();
-  });
-
-  test("bearer token is saved to the secure store and only an opaque key is persisted in collections.json", async ({ page, request }) => {
-    const token = `my-secret-bearer-token-${Date.now()}`;
-    const collectionName = `Secret Store Collection ${Date.now()}`;
-    const requestName = `Secret Store Request ${Date.now()}`;
-
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill(collectionName);
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId("collection-search").fill(collectionName);
-    await page.getByTestId(/collection-root-/).filter({ hasText: collectionName }).first().click();
-    await page.getByTestId("collection-search").fill("");
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill(requestName);
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId("collection-search").fill(requestName);
-    await page.getByTestId(/collection-node-Request-/).filter({ hasText: requestName }).first().click();
-
-    await page.getByTestId("request-tab-auth").click();
-    await page.getByTestId("auth-type-select").selectOption("BearerToken");
-    await page.getByTestId("auth-bearer-input").fill(token);
-    await page.getByTestId("auth-bearer-input").blur();
-
-    await page.getByTestId("request-url-input").fill(`${sidecarBaseUrl}/health`);
-    await page.getByTestId("request-save-button").click();
-    await page.waitForTimeout(500);
-
-    const sidecarPort = process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198";
-    const response = await request.get(`http://127.0.0.1:${sidecarPort}/api/config/collections`);
-    expect(response.ok()).toBeTruthy();
-    const collections = await response.json();
-    const collection = collections.find((c: any) => c.name === collectionName);
-    expect(collection).toBeTruthy();
-
-    function findRequest(nodes: any[]): any | undefined {
-      for (const node of nodes) {
-        if (node.type === "Request" && node.request) return node.request;
-        if (node.children) {
-          const found = findRequest(node.children);
-          if (found) return found;
-        }
-      }
-      return undefined;
-    }
-
-    const req = findRequest(collection.nodes);
-    expect(req).toBeTruthy();
-    expect(req.auth.type).toBe("BearerToken");
-    expect(req.auth.credentialKey).not.toBe(token);
-    expect(req.auth.credentialKey).toMatch(/^sw-secret:/);
-    expect(JSON.stringify(collections)).not.toContain(token);
-  });
-
-  test("collection import dialog imports a Postman v2.1 file", async ({ page }) => {
-    const collectionName = `Imported Postman ${Date.now()}`;
-    const tmpDir = mkdtempSync(join(tmpdir(), "sw-import-"));
-    const filePath = join(tmpDir, "postman-collection.json");
-    writeFileSync(
-      filePath,
-      JSON.stringify({
-        info: {
-          schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-          name: collectionName,
-        },
-        item: [
-          {
-            name: "Get Health",
-            request: { method: "GET", url: `${sidecarBaseUrl}/health` },
-          },
-        ],
-      }),
-    );
-
-    page.once("filechooser", async (fileChooser) => {
-      await fileChooser.setFiles(filePath);
+    test.beforeEach(async ({ page }) => {
+        await setDemoMode(page, false);
+        await resetCollections(page);
+        await page.goto("/api-client");
     });
 
-    await page.getByTestId("collection-import-button").click();
-    await expect(page.getByTestId("collection-import-dialog")).toBeVisible();
-    await page.getByTestId("collection-import-file-btn").click();
-    await expect(page.getByTestId("collection-import-result")).toContainText("Import successful", { timeout: 10_000 });
-    await page.getByTestId("collection-import-close").click();
-    await expect(page.getByTestId("collection-import-dialog")).not.toBeVisible();
-
-    await page.getByTestId("collection-search").fill(collectionName);
-    await expect(page.getByTestId(/collection-root-/).filter({ hasText: collectionName }).first()).toBeVisible();
-  });
-
-  test("collection import is disabled in demo mode", async ({ page }) => {
-    await setDemoMode(page, true);
-    await page.goto("/api-client");
-
-    await page.getByTestId("collection-import-button").click();
-    await expect(page.getByTestId("collection-import-dialog")).toBeVisible();
-    await expect(page.getByText("Import is disabled in demo mode.")).toBeVisible();
-    await expect(page.getByTestId("collection-import-file-btn")).toBeDisabled();
-    await page.getByTestId("collection-import-tab-bruno").click();
-    await expect(page.getByTestId("collection-import-bruno-btn")).toBeDisabled();
-  });
-
-  test("JSONPath picker sets capture rule path", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("JSONPath Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("JSONPath Request");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-node-Request-/).first().click();
-
-    await page.getByTestId("request-tab-capture").click();
-    await page.getByTestId("add-capture-rule").click();
-
-    await page.getByTestId("capture-rule-target-0").fill("requestId");
-    await page.getByTestId("capture-rule-picker-0").click();
-
-    await expect(page.getByTestId("jsonpath-picker-dialog")).toBeVisible();
-
-    await page.getByTestId("jsonpath-picker-body").fill(JSON.stringify({ data: { id: "abc-123" } }));
-    await page.getByTestId("jsonpath-picker-input").fill("$.data.id");
-    await page.getByTestId("jsonpath-picker-evaluate").click();
-    await expect(page.getByTestId("jsonpath-picker-preview")).toContainText("abc-123");
-
-    await page.getByTestId("jsonpath-picker-select").click();
-    await expect(page.getByTestId("jsonpath-picker-dialog")).not.toBeVisible();
-    await expect(page.getByTestId("capture-rule-path-0")).toHaveValue("$.data.id");
-  });
-
-  test("JSONPath picker reports invalid expressions", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("JSONPath Invalid Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("JSONPath Invalid Request");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-node-Request-/).first().click();
-
-    await page.getByTestId("request-tab-capture").click();
-    await page.getByTestId("add-capture-rule").click();
-    await page.getByTestId("capture-rule-picker-0").click();
-
-    await expect(page.getByTestId("jsonpath-picker-dialog")).toBeVisible();
-
-    await page.getByTestId("jsonpath-picker-body").fill("{ not json");
-    await expect(page.getByText("Invalid JSON")).toBeVisible();
-
-    await page.getByTestId("jsonpath-picker-body").fill(JSON.stringify({ a: 1 }));
-    await page.getByTestId("jsonpath-picker-input").fill("$..");
-    await page.getByTestId("jsonpath-picker-evaluate").click();
-    await expect(page.getByTestId("jsonpath-picker-preview")).toContainText("Invalid JSONPath");
-
-    await page.getByTestId("jsonpath-picker-close").click();
-    await expect(page.getByTestId("jsonpath-picker-dialog")).not.toBeVisible();
-  });
-
-  test("post-request action copies the response status code to the clipboard", async ({ page, context }) => {
-    await context.grantPermissions(["clipboard-write", "clipboard-read"]);
-
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Action Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Action Request");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-node-Request-/).first().click();
-
-    await page.getByTestId("request-url-input").fill(`${sidecarBaseUrl}/health`);
-
-    await page.getByTestId("request-tab-actions").click();
-    await page.getByTestId("add-postRequestActions").click();
-    await page.getByTestId("postRequestActions-name-0").fill("Copy status");
-    await page.getByTestId("postRequestActions-source-0").selectOption("ResponseStatusCode");
-
-    await page.getByTestId("request-send-button").click();
-    await expect(page.getByTestId("response-status")).toContainText("200", { timeout: 10_000 });
-    await expect(page.getByText("Copied", { exact: true })).toBeVisible();
-
-    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
-    expect(clipboard).toBe("200");
-  });
-
-  test("pre-request action reports nothing to copy when the source has no value", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Pre Action Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Pre Action Request");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-node-Request-/).first().click();
-
-    await page.getByTestId("request-url-input").fill(`${sidecarBaseUrl}/health`);
-
-    await page.getByTestId("request-tab-actions").click();
-    await page.getByTestId("add-preRequestActions").click();
-    await page.getByTestId("preRequestActions-name-0").fill("Copy body id");
-    await page.getByTestId("preRequestActions-source-0").selectOption("ResponseBody");
-    await page.getByTestId("preRequestActions-selector-0").fill("$.id");
-
-    await page.getByTestId("request-send-button").click();
-    await expect(page.getByText("nothing to copy")).toBeVisible();
-    await expect(page.getByTestId("response-status")).toContainText("200", { timeout: 10_000 });
-  });
-
-  test("reorders requests via drag and drop", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Reorder Drag Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Drag First");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Drag Second");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    const sourceRow = page.getByTestId(/collection-node-Request-/).filter({ hasText: "Drag Second" });
-    const source = sourceRow.locator('[data-testid^="drag-handle-"]');
-    const target = page.getByTestId(/collection-node-Request-/).filter({ hasText: "Drag First" });
-    await source.dragTo(target, { targetPosition: { x: 10, y: 2 } });
-
-    // Polled, not read once: the reorder is persisted through a save that is
-    // serialized behind the two request creations, so the new order can land a
-    // beat after the drop.
-    const dragRows = page.getByTestId(/collection-node-Request-/).filter({ hasText: /Drag (First|Second)/ });
-    await expect.poll(() => dragRows.allTextContents()).toEqual([
-      expect.stringContaining("Drag Second"),
-      expect.stringContaining("Drag First"),
-    ]);
-  });
-
-  test("reorders collections via drag and drop", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Collection Drag A");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Collection Drag B");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    const sourceRow = page.getByTestId(/collection-root-/).filter({ hasText: "Collection Drag B" });
-    const source = sourceRow.locator('[data-testid^="drag-handle-"]');
-    const target = page.getByTestId(/collection-root-/).filter({ hasText: "Collection Drag A" });
-    await source.dragTo(target, { targetPosition: { x: 10, y: 2 } });
-
-    const rootRows = page.getByTestId(/collection-root-/).filter({ hasText: /Collection Drag (A|B)/ });
-    await expect.poll(async () => {
-      const texts = await rootRows.allTextContents();
-      return texts.findIndex((t) => t.includes("Collection Drag B")) <
-        texts.findIndex((t) => t.includes("Collection Drag A"));
-    }).toBe(true);
-  });
-
-  test("moves a request into a folder via drag and drop", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Folder Drag Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
-
-    await page.getByTestId("add-folder-button").click();
-    await page.getByTestId("name-dialog-input").fill("Folder Drop");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Inside Request");
-    await page.getByTestId("name-dialog-confirm").click();
-
-    const sourceRow = page.getByTestId(/collection-node-Request-/).filter({ hasText: "Inside Request" });
-    const source = sourceRow.locator('[data-testid^="drag-handle-"]');
-    const target = page.getByTestId(/collection-node-Folder-/).filter({ hasText: "Folder Drop" });
-    await source.dragTo(target);
-
-    const folder = page.getByTestId(/collection-node-Folder-/).filter({ hasText: "Folder Drop" });
-    await expect(folder).toHaveAttribute("aria-expanded", "true");
-    await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Inside Request" })).toBeVisible();
-  });
-
-  test("dropping into a NESTED folder keeps the rest of the collection", async ({ page }) => {
-    // Regression: the insert spliced the array directly containing the drop target
-    // and assigned it to the collection's root node list. For a nested target that
-    // array is a folder's children, so the whole collection was replaced by one
-    // inner list and everything else in it disappeared. The existing folder-drop
-    // test only ever dropped into a *top-level* folder, where the two arrays are
-    // the same — which is why this went unnoticed.
-    const collectionsUrl = `${sidecarBaseUrl}/api/config/collections`;
-    const now = new Date().toISOString();
-    const req = (id: string, name: string) => ({
-      id,
-      type: "Request",
-      name,
-      isExpanded: true,
-      children: [],
-      defaultAuth: null,
-      request: {
-        id,
-        name,
-        method: "Get",
-        url: "https://example.com",
-        headers: [],
-        queryParams: [],
-        body: { mode: "None", rawContent: null, contentType: null, formFields: [] },
-        auth: null,
-        captureRules: [],
-        preRequestActions: [],
-        postRequestActions: [],
-        responseExamples: [],
-        createdAt: now,
-        updatedAt: now,
-      },
-    });
-    const folder = (id: string, name: string, children: unknown[]) => ({
-      id,
-      type: "Folder",
-      name,
-      isExpanded: true,
-      children,
-      defaultAuth: null,
-      request: null,
+    test.afterEach(async ({ page }) => {
+        await setDemoMode(page, false);
     });
 
-    await page.request.put(collectionsUrl, {
-      data: {
-        schemaVersion: 1,
-        collections: [
-          {
-            id: "33333333-3333-3333-3333-333333333333",
-            name: "Nested Drop Collection",
-            variables: [],
-            defaultAuth: null,
-            createdAt: now,
-            updatedAt: now,
-            nodes: [
-              folder("44444444-4444-4444-4444-444444444444", "Outer Folder", [
-                folder("55555555-5555-5555-5555-555555555555", "Inner Folder", [
-                  req("66666666-6666-6666-6666-666666666666", "Deep Request"),
-                ]),
-              ]),
-              req("77777777-7777-7777-7777-777777777777", "Root Request"),
-              folder("88888888-8888-8888-8888-888888888888", "Bystander Folder", [
-                req("99999999-9999-9999-9999-999999999999", "Bystander Request"),
-              ]),
-            ],
-          },
-        ],
-      },
+    test("creates a collection, request, sends it and shows response", async ({
+        page,
+    }) => {
+        // Add collection via dialog
+        await page.getByTestId("add-collection-button").click();
+        await expect(page.getByTestId("name-dialog")).toBeVisible();
+        await page.getByTestId("name-dialog-input").fill("E2E Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .waitFor();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        // Add request via dialog
+        await page.getByTestId("add-request-button").click();
+        await expect(page.getByTestId("name-dialog")).toBeVisible();
+        await page.getByTestId("name-dialog-input").fill("Health Check");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        const requestNode = page
+            .getByTestId(/collection-node-Request-/)
+            .first();
+        await requestNode.waitFor();
+        await requestNode.click();
+
+        await page
+            .getByTestId("request-url-input")
+            .fill(`${sidecarBaseUrl}/health`);
+        await page.getByTestId("request-send-button").click();
+
+        await expect(page.getByTestId("response-status")).toContainText("200", {
+            timeout: 10_000,
+        });
+        await expect(page.getByTestId("response-body")).toContainText("status");
     });
-    await page.goto("/api-client");
 
-    const source = page.getByTestId(/collection-node-Request-/).filter({ hasText: "Root Request" });
-    const innerFolder = page.getByTestId(/collection-node-Folder-/).filter({ hasText: "Inner Folder" });
-    await expect(innerFolder).toBeVisible();
-    await source.dragTo(innerFolder);
+    test("adds and removes a header", async ({ page }) => {
+        // Add collection
+        await page.getByTestId("add-collection-button").click();
+        await page.getByTestId("name-dialog-input").fill("Header Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
 
-    // Everything that was not dragged must still be there, at every depth.
-    for (const name of [
-      "Outer Folder",
-      "Inner Folder",
-      "Deep Request",
-      "Root Request",
-      "Bystander Folder",
-      "Bystander Request",
-    ]) {
-      await expect
-        .poll(
-          () =>
+        // Add request
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Header Request");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .first()
+            .click();
+
+        // Switch to headers tab
+        await page.getByTestId("request-tab-headers").click();
+        await page.getByTestId("add-request-header-button").click();
+        await page
+            .locator(
+                '[data-testid="request-header-row-0"] input[placeholder="Header"]',
+            )
+            .fill("X-Test");
+        await page
+            .locator(
+                '[data-testid="request-header-row-0"] input[placeholder="Value"]',
+            )
+            .fill("value");
+
+        await expect(
+            page.locator(
+                '[data-testid="request-header-row-0"] input[placeholder="Header"]',
+            ),
+        ).toHaveValue("X-Test");
+    });
+
+    test("collection tree search filters nodes", async ({ page }) => {
+        // Add collection
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Searchable Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        // Add a request
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("FindMe Request");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        // Search should filter to show the request
+        await page.getByTestId("collection-search").fill("FindMe");
+        await expect(
+            page.getByTestId(/collection-node-Request-/).first(),
+        ).toBeVisible();
+
+        // Search with non-matching term should hide it
+        await page.getByTestId("collection-search").fill("NonExistent");
+        await expect(page.getByTestId(/collection-node-Request-/)).toHaveCount(
+            0,
+        );
+
+        // Clear search
+        await page.getByTestId("collection-search").fill("");
+        await expect(
+            page.getByTestId(/collection-node-Request-/).first(),
+        ).toBeVisible();
+    });
+
+    test("inline rename via double-click", async ({ page }) => {
+        // Add collection
+        await page.getByTestId("add-collection-button").click();
+        await page.getByTestId("name-dialog-input").fill("Original Name");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        const collectionRoot = page.getByTestId(/collection-root-/).first();
+        await collectionRoot.waitFor();
+
+        // Double-click to rename
+        await collectionRoot.dblclick();
+
+        // The rename input appears inside the collection root element
+        const renameInput = collectionRoot.locator("input").first();
+        await renameInput.waitFor({ timeout: 5000 });
+        await renameInput.fill("Renamed Collection");
+        await page.keyboard.press("Enter");
+
+        await expect(
+            page.getByTestId(/collection-root-/).first(),
+        ).toContainText("Renamed Collection");
+    });
+
+    test("context menu appears on right-click", async ({ page }) => {
+        // Add collection
+        await page.getByTestId("add-collection-button").click();
+        await page.getByTestId("name-dialog-input").fill("Context Menu Test");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        const collectionRoot = page.getByTestId(/collection-root-/).first();
+        await collectionRoot.waitFor();
+        await collectionRoot.click();
+
+        // Right-click to open context menu
+        await collectionRoot.click({ button: "right" });
+        await expect(page.getByTestId("tree-context-menu")).toBeVisible();
+        await expect(page.getByTestId("ctx-add-request")).toBeVisible();
+        await expect(page.getByTestId("ctx-add-folder")).toBeVisible();
+        await expect(page.getByTestId("ctx-rename")).toBeVisible();
+        await expect(page.getByTestId("ctx-delete")).toBeVisible();
+
+        // Close by clicking elsewhere
+        await page.click("body", { position: { x: 0, y: 0 } });
+        await expect(page.getByTestId("tree-context-menu")).not.toBeVisible();
+    });
+
+    test("delete confirmation dialog works", async ({ page }) => {
+        // Add collection with unique name
+        const uniqueName = `Delete Test ${Date.now()}`;
+        await page.getByTestId("add-collection-button").click();
+        await page.getByTestId("name-dialog-input").fill(uniqueName);
+        await page.getByTestId("name-dialog-confirm").click();
+
+        // Filter so the virtualized tree renders our specific collection
+        await page.getByTestId("collection-search").fill(uniqueName);
+        const collectionRoot = page
+            .getByTestId(/collection-root-/)
+            .filter({ hasText: uniqueName })
+            .first();
+        await collectionRoot.waitFor();
+        await collectionRoot.scrollIntoViewIfNeeded();
+
+        // Right-click and delete
+        await collectionRoot.click({ button: "right" });
+        await page.getByTestId("ctx-delete").click();
+
+        // Confirm dialog should appear
+        await expect(page.getByTestId("confirm-dialog")).toBeVisible();
+
+        // Cancel
+        await page.getByTestId("confirm-dialog-cancel").click();
+        await expect(page.getByTestId("confirm-dialog")).not.toBeVisible();
+        await expect(collectionRoot).toBeVisible();
+
+        // Delete for real
+        await collectionRoot.scrollIntoViewIfNeeded();
+        await collectionRoot.click({ button: "right" });
+        await page.getByTestId("ctx-delete").click();
+        await page.getByTestId("confirm-dialog-confirm").click();
+
+        // Our specific collection should be gone
+        await expect(
             page
-              .getByTestId(/collection-node-(Folder|Request)-/)
-              .filter({ hasText: name })
-              .count(),
-          { message: `"${name}" disappeared after the nested drop` },
-        )
-        .toBeGreaterThan(0);
-    }
+                .getByTestId(/collection-root-/)
+                .filter({ hasText: uniqueName }),
+        ).toHaveCount(0);
+    });
 
-    // And the drop actually landed: reloading proves it was persisted, not just
-    // reflected in local state.
-    await page.reload();
-    await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Bystander Request" })).toBeVisible();
-    await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Deep Request" })).toBeVisible();
-    await expect(page.getByTestId(/collection-node-Request-/).filter({ hasText: "Root Request" })).toBeVisible();
-  });
+    test("request editor tabs switch between params, headers, body, auth", async ({
+        page,
+    }) => {
+        // Setup collection + request
+        await page.getByTestId("add-collection-button").click();
+        await page.getByTestId("name-dialog-input").fill("Tab Test Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
 
-  test("reorders rows via keyboard shortcuts", async ({ page }) => {
-    await page.getByTestId("add-collection-button").click();
-    await page.getByTestId("name-dialog-input").fill("Keyboard Reorder Collection");
-    await page.getByTestId("name-dialog-confirm").click();
-    await page.getByTestId(/collection-root-/).first().click();
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Tab Test Request");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .first()
+            .click();
 
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Keyboard First");
-    await page.getByTestId("name-dialog-confirm").click();
+        // Default tab should be params
+        await expect(page.getByTestId("params-tab")).toBeVisible();
 
-    await page.getByTestId("add-request-button").click();
-    await page.getByTestId("name-dialog-input").fill("Keyboard Second");
-    await page.getByTestId("name-dialog-confirm").click();
+        // Switch to headers
+        await page.getByTestId("request-tab-headers").click();
+        await expect(page.getByTestId("headers-tab")).toBeVisible();
 
-    await page.getByTestId(/collection-node-Request-/).filter({ hasText: "Keyboard Second" }).click();
-    await page.keyboard.press("Alt+ArrowUp");
+        // Switch to body
+        await page.getByTestId("request-tab-body").click();
+        await expect(page.getByTestId("body-tab")).toBeVisible();
 
-    const keyboardRows = page.getByTestId(/collection-node-Request-/).filter({ hasText: /Keyboard (First|Second)/ });
-    await expect.poll(() => keyboardRows.allTextContents()).toEqual([
-      expect.stringContaining("Keyboard Second"),
-      expect.stringContaining("Keyboard First"),
-    ]);
-  });
+        // Switch to auth
+        await page.getByTestId("request-tab-auth").click();
+        await expect(page.getByTestId("auth-tab")).toBeVisible();
+    });
 
-  test("demo collection cannot be dragged", async ({ page }) => {
-    await setDemoMode(page, true);
-    await page.goto("/api-client");
+    test("an auth secret can be revealed and hidden again", async ({
+        page,
+    }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Auth Reveal Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
 
-    const demoHandle = page.getByTestId("drag-handle-__demo__samples");
-    await expect(demoHandle).toHaveAttribute("draggable", "false");
-  });
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Auth Reveal Request");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .first()
+            .click();
+
+        await page.getByTestId("request-tab-auth").click();
+        await page.getByTestId("auth-type-select").selectOption("BearerToken");
+
+        const token = page.getByTestId("auth-bearer-input");
+        await token.fill("{{AUTH_PI2_KEY}}");
+        // Masked by default — the value is there, the browser just will not show it.
+        await expect(token).toHaveAttribute("type", "password");
+        await expect(token).toHaveValue("{{AUTH_PI2_KEY}}");
+
+        // Revealed, the field becomes the variable-aware input, which is a plain text box.
+        await page.getByTestId("auth-bearer-input-reveal").click();
+        await expect(page.getByTestId("auth-bearer-input")).toHaveAttribute(
+            "type",
+            "text",
+        );
+        await expect(page.getByTestId("auth-bearer-input")).toHaveValue(
+            "{{AUTH_PI2_KEY}}",
+        );
+
+        await page.getByTestId("auth-bearer-input-reveal").click();
+        await expect(page.getByTestId("auth-bearer-input")).toHaveAttribute(
+            "type",
+            "password",
+        );
+    });
+
+    test("body pretty-print and minify work for JSON", async ({ page }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Body Format Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Body Format Request");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .first()
+            .click();
+
+        // Go to body tab
+        await page.getByTestId("request-tab-body").click();
+        await page.getByTestId("request-body-mode-select").selectOption("Json");
+
+        // Enter minified JSON
+        const minified = '{"key":"value","nested":{"a":1}}';
+        await page.getByTestId("request-body-editor").fill(minified);
+
+        // Pretty print
+        await page.getByTestId("body-pretty-print").click();
+        const prettyValue = await page
+            .getByTestId("request-body-editor")
+            .inputValue();
+        expect(prettyValue).toContain("\n");
+
+        // Minify back
+        await page.getByTestId("body-minify").click();
+        const minifiedValue = await page
+            .getByTestId("request-body-editor")
+            .inputValue();
+        expect(minifiedValue).not.toContain("\n  ");
+    });
+
+    test("response viewer shows pretty-print and copy buttons", async ({
+        page,
+    }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Response Test Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Response Test Request");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .first()
+            .click();
+
+        await page
+            .getByTestId("request-url-input")
+            .fill(`${sidecarBaseUrl}/health`);
+        await page.getByTestId("request-send-button").click();
+
+        await expect(page.getByTestId("response-status")).toContainText("200", {
+            timeout: 10_000,
+        });
+
+        // Pretty print toggle should be available
+        await expect(page.getByTestId("response-pretty-toggle")).toBeVisible();
+        await expect(page.getByTestId("response-copy-body")).toBeVisible();
+
+        // cURL toggle should be available
+        await expect(page.getByTestId("response-curl-toggle")).toBeVisible();
+        await page.getByTestId("response-curl-toggle").click();
+        await expect(page.getByTestId("response-curl-panel")).toBeVisible();
+        await expect(page.getByTestId("response-curl-panel")).toContainText(
+            "curl",
+        );
+    });
+
+    test("environment variable source picker switches fields and lists configured key vaults", async ({
+        page,
+    }) => {
+        const uniqueVaultName = `Test Vault ${Date.now()}`;
+
+        // Settings text fields commit on blur, not per keystroke, so each edit is filled and
+        // then blurred. Saves are serialized by `useUpdateProfile`, so back-to-back edits no
+        // longer race — but waiting for each PUT still keeps the assertions below deterministic.
+        const saveProfile = () =>
+            page.waitForResponse(
+                (r) =>
+                    r.url().includes("/api/config/profiles") &&
+                    r.request().method() === "PUT",
+            );
+
+        // Configure a Key Vault in Settings so the picker has something to list.
+        await page.goto("/settings");
+        await expect(page.getByTestId("key-vaults-section")).toBeVisible();
+        const existingVaultCount = await page
+            .locator('[data-testid^="kv-name-"]')
+            .count();
+        await Promise.all([saveProfile(), page.getByTestId("kv-add").click()]);
+
+        const vaultName = page.getByTestId(`kv-name-${existingVaultCount}`);
+        await vaultName.fill(uniqueVaultName);
+        await Promise.all([saveProfile(), vaultName.blur()]);
+
+        const vaultUrl = page.getByTestId(`kv-url-${existingVaultCount}`);
+        await vaultUrl.fill("https://test-vault.vault.azure.net/");
+        await Promise.all([saveProfile(), vaultUrl.blur()]);
+
+        // Reload and confirm the vault persisted before moving on, so the environment editor's fetch
+        // below can't race the save.
+        await page.reload();
+        await expect(
+            page.getByTestId(`kv-name-${existingVaultCount}`),
+        ).toHaveValue(uniqueVaultName);
+
+        await page.goto("/api-client");
+        await page.getByTestId("env-manager-button").click();
+        await page.getByTestId("env-add-button").click();
+        await page.getByTestId("env-name-input").fill("Source Picker Test Env");
+        await page.getByTestId("env-add-variable").click();
+        await page.getByTestId("env-var-key-0").fill("apiKey");
+
+        // Plain (default): a single value input, no vault picker or preview button.
+        await expect(page.getByTestId("env-var-value-0")).toHaveAttribute(
+            "placeholder",
+            "Value",
+        );
+        await expect(page.getByTestId("env-var-vault-0")).toHaveCount(0);
+        await expect(page.getByTestId("env-var-preview-btn-0")).toHaveCount(0);
+
+        // Windows Credential Store: a credential-key input.
+        await page
+            .getByTestId("env-var-source-0")
+            .selectOption("WindowsCredentialStore");
+        await expect(page.getByTestId("env-var-value-0")).toHaveAttribute(
+            "placeholder",
+            "Credential key",
+        );
+
+        // Azure Key Vault: the configured vault appears in the dropdown, plus a secret-name input and Preview.
+        await page
+            .getByTestId("env-var-source-0")
+            .selectOption("AzureKeyVault");
+        await expect(page.getByTestId("env-var-value-0")).toHaveAttribute(
+            "placeholder",
+            "Secret name",
+        );
+        await expect(page.getByTestId("env-var-vault-0")).toBeVisible();
+        await expect(
+            page
+                .getByTestId("env-var-vault-0")
+                .locator("option", { hasText: uniqueVaultName }),
+        ).toHaveCount(1);
+        await expect(page.getByTestId("env-var-preview-btn-0")).toBeDisabled();
+
+        await page.getByTestId("env-var-value-0").fill("my-secret-name");
+        await expect(page.getByTestId("env-var-preview-btn-0")).toBeEnabled();
+
+        // Switching back to Plain restores the plain value input and hides the vault picker.
+        await page.getByTestId("env-var-source-0").selectOption("Plain");
+        await expect(page.getByTestId("env-var-value-0")).toHaveAttribute(
+            "placeholder",
+            "Value",
+        );
+        await expect(page.getByTestId("env-var-vault-0")).toHaveCount(0);
+
+        // Removing the vault in Settings takes it out of the list.
+        await page.goto("/settings");
+        await expect(page.getByTestId("key-vaults-section")).toBeVisible();
+        const countBeforeRemove = await page
+            .locator('[data-testid^="kv-name-"]')
+            .count();
+        await page.getByTestId(`kv-remove-${existingVaultCount}`).click();
+        await expect(page.locator('[data-testid^="kv-name-"]')).toHaveCount(
+            countBeforeRemove - 1,
+        );
+    });
+
+    test("environment manager creates and edits environments", async ({
+        page,
+    }) => {
+        // Open environment manager
+        await page.getByTestId("env-manager-button").click();
+        await expect(page.getByTestId("env-manager")).toBeVisible();
+
+        // Add a new environment
+        await page.getByTestId("env-add-button").click();
+        await expect(page.getByTestId("env-editor")).toBeVisible();
+
+        // Edit name
+        await page.getByTestId("env-name-input").fill("Test Environment");
+
+        // Add a variable
+        await page.getByTestId("env-add-variable").click();
+        await page.getByTestId("env-var-key-0").fill("baseUrl");
+        await page.getByTestId("env-var-value-0").fill("http://localhost:5198");
+
+        // Save
+        await page.getByTestId("env-save-all").click();
+
+        // Environment selector should show the new environment
+        const envSelector = page.getByTestId("env-selector");
+        await expect(envSelector).toContainText("Test Environment");
+    });
+
+    test("deleting an environment requires confirmation (unit 4.3)", async ({
+        page,
+    }) => {
+        // Regression: environment delete previously removed the environment immediately with
+        // zero confirmation, unlike every other destructive flow in this feature.
+        await page.getByTestId("env-manager-button").click();
+        await page.getByTestId("env-add-button").click();
+        await page.getByTestId("env-name-input").fill("Delete Confirm Env");
+        await page.getByTestId("env-save-all").click();
+
+        await page.getByTestId("env-manager-button").click();
+        const envItem = page
+            .locator('[data-testid^="env-item-"]')
+            .filter({ hasText: "Delete Confirm Env" });
+        await envItem.hover();
+        const deleteButton = envItem.locator('[data-testid^="env-delete-"]');
+
+        // Cancel leaves the environment in place.
+        await deleteButton.click();
+        await expect(page.getByTestId("confirm-dialog")).toBeVisible();
+        await page.getByTestId("confirm-dialog-cancel").click();
+        await expect(page.getByTestId("confirm-dialog")).not.toBeVisible();
+        await expect(envItem).toBeVisible();
+
+        // Confirm actually removes it.
+        await envItem.hover();
+        await deleteButton.click();
+        await page.getByTestId("confirm-dialog-confirm").click();
+        await expect(
+            page
+                .locator('[data-testid^="env-item-"]')
+                .filter({ hasText: "Delete Confirm Env" }),
+        ).toHaveCount(0);
+    });
+
+    test("environment selector dropdown shows environments", async ({
+        page,
+    }) => {
+        // Open env manager and create an environment
+        await page.getByTestId("env-manager-button").click();
+        await page.getByTestId("env-add-button").click();
+        await page.getByTestId("env-name-input").fill("Selector Test Env");
+        await page.getByTestId("env-save-all").click();
+
+        // Selector should contain it
+        const envSelector = page.getByTestId("env-selector");
+        await expect(envSelector).toContainText("Selector Test Env");
+
+        // Select it
+        await envSelector.selectOption({ label: "Selector Test Env" });
+
+        // Active env name should show
+        await expect(page.getByTestId("active-env-name")).toContainText(
+            "Selector Test Env",
+        );
+    });
+
+    test("a collection-scoped environment is selectable from its own picker", async ({
+        page,
+    }) => {
+        // The regression this guards: the global picker lists only global environments, so an
+        // estate of entirely collection-scoped ones had nothing selectable anywhere while the
+        // project picker was hidden until a request tab happened to be open.
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Scoped Env Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        await page.getByTestId("env-manager-button").click();
+        await page.getByTestId("env-add-button").click();
+        await page.getByTestId("env-name-input").fill("Scoped Env");
+        await page
+            .getByTestId("env-scope-select")
+            .selectOption({ label: "Scoped Env Collection" });
+        await page.getByTestId("env-save-all").click();
+
+        // Not offered by the global picker, because it is not global.
+        await expect(page.getByTestId("env-selector")).not.toContainText(
+            "Scoped Env",
+        );
+
+        // Selecting the collection in the tree is enough — no request needs to be open.
+        await page
+            .getByTestId("collection-search")
+            .fill("Scoped Env Collection");
+        await page
+            .getByTestId(/collection-root-/)
+            .filter({ hasText: "Scoped Env Collection" })
+            .first()
+            .click();
+
+        const scoped = page.getByTestId("env-selector-scoped");
+        await expect(scoped).toBeEnabled();
+        await expect(scoped).toContainText("Scoped Env");
+        await scoped.selectOption({ label: "Scoped Env" });
+        await expect(page.getByTestId("active-env-name")).toContainText(
+            "Scoped Env",
+        );
+    });
+
+    test("collection variables editor works", async ({ page }) => {
+        // Create a collection
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Col Var Test Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        // Select it (filter so the virtualized tree renders it)
+        await page
+            .getByTestId("collection-search")
+            .fill("Col Var Test Collection");
+        await page
+            .getByTestId(/collection-root-/)
+            .filter({ hasText: "Col Var Test Collection" })
+            .first()
+            .click();
+
+        // Open collection variables editor
+        await page.getByTestId("col-vars-button").click();
+        await expect(page.getByTestId("col-var-editor")).toBeVisible();
+
+        // Add a variable
+        await page.getByTestId("col-var-add").click();
+        await page.getByTestId("col-var-key-0").fill("apiKey");
+        await page.getByTestId("col-var-value-0").fill("test-key-123");
+
+        // Save
+        await page.getByTestId("col-var-save").click();
+
+        // Reopen to verify
+        await page.getByTestId("col-vars-button").click();
+        await expect(page.getByTestId("col-var-key-0")).toHaveValue("apiKey");
+        await expect(page.getByTestId("col-var-value-0")).toHaveValue(
+            "test-key-123",
+        );
+    });
+
+    test("Faker generator is a closed, self-explanatory category dropdown", async ({
+        page,
+    }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Generator Clarity Test Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        await page
+            .getByTestId("collection-search")
+            .fill("Generator Clarity Test Collection");
+        await page
+            .getByTestId(/collection-root-/)
+            .filter({ hasText: "Generator Clarity Test Collection" })
+            .first()
+            .click();
+
+        await page.getByTestId("col-vars-button").click();
+        await expect(page.getByTestId("col-var-editor")).toBeVisible();
+
+        await page.getByTestId("col-var-add").click();
+        await page.getByTestId("col-var-key-0").fill("userEmail");
+        await page.getByTestId("col-var-source-0").selectOption("Generated");
+
+        // Every generator kind shows a plain-English explanation, not just a bare input.
+        await expect(
+            page.getByTestId("col-var-0-generator-help"),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId("col-var-0-generator-help"),
+        ).toContainText(/random|UUID/i);
+
+        // Faker is a closed dropdown of exactly the categories the sidecar implements — not a
+        // free-text field a user could mistype a plausible-but-unsupported category into. There is
+        // no "Template" kind: it only duplicated {{variable}} substitution the URL/header/body
+        // fields already do directly, for a niche "name a composed value once" benefit nobody asked
+        // for — removed rather than kept as an option that needs its own explanation.
+        await page
+            .getByTestId("col-var-0-generator-kind")
+            .selectOption("Faker");
+        const fakerInput = page.getByTestId("col-var-0-generator-input");
+        await expect(fakerInput).toHaveJSProperty("tagName", "SELECT");
+        const fakerOptionCount = await fakerInput.locator("option").count();
+        expect(fakerOptionCount).toBe(25);
+        await expect(
+            page.getByTestId("col-var-0-generator-help"),
+        ).toContainText("category you pick below");
+
+        const kindOptions = await page
+            .getByTestId("col-var-0-generator-kind")
+            .locator("option")
+            .allTextContents();
+        expect(kindOptions).not.toContain("Template");
+    });
+
+    test("multi-tab: opening requests creates tabs and switching preserves state", async ({
+        page,
+    }) => {
+        // Create a collection with two requests
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Multi-Tab Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("First Request");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Second Request");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        // Creating requests auto-opens tabs, so we should already have 2 tabs
+        const tabItems = page.locator('[data-testid^="open-tab-"]');
+        await expect(tabItems).toHaveCount(2);
+        await expect(page.getByTestId("request-tab-strip")).toBeVisible();
+
+        // Set URL on second request (currently active tab from last creation)
+        await page
+            .getByTestId("request-url-input")
+            .fill("http://127.0.0.1:5198/second");
+
+        // Switch to first tab — URL should be empty
+        await tabItems.filter({ hasText: "First Request" }).first().click();
+        await expect(page.getByTestId("request-url-input")).toHaveValue("");
+
+        // Set URL on first request
+        await page
+            .getByTestId("request-url-input")
+            .fill("http://127.0.0.1:5198/first");
+
+        // Switch to second tab — URL should be preserved
+        await tabItems.filter({ hasText: "Second Request" }).first().click();
+        await expect(page.getByTestId("request-url-input")).toHaveValue(
+            "http://127.0.0.1:5198/second",
+        );
+
+        // Switch back to first tab — URL should also be preserved
+        await tabItems.filter({ hasText: "First Request" }).first().click();
+        await expect(page.getByTestId("request-url-input")).toHaveValue(
+            "http://127.0.0.1:5198/first",
+        );
+    });
+
+    test("multi-tab: closing a tab works", async ({ page }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Close Tab Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Closable Request");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        // Tab should be open
+        const tabItems = page.locator('[data-testid^="open-tab-"]');
+        await expect(tabItems).toHaveCount(1);
+
+        // Close it
+        await page.locator('[data-testid^="tab-close-"]').first().click();
+        await expect(tabItems).toHaveCount(0);
+        await expect(page.getByTestId("api-client-empty-editor")).toBeVisible();
+    });
+
+    test("GraphQL panel shows query and variables editors", async ({
+        page,
+    }) => {
+        // Create a collection and request
+        await page.getByTestId("add-collection-button").click();
+        await page.getByTestId("name-dialog-input").fill("GraphQL Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("GraphQL Request");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        // Switch method to GraphQL
+        await page.getByTestId("request-method-select").selectOption("GraphQl");
+
+        // Should see GraphQL tab instead of Body
+        await expect(page.getByTestId("request-tab-graphql")).toBeVisible();
+        await expect(page.getByTestId("request-tab-body")).not.toBeVisible();
+
+        // Click GraphQL tab
+        await page.getByTestId("request-tab-graphql").click();
+        await expect(page.getByTestId("graphql-panel")).toBeVisible();
+
+        // Type a query
+        await page.getByTestId("graphql-query-input").fill("query { hello }");
+        await expect(page.getByTestId("graphql-query-input")).toHaveValue(
+            "query { hello }",
+        );
+
+        // Type variables
+        await page
+            .getByTestId("graphql-variables-input")
+            .fill('{\n  "key": "value"\n}');
+        await expect(page.getByTestId("graphql-variables-input")).toHaveValue(
+            '{\n  "key": "value"\n}',
+        );
+    });
+
+    test("WebSocket panel shows connection controls and message log", async ({
+        page,
+    }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("WebSocket Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("WebSocket Request");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        // Switch method to WebSocket
+        await page
+            .getByTestId("request-method-select")
+            .selectOption("WebSocket");
+
+        // Should see WebSocket tab instead of Body
+        await expect(page.getByTestId("request-tab-websocket")).toBeVisible();
+        await expect(page.getByTestId("request-tab-body")).not.toBeVisible();
+
+        // Click WebSocket tab
+        await page.getByTestId("request-tab-websocket").click();
+        await expect(page.getByTestId("websocket-panel")).toBeVisible();
+
+        // Should see connect button and status
+        await expect(page.getByTestId("ws-connect-button")).toBeVisible();
+        await expect(page.getByTestId("ws-status")).toContainText(
+            "Disconnected",
+        );
+
+        // Should see message log area
+        await expect(page.getByTestId("ws-messages")).toBeVisible();
+
+        // Should see saved messages section
+        await expect(page.getByTestId("ws-add-saved")).toBeVisible();
+    });
+
+    test("collection export dialog opens from context menu", async ({
+        page,
+    }) => {
+        // Create a collection
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Export Test Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        // Right-click on the collection to open context menu
+        const collectionNode = page.getByTestId(/collection-root-/).first();
+        await collectionNode.click({ button: "right" });
+
+        // Click Export in context menu
+        await page.getByTestId("ctx-export").click();
+
+        // Export dialog should be visible
+        await expect(
+            page.getByTestId("collection-export-dialog"),
+        ).toBeVisible();
+
+        // Should have format options
+        await expect(page.getByTestId("export-format-sweb")).toBeVisible();
+        await expect(page.getByTestId("export-format-postman")).toBeVisible();
+        await expect(page.getByTestId("export-format-json")).toBeVisible();
+
+        // Should have download button
+        await expect(page.getByTestId("export-download-button")).toBeVisible();
+
+        // Close dialog
+        await page.getByTestId("export-download-button").click();
+        await expect(
+            page.getByTestId("collection-export-dialog"),
+        ).not.toBeVisible();
+    });
+
+    test("bearer token is saved to the secure store and only an opaque key is persisted in collections.json", async ({
+        page,
+        request,
+    }) => {
+        const token = `my-secret-bearer-token-${Date.now()}`;
+        const collectionName = `Secret Store Collection ${Date.now()}`;
+        const requestName = `Secret Store Request ${Date.now()}`;
+
+        await page.getByTestId("add-collection-button").click();
+        await page.getByTestId("name-dialog-input").fill(collectionName);
+        await page.getByTestId("name-dialog-confirm").click();
+        await page.getByTestId("collection-search").fill(collectionName);
+        await page
+            .getByTestId(/collection-root-/)
+            .filter({ hasText: collectionName })
+            .first()
+            .click();
+        await page.getByTestId("collection-search").fill("");
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill(requestName);
+        await page.getByTestId("name-dialog-confirm").click();
+        await page.getByTestId("collection-search").fill(requestName);
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .filter({ hasText: requestName })
+            .first()
+            .click();
+
+        await page.getByTestId("request-tab-auth").click();
+        await page.getByTestId("auth-type-select").selectOption("BearerToken");
+        await page.getByTestId("auth-bearer-input").fill(token);
+        await page.getByTestId("auth-bearer-input").blur();
+
+        await page
+            .getByTestId("request-url-input")
+            .fill(`${sidecarBaseUrl}/health`);
+        await page.getByTestId("request-save-button").click();
+        await page.waitForTimeout(500);
+
+        const sidecarPort = process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198";
+        const response = await request.get(
+            `http://127.0.0.1:${sidecarPort}/api/config/collections`,
+        );
+        expect(response.ok()).toBeTruthy();
+        const collections = await response.json();
+        const collection = collections.find(
+            (c: any) => c.name === collectionName,
+        );
+        expect(collection).toBeTruthy();
+
+        function findRequest(nodes: any[]): any | undefined {
+            for (const node of nodes) {
+                if (node.type === "Request" && node.request)
+                    return node.request;
+                if (node.children) {
+                    const found = findRequest(node.children);
+                    if (found) return found;
+                }
+            }
+            return undefined;
+        }
+
+        const req = findRequest(collection.nodes);
+        expect(req).toBeTruthy();
+        expect(req.auth.type).toBe("BearerToken");
+        expect(req.auth.credentialKey).not.toBe(token);
+        expect(req.auth.credentialKey).toMatch(/^sw-secret:/);
+        expect(JSON.stringify(collections)).not.toContain(token);
+    });
+
+    test("collection import dialog imports a Postman v2.1 file", async ({
+        page,
+    }) => {
+        const collectionName = `Imported Postman ${Date.now()}`;
+        const tmpDir = mkdtempSync(join(tmpdir(), "sw-import-"));
+        const filePath = join(tmpDir, "postman-collection.json");
+        writeFileSync(
+            filePath,
+            JSON.stringify({
+                info: {
+                    schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+                    name: collectionName,
+                },
+                item: [
+                    {
+                        name: "Get Health",
+                        request: {
+                            method: "GET",
+                            url: `${sidecarBaseUrl}/health`,
+                        },
+                    },
+                ],
+            }),
+        );
+
+        page.once("filechooser", async (fileChooser) => {
+            await fileChooser.setFiles(filePath);
+        });
+
+        await page.getByTestId("collection-import-button").click();
+        await expect(
+            page.getByTestId("collection-import-dialog"),
+        ).toBeVisible();
+        await page.getByTestId("collection-import-file-btn").click();
+        await expect(
+            page.getByTestId("collection-import-result"),
+        ).toContainText("Import successful", { timeout: 10_000 });
+        await page.getByTestId("collection-import-close").click();
+        await expect(
+            page.getByTestId("collection-import-dialog"),
+        ).not.toBeVisible();
+
+        await page.getByTestId("collection-search").fill(collectionName);
+        await expect(
+            page
+                .getByTestId(/collection-root-/)
+                .filter({ hasText: collectionName })
+                .first(),
+        ).toBeVisible();
+    });
+
+    test("collection import is disabled in demo mode", async ({ page }) => {
+        await setDemoMode(page, true);
+        await page.goto("/api-client");
+
+        await page.getByTestId("collection-import-button").click();
+        await expect(
+            page.getByTestId("collection-import-dialog"),
+        ).toBeVisible();
+        await expect(
+            page.getByText("Import is disabled in demo mode."),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId("collection-import-file-btn"),
+        ).toBeDisabled();
+        await page.getByTestId("collection-import-tab-bruno").click();
+        await expect(
+            page.getByTestId("collection-import-bruno-btn"),
+        ).toBeDisabled();
+    });
+
+    test("imports a cURL command into a new collection and folder", async ({
+        page,
+    }) => {
+        await page.getByTestId("curl-import-button").click();
+        await expect(page.getByTestId("curl-import-dialog")).toBeVisible();
+
+        await page
+            .getByTestId("curl-import-input")
+            .fill(
+                `curl -X POST '${sidecarBaseUrl}/health' -H 'Content-Type: application/json' --data-raw '{"a":1}'`,
+            );
+
+        // Debounced parse shows the resolved method + URL before committing.
+        await expect(page.getByTestId("curl-import-preview")).toBeVisible();
+        await expect(page.getByTestId("curl-import-preview")).toContainText(
+            "Post",
+        );
+
+        await page
+            .getByTestId("curl-import-collection")
+            .selectOption("__new__");
+        await page
+            .getByTestId("curl-import-new-collection")
+            .fill("Curl Imports");
+        await page.getByTestId("curl-import-folder").fill("Scratch/Health");
+
+        await page.getByTestId("curl-import-submit").click();
+
+        // New collection + nested folders materialize in the tree, and the imported
+        // request opens in a tab.
+        await expect(
+            page
+                .getByTestId(/collection-root-/)
+                .filter({ hasText: "Curl Imports" }),
+        ).toBeVisible();
+        await expect(
+            page
+                .getByTestId(/collection-node-Folder-/)
+                .filter({ hasText: "Scratch" }),
+        ).toBeVisible();
+        await expect(
+            page
+                .getByTestId(/collection-node-Folder-/)
+                .filter({ hasText: "Health" }),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId(/collection-node-Request-/),
+        ).toBeVisible();
+        await expect(page.getByTestId("request-url-input")).toHaveValue(
+            `${sidecarBaseUrl}/health`,
+        );
+    });
+
+    test("cURL import reports a malformed command without creating anything", async ({
+        page,
+    }) => {
+        await page.getByTestId("curl-import-button").click();
+        await page.getByTestId("curl-import-input").fill("curl -X");
+        await expect(page.getByTestId("curl-import-error")).toBeVisible();
+        await expect(page.getByTestId("curl-import-submit")).toBeDisabled();
+    });
+
+    test("cURL import is disabled in demo mode", async ({ page }) => {
+        await setDemoMode(page, true);
+        await page.goto("/api-client");
+
+        await page.getByTestId("curl-import-button").click();
+        await expect(page.getByTestId("curl-import-dialog")).toBeVisible();
+        await expect(
+            page.getByText("Import is disabled in demo mode."),
+        ).toBeVisible();
+        await expect(page.getByTestId("curl-import-submit")).toBeDisabled();
+    });
+
+    test("JSONPath picker sets capture rule path", async ({ page }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page.getByTestId("name-dialog-input").fill("JSONPath Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("JSONPath Request");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .first()
+            .click();
+
+        await page.getByTestId("request-tab-capture").click();
+        await page.getByTestId("add-capture-rule").click();
+
+        await page.getByTestId("capture-rule-target-0").fill("requestId");
+        await page.getByTestId("capture-rule-picker-0").click();
+
+        await expect(page.getByTestId("jsonpath-picker-dialog")).toBeVisible();
+
+        await page
+            .getByTestId("jsonpath-picker-body")
+            .fill(JSON.stringify({ data: { id: "abc-123" } }));
+        await page.getByTestId("jsonpath-picker-input").fill("$.data.id");
+        await page.getByTestId("jsonpath-picker-evaluate").click();
+        await expect(page.getByTestId("jsonpath-picker-preview")).toContainText(
+            "abc-123",
+        );
+
+        await page.getByTestId("jsonpath-picker-select").click();
+        await expect(
+            page.getByTestId("jsonpath-picker-dialog"),
+        ).not.toBeVisible();
+        await expect(page.getByTestId("capture-rule-path-0")).toHaveValue(
+            "$.data.id",
+        );
+    });
+
+    test("JSONPath picker reports invalid expressions", async ({ page }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("JSONPath Invalid Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("JSONPath Invalid Request");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .first()
+            .click();
+
+        await page.getByTestId("request-tab-capture").click();
+        await page.getByTestId("add-capture-rule").click();
+        await page.getByTestId("capture-rule-picker-0").click();
+
+        await expect(page.getByTestId("jsonpath-picker-dialog")).toBeVisible();
+
+        await page.getByTestId("jsonpath-picker-body").fill("{ not json");
+        await expect(page.getByText("Invalid JSON")).toBeVisible();
+
+        await page
+            .getByTestId("jsonpath-picker-body")
+            .fill(JSON.stringify({ a: 1 }));
+        await page.getByTestId("jsonpath-picker-input").fill("$..");
+        await page.getByTestId("jsonpath-picker-evaluate").click();
+        await expect(page.getByTestId("jsonpath-picker-preview")).toContainText(
+            "Invalid JSONPath",
+        );
+
+        await page.getByTestId("jsonpath-picker-close").click();
+        await expect(
+            page.getByTestId("jsonpath-picker-dialog"),
+        ).not.toBeVisible();
+    });
+
+    test("post-request action copies the response status code to the clipboard", async ({
+        page,
+        context,
+    }) => {
+        await context.grantPermissions(["clipboard-write", "clipboard-read"]);
+
+        await page.getByTestId("add-collection-button").click();
+        await page.getByTestId("name-dialog-input").fill("Action Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Action Request");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .first()
+            .click();
+
+        await page
+            .getByTestId("request-url-input")
+            .fill(`${sidecarBaseUrl}/health`);
+
+        await page.getByTestId("request-tab-actions").click();
+        await page.getByTestId("add-postRequestActions").click();
+        await page.getByTestId("postRequestActions-name-0").fill("Copy status");
+        await page
+            .getByTestId("postRequestActions-source-0")
+            .selectOption("ResponseStatusCode");
+
+        await page.getByTestId("request-send-button").click();
+        await expect(page.getByTestId("response-status")).toContainText("200", {
+            timeout: 10_000,
+        });
+        await expect(page.getByText("Copied", { exact: true })).toBeVisible();
+
+        const clipboard = await page.evaluate(() =>
+            navigator.clipboard.readText(),
+        );
+        expect(clipboard).toBe("200");
+    });
+
+    test("pre-request action reports nothing to copy when the source has no value", async ({
+        page,
+    }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Pre Action Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Pre Action Request");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .first()
+            .click();
+
+        await page
+            .getByTestId("request-url-input")
+            .fill(`${sidecarBaseUrl}/health`);
+
+        await page.getByTestId("request-tab-actions").click();
+        await page.getByTestId("add-preRequestActions").click();
+        await page.getByTestId("preRequestActions-name-0").fill("Copy body id");
+        await page
+            .getByTestId("preRequestActions-source-0")
+            .selectOption("ResponseBody");
+        await page.getByTestId("preRequestActions-selector-0").fill("$.id");
+
+        await page.getByTestId("request-send-button").click();
+        await expect(page.getByText("nothing to copy")).toBeVisible();
+        await expect(page.getByTestId("response-status")).toContainText("200", {
+            timeout: 10_000,
+        });
+    });
+
+    test("reorders requests via drag and drop", async ({ page }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Reorder Drag Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Drag First");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Drag Second");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        const sourceRow = page
+            .getByTestId(/collection-node-Request-/)
+            .filter({ hasText: "Drag Second" });
+        const source = sourceRow.locator('[data-testid^="drag-handle-"]');
+        const target = page
+            .getByTestId(/collection-node-Request-/)
+            .filter({ hasText: "Drag First" });
+        await source.dragTo(target, { targetPosition: { x: 10, y: 2 } });
+
+        // Polled, not read once: the reorder is persisted through a save that is
+        // serialized behind the two request creations, so the new order can land a
+        // beat after the drop.
+        const dragRows = page
+            .getByTestId(/collection-node-Request-/)
+            .filter({ hasText: /Drag (First|Second)/ });
+        await expect
+            .poll(() => dragRows.allTextContents())
+            .toEqual([
+                expect.stringContaining("Drag Second"),
+                expect.stringContaining("Drag First"),
+            ]);
+    });
+
+    test("reorders collections via drag and drop", async ({ page }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page.getByTestId("name-dialog-input").fill("Collection Drag A");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        await page.getByTestId("add-collection-button").click();
+        await page.getByTestId("name-dialog-input").fill("Collection Drag B");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        const sourceRow = page
+            .getByTestId(/collection-root-/)
+            .filter({ hasText: "Collection Drag B" });
+        const source = sourceRow.locator('[data-testid^="drag-handle-"]');
+        const target = page
+            .getByTestId(/collection-root-/)
+            .filter({ hasText: "Collection Drag A" });
+        await source.dragTo(target, { targetPosition: { x: 10, y: 2 } });
+
+        const rootRows = page
+            .getByTestId(/collection-root-/)
+            .filter({ hasText: /Collection Drag (A|B)/ });
+        await expect
+            .poll(async () => {
+                const texts = await rootRows.allTextContents();
+                return (
+                    texts.findIndex((t) => t.includes("Collection Drag B")) <
+                    texts.findIndex((t) => t.includes("Collection Drag A"))
+                );
+            })
+            .toBe(true);
+    });
+
+    test("moves a request into a folder via drag and drop", async ({
+        page,
+    }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Folder Drag Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-folder-button").click();
+        await page.getByTestId("name-dialog-input").fill("Folder Drop");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Inside Request");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        const sourceRow = page
+            .getByTestId(/collection-node-Request-/)
+            .filter({ hasText: "Inside Request" });
+        const source = sourceRow.locator('[data-testid^="drag-handle-"]');
+        const target = page
+            .getByTestId(/collection-node-Folder-/)
+            .filter({ hasText: "Folder Drop" });
+        await source.dragTo(target);
+
+        const folder = page
+            .getByTestId(/collection-node-Folder-/)
+            .filter({ hasText: "Folder Drop" });
+        await expect(folder).toHaveAttribute("aria-expanded", "true");
+        await expect(
+            page
+                .getByTestId(/collection-node-Request-/)
+                .filter({ hasText: "Inside Request" }),
+        ).toBeVisible();
+    });
+
+    test("dropping into a NESTED folder keeps the rest of the collection", async ({
+        page,
+    }) => {
+        // Regression: the insert spliced the array directly containing the drop target
+        // and assigned it to the collection's root node list. For a nested target that
+        // array is a folder's children, so the whole collection was replaced by one
+        // inner list and everything else in it disappeared. The existing folder-drop
+        // test only ever dropped into a *top-level* folder, where the two arrays are
+        // the same — which is why this went unnoticed.
+        const collectionsUrl = `${sidecarBaseUrl}/api/config/collections`;
+        const now = new Date().toISOString();
+        const req = (id: string, name: string) => ({
+            id,
+            type: "Request",
+            name,
+            isExpanded: true,
+            children: [],
+            defaultAuth: null,
+            request: {
+                id,
+                name,
+                method: "Get",
+                url: "https://example.com",
+                headers: [],
+                queryParams: [],
+                body: {
+                    mode: "None",
+                    rawContent: null,
+                    contentType: null,
+                    formFields: [],
+                },
+                auth: null,
+                captureRules: [],
+                preRequestActions: [],
+                postRequestActions: [],
+                responseExamples: [],
+                createdAt: now,
+                updatedAt: now,
+            },
+        });
+        const folder = (id: string, name: string, children: unknown[]) => ({
+            id,
+            type: "Folder",
+            name,
+            isExpanded: true,
+            children,
+            defaultAuth: null,
+            request: null,
+        });
+
+        await page.request.put(collectionsUrl, {
+            data: {
+                schemaVersion: 1,
+                collections: [
+                    {
+                        id: "33333333-3333-3333-3333-333333333333",
+                        name: "Nested Drop Collection",
+                        variables: [],
+                        defaultAuth: null,
+                        createdAt: now,
+                        updatedAt: now,
+                        nodes: [
+                            folder(
+                                "44444444-4444-4444-4444-444444444444",
+                                "Outer Folder",
+                                [
+                                    folder(
+                                        "55555555-5555-5555-5555-555555555555",
+                                        "Inner Folder",
+                                        [
+                                            req(
+                                                "66666666-6666-6666-6666-666666666666",
+                                                "Deep Request",
+                                            ),
+                                        ],
+                                    ),
+                                ],
+                            ),
+                            req(
+                                "77777777-7777-7777-7777-777777777777",
+                                "Root Request",
+                            ),
+                            folder(
+                                "88888888-8888-8888-8888-888888888888",
+                                "Bystander Folder",
+                                [
+                                    req(
+                                        "99999999-9999-9999-9999-999999999999",
+                                        "Bystander Request",
+                                    ),
+                                ],
+                            ),
+                        ],
+                    },
+                ],
+            },
+        });
+        await page.goto("/api-client");
+
+        const source = page
+            .getByTestId(/collection-node-Request-/)
+            .filter({ hasText: "Root Request" });
+        const innerFolder = page
+            .getByTestId(/collection-node-Folder-/)
+            .filter({ hasText: "Inner Folder" });
+        await expect(innerFolder).toBeVisible();
+        await source.dragTo(innerFolder);
+
+        // Everything that was not dragged must still be there, at every depth.
+        for (const name of [
+            "Outer Folder",
+            "Inner Folder",
+            "Deep Request",
+            "Root Request",
+            "Bystander Folder",
+            "Bystander Request",
+        ]) {
+            await expect
+                .poll(
+                    () =>
+                        page
+                            .getByTestId(/collection-node-(Folder|Request)-/)
+                            .filter({ hasText: name })
+                            .count(),
+                    { message: `"${name}" disappeared after the nested drop` },
+                )
+                .toBeGreaterThan(0);
+        }
+
+        // And the drop actually landed: reloading proves it was persisted, not just
+        // reflected in local state.
+        await page.reload();
+        await expect(
+            page
+                .getByTestId(/collection-node-Request-/)
+                .filter({ hasText: "Bystander Request" }),
+        ).toBeVisible();
+        await expect(
+            page
+                .getByTestId(/collection-node-Request-/)
+                .filter({ hasText: "Deep Request" }),
+        ).toBeVisible();
+        await expect(
+            page
+                .getByTestId(/collection-node-Request-/)
+                .filter({ hasText: "Root Request" }),
+        ).toBeVisible();
+    });
+
+    test("reorders rows via keyboard shortcuts", async ({ page }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page
+            .getByTestId("name-dialog-input")
+            .fill("Keyboard Reorder Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Keyboard First");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Keyboard Second");
+        await page.getByTestId("name-dialog-confirm").click();
+
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .filter({ hasText: "Keyboard Second" })
+            .click();
+        await page.keyboard.press("Alt+ArrowUp");
+
+        const keyboardRows = page
+            .getByTestId(/collection-node-Request-/)
+            .filter({ hasText: /Keyboard (First|Second)/ });
+        await expect
+            .poll(() => keyboardRows.allTextContents())
+            .toEqual([
+                expect.stringContaining("Keyboard Second"),
+                expect.stringContaining("Keyboard First"),
+            ]);
+    });
+
+    test("demo collection cannot be dragged", async ({ page }) => {
+        await setDemoMode(page, true);
+        await page.goto("/api-client");
+
+        const demoHandle = page.getByTestId("drag-handle-__demo__samples");
+        await expect(demoHandle).toHaveAttribute("draggable", "false");
+    });
+    test("form-data body rows support text and file fields", async ({
+        page,
+    }) => {
+        await page.getByTestId("add-collection-button").click();
+        await page.getByTestId("name-dialog-input").fill("FormData Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-root-/)
+            .first()
+            .click();
+
+        await page.getByTestId("add-request-button").click();
+        await page.getByTestId("name-dialog-input").fill("Upload");
+        await page.getByTestId("name-dialog-confirm").click();
+        await page
+            .getByTestId(/collection-node-Request-/)
+            .first()
+            .click();
+
+        await page.getByTestId("request-tab-body").click();
+        await page
+            .getByTestId("request-body-mode-select")
+            .selectOption("FormData");
+
+        await page.getByTestId("add-formdata-field-button").click();
+        await expect(page.getByTestId("formdata-row-0")).toBeVisible();
+        await page.getByTestId("formdata-key-0").fill("document");
+
+        // text row: value placeholder, no filename semantics
+        await expect(page.getByTestId("formdata-type-0")).toHaveValue("text");
+
+        // toggle to file: the input becomes a file-path field with a browse button
+        await page.getByTestId("formdata-type-0").selectOption("file");
+        await expect(page.getByTestId("formdata-value-0")).toHaveAttribute(
+            "placeholder",
+            /Path to file/,
+        );
+        await expect(page.getByTestId("formdata-browse-0")).toBeVisible();
+
+        // Browse opens the OS picker (web fallback: file input → filechooser)
+        const chooserPromise = page.waitForEvent("filechooser");
+        await page.getByTestId("formdata-browse-0").click();
+        const chooser = await chooserPromise;
+        await chooser.setFiles({
+            name: "upload-e2e.txt",
+            mimeType: "text/plain",
+            buffer: Buffer.from("e2e"),
+        });
+        await expect(page.getByTestId("formdata-value-0")).toHaveValue(
+            "upload-e2e.txt",
+        );
+
+        // toggle back to text restores the value placeholder and drops browse
+        await page.getByTestId("formdata-type-0").selectOption("text");
+        await expect(page.getByTestId("formdata-value-0")).toHaveAttribute(
+            "placeholder",
+            "Value",
+        );
+        await expect(page.getByTestId("formdata-browse-0")).toHaveCount(0);
+    });
 });

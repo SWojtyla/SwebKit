@@ -32,7 +32,10 @@ public sealed class DemoModeService : IDisposable
 
     private DemoServiceBusClient _ordersClient = DemoServiceBusClient.OrdersDev();
     private DemoServiceBusClient _paymentsClient = DemoServiceBusClient.PaymentsDev();
-    private readonly DemoAksClient _aksClient = new();
+    // AKS demo clients are per-context so the multi-context workspace sees clusters with
+    // different namespace lists; an unknown context name gets the default namespace set.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DemoAksClient> _aksClients =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly DemoRedisClient _redisClient = new(0);
     private readonly DemoStorageClient _storageClient = new();
 
@@ -111,7 +114,10 @@ public sealed class DemoModeService : IDisposable
         throw new InvalidOperationException($"Unknown demo namespace: {ns.Alias}");
     }
 
-    public IAksClient GetAksClient() => _aksClient;
+    public IAksClient GetAksClient() => GetAksClient(null);
+
+    public IAksClient GetAksClient(string? context) =>
+        _aksClients.GetOrAdd(context ?? "", ctx => new DemoAksClient(ctx.Length == 0 ? null : ctx));
 
     public RedisCacheEntry? GetDemoRedisCache(string cacheId)
     {

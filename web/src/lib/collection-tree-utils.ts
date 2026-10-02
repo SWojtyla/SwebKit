@@ -4,49 +4,49 @@ import type { ApiCollection, ApiCollectionNode } from "./types";
 export const DEMO_COLLECTION_ID = "__demo__samples";
 
 export interface FlatRow {
-  id: string;
-  node: ApiCollectionNode;
-  collectionId: string;
-  depth: number;
-  isCollection: boolean;
+    id: string;
+    node: ApiCollectionNode;
+    collectionId: string;
+    depth: number;
+    isCollection: boolean;
 }
 
 export interface MoveNodeTarget {
-  targetCollectionId: string;
-  /** undefined means the collection root itself. */
-  targetNodeId?: string;
-  placement: "before" | "after" | "inside";
+    targetCollectionId: string;
+    /** undefined means the collection root itself. */
+    targetNodeId?: string;
+    placement: "before" | "after" | "inside";
 }
 
 export interface MoveCollectionTarget {
-  targetCollectionId: string;
-  placement: "before" | "after";
+    targetCollectionId: string;
+    placement: "before" | "after";
 }
 
 export interface DragData {
-  id: string;
-  collectionId: string;
-  kind: "collection" | "node";
+    id: string;
+    collectionId: string;
+    kind: "collection" | "node";
 }
 
 interface RemovalResult {
-  node: ApiCollectionNode;
-  collectionsAfterRemoval: ApiCollection[];
+    node: ApiCollectionNode;
+    collectionsAfterRemoval: ApiCollection[];
 }
 
 /** True when `node` (or, for a folder, any descendant) matches `query` by name, URL or method. */
 function matchesSearch(node: ApiCollectionNode, query: string): boolean {
-  if (!query) return true;
-  const q = query.toLowerCase();
-  if (node.name.toLowerCase().includes(q)) return true;
-  if (node.type === "Request" && node.request) {
-    if (node.request.url.toLowerCase().includes(q)) return true;
-    if (node.request.method.toLowerCase().includes(q)) return true;
-  }
-  if (node.type === "Folder") {
-    return node.children.some((c) => matchesSearch(c, q));
-  }
-  return false;
+    if (!query) return true;
+    const q = query.toLowerCase();
+    if (node.name.toLowerCase().includes(q)) return true;
+    if (node.type === "Request" && node.request) {
+        if (node.request.url.toLowerCase().includes(q)) return true;
+        if (node.request.method.toLowerCase().includes(q)) return true;
+    }
+    if (node.type === "Folder") {
+        return node.children.some((c) => matchesSearch(c, q));
+    }
+    return false;
 }
 
 /**
@@ -55,24 +55,31 @@ function matchesSearch(node: ApiCollectionNode, query: string): boolean {
  * its non-matching children — a folder that survives this filter is
  * therefore guaranteed to contain at least one match somewhere inside it.
  */
-export function filterNodes(nodes: ApiCollectionNode[], query: string): ApiCollectionNode[] {
-  if (!query) return nodes;
-  return nodes
-    .filter((n) => matchesSearch(n, query))
-    .map((n) => (n.type === "Folder" ? { ...n, children: filterNodes(n.children, query) } : n));
+export function filterNodes(
+    nodes: ApiCollectionNode[],
+    query: string,
+): ApiCollectionNode[] {
+    if (!query) return nodes;
+    return nodes
+        .filter((n) => matchesSearch(n, query))
+        .map((n) =>
+            n.type === "Folder"
+                ? { ...n, children: filterNodes(n.children, query) }
+                : n,
+        );
 }
 
 /** Synthesizes the collection-root row a `CollectionTree` renders above its top-level nodes. */
 function collectionRootNode(collection: ApiCollection): ApiCollectionNode {
-  return {
-    id: collection.id,
-    type: "Folder",
-    name: collection.name,
-    isExpanded: true,
-    children: collection.nodes,
-    defaultAuth: collection.defaultAuth,
-    request: null,
-  };
+    return {
+        id: collection.id,
+        type: "Folder",
+        name: collection.name,
+        isExpanded: true,
+        children: collection.nodes,
+        defaultAuth: collection.defaultAuth,
+        request: null,
+    };
 }
 
 /**
@@ -88,68 +95,93 @@ function collectionRootNode(collection: ApiCollection): ApiCollectionNode {
  * they clear the search.
  */
 export function flattenTree(
-  filteredCollections: ApiCollection[],
-  expandedIds: Set<string>,
-  forceExpandAll = false,
+    filteredCollections: ApiCollection[],
+    expandedIds: Set<string>,
+    forceExpandAll = false,
 ): FlatRow[] {
-  const rows: FlatRow[] = [];
+    const rows: FlatRow[] = [];
 
-  function walk(nodes: ApiCollectionNode[], collectionId: string, depth: number) {
-    for (const n of nodes) {
-      rows.push({ id: n.id, node: n, collectionId, depth, isCollection: false });
-      if (n.type === "Folder" && (forceExpandAll || expandedIds.has(n.id))) {
-        walk(n.children, collectionId, depth + 1);
-      }
+    function walk(
+        nodes: ApiCollectionNode[],
+        collectionId: string,
+        depth: number,
+    ) {
+        for (const n of nodes) {
+            rows.push({
+                id: n.id,
+                node: n,
+                collectionId,
+                depth,
+                isCollection: false,
+            });
+            if (
+                n.type === "Folder" &&
+                (forceExpandAll || expandedIds.has(n.id))
+            ) {
+                walk(n.children, collectionId, depth + 1);
+            }
+        }
     }
-  }
 
-  for (const c of filteredCollections) {
-    const root = collectionRootNode(c);
-    rows.push({ id: c.id, node: root, collectionId: c.id, depth: 0, isCollection: true });
-    if (forceExpandAll || expandedIds.has(c.id)) {
-      walk(c.nodes, c.id, 1);
+    for (const c of filteredCollections) {
+        const root = collectionRootNode(c);
+        rows.push({
+            id: c.id,
+            node: root,
+            collectionId: c.id,
+            depth: 0,
+            isCollection: true,
+        });
+        if (forceExpandAll || expandedIds.has(c.id)) {
+            walk(c.nodes, c.id, 1);
+        }
     }
-  }
 
-  return rows;
+    return rows;
 }
 
 /** Collects the id of every folder whose persisted `isExpanded` is true, recursively. */
-export function collectExpandedFolderIds(nodes: ApiCollectionNode[], into: Set<string>) {
-  for (const n of nodes) {
-    if (n.type === "Folder") {
-      if (n.isExpanded) into.add(n.id);
-      collectExpandedFolderIds(n.children, into);
+export function collectExpandedFolderIds(
+    nodes: ApiCollectionNode[],
+    into: Set<string>,
+) {
+    for (const n of nodes) {
+        if (n.type === "Folder") {
+            if (n.isExpanded) into.add(n.id);
+            collectExpandedFolderIds(n.children, into);
+        }
     }
-  }
 }
 
 /** Finds a node (folder or request) anywhere in `nodes` by id, recursing into folders. */
-export function findRequestNode(nodes: ApiCollectionNode[], nodeId: string): ApiCollectionNode | null {
-  for (const node of nodes) {
-    if (node.id === nodeId) return node;
-    if (node.children) {
-      const found = findRequestNode(node.children, nodeId);
-      if (found) return found;
+export function findRequestNode(
+    nodes: ApiCollectionNode[],
+    nodeId: string,
+): ApiCollectionNode | null {
+    for (const node of nodes) {
+        if (node.id === nodeId) return node;
+        if (node.children) {
+            const found = findRequestNode(node.children, nodeId);
+            if (found) return found;
+        }
     }
-  }
-  return null;
+    return null;
 }
 
 /** Counts every node (folders and requests alike) under `nodes`, recursively. */
 export function countDescendants(nodes: ApiCollectionNode[]): number {
-  let count = 0;
-  for (const n of nodes) {
-    count += 1;
-    if (n.type === "Folder") count += countDescendants(n.children);
-  }
-  return count;
+    let count = 0;
+    for (const n of nodes) {
+        count += 1;
+        if (n.type === "Folder") count += countDescendants(n.children);
+    }
+    return count;
 }
 
 export interface NodeDeleteInfo {
-  name: string;
-  typeLabel: "collection" | "folder" | "request";
-  descendantCount: number;
+    name: string;
+    typeLabel: "collection" | "folder" | "request";
+    descendantCount: number;
 }
 
 /**
@@ -159,114 +191,126 @@ export interface NodeDeleteInfo {
  * same delete path as a folder or request.
  */
 export function describeNodeForDelete(
-  collections: ApiCollection[],
-  nodeId: string,
-  collectionId: string,
+    collections: ApiCollection[],
+    nodeId: string,
+    collectionId: string,
 ): NodeDeleteInfo {
-  const collection = collections.find((c) => c.id === collectionId);
-  if (collection && collection.id === nodeId) {
-    return { name: collection.name, typeLabel: "collection", descendantCount: countDescendants(collection.nodes) };
-  }
-  const node = collection ? findRequestNode(collection.nodes, nodeId) : null;
-  if (node) {
-    return {
-      name: node.name,
-      typeLabel: node.type === "Folder" ? "folder" : "request",
-      descendantCount: node.type === "Folder" ? countDescendants(node.children) : 0,
-    };
-  }
-  return { name: "this item", typeLabel: "request", descendantCount: 0 };
+    const collection = collections.find((c) => c.id === collectionId);
+    if (collection && collection.id === nodeId) {
+        return {
+            name: collection.name,
+            typeLabel: "collection",
+            descendantCount: countDescendants(collection.nodes),
+        };
+    }
+    const node = collection ? findRequestNode(collection.nodes, nodeId) : null;
+    if (node) {
+        return {
+            name: node.name,
+            typeLabel: node.type === "Folder" ? "folder" : "request",
+            descendantCount:
+                node.type === "Folder" ? countDescendants(node.children) : 0,
+        };
+    }
+    return { name: "this item", typeLabel: "request", descendantCount: 0 };
 }
 
 /** Renders `describeNodeForDelete`'s result as the delete-confirmation message. */
 export function formatDeleteMessage(info: NodeDeleteInfo): string {
-  const descendantPhrase =
-    info.descendantCount > 0
-      ? ` and its ${info.descendantCount} item${info.descendantCount === 1 ? "" : "s"}`
-      : "";
-  return `Delete ${info.typeLabel} "${info.name}"${descendantPhrase}? This cannot be undone.`;
+    const descendantPhrase =
+        info.descendantCount > 0
+            ? ` and its ${info.descendantCount} item${info.descendantCount === 1 ? "" : "s"}`
+            : "";
+    return `Delete ${info.typeLabel} "${info.name}"${descendantPhrase}? This cannot be undone.`;
 }
 
 /** Returns true if `candidateId` is the same as `ancestorId` or inside one of its descendant subtrees. */
 export function isDescendant(
-  nodes: ApiCollectionNode[],
-  ancestorId: string,
-  candidateId: string,
+    nodes: ApiCollectionNode[],
+    ancestorId: string,
+    candidateId: string,
 ): boolean {
-  if (ancestorId === candidateId) return true;
-  for (const n of nodes) {
-    if (n.id === ancestorId) {
-      return nodeContains(n, candidateId);
+    if (ancestorId === candidateId) return true;
+    for (const n of nodes) {
+        if (n.id === ancestorId) {
+            return nodeContains(n, candidateId);
+        }
+        if (
+            n.type === "Folder" &&
+            isDescendant(n.children, ancestorId, candidateId)
+        ) {
+            return true;
+        }
     }
-    if (n.type === "Folder" && isDescendant(n.children, ancestorId, candidateId)) {
-      return true;
-    }
-  }
-  return false;
+    return false;
 }
 
 function nodeContains(ancestor: ApiCollectionNode, id: string): boolean {
-  if (ancestor.id === id) return true;
-  if (ancestor.type !== "Folder") return false;
-  return ancestor.children.some((c) => c.id === id || nodeContains(c, id));
+    if (ancestor.id === id) return true;
+    if (ancestor.type !== "Folder") return false;
+    return ancestor.children.some((c) => c.id === id || nodeContains(c, id));
 }
 
 function removeNodeFromNodes(
-  nodes: ApiCollectionNode[],
-  id: string,
+    nodes: ApiCollectionNode[],
+    id: string,
 ): { node: ApiCollectionNode; newNodes: ApiCollectionNode[] } | null {
-  for (let i = 0; i < nodes.length; i++) {
-    const n = nodes[i];
-    if (n.id === id) {
-      return {
-        node: n,
-        newNodes: [...nodes.slice(0, i), ...nodes.slice(i + 1)],
-      };
+    for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        if (n.id === id) {
+            return {
+                node: n,
+                newNodes: [...nodes.slice(0, i), ...nodes.slice(i + 1)],
+            };
+        }
+        if (n.type === "Folder") {
+            const found = removeNodeFromNodes(n.children, id);
+            if (found) {
+                return {
+                    node: found.node,
+                    newNodes: [
+                        ...nodes.slice(0, i),
+                        { ...n, children: found.newNodes },
+                        ...nodes.slice(i + 1),
+                    ],
+                };
+            }
+        }
     }
-    if (n.type === "Folder") {
-      const found = removeNodeFromNodes(n.children, id);
-      if (found) {
-        return {
-          node: found.node,
-          newNodes: [
-            ...nodes.slice(0, i),
-            { ...n, children: found.newNodes },
-            ...nodes.slice(i + 1),
-          ],
-        };
-      }
-    }
-  }
-  return null;
+    return null;
 }
 
 function removeNode(
-  collections: ApiCollection[],
-  id: string,
+    collections: ApiCollection[],
+    id: string,
 ): RemovalResult | null {
-  for (let i = 0; i < collections.length; i++) {
-    const c = collections[i];
-    const found = removeNodeFromNodes(c.nodes, id);
-    if (found) {
-      return {
-        node: found.node,
-        collectionsAfterRemoval: [
-          ...collections.slice(0, i),
-          { ...c, nodes: found.newNodes },
-          ...collections.slice(i + 1),
-        ],
-      };
+    for (let i = 0; i < collections.length; i++) {
+        const c = collections[i];
+        const found = removeNodeFromNodes(c.nodes, id);
+        if (found) {
+            return {
+                node: found.node,
+                collectionsAfterRemoval: [
+                    ...collections.slice(0, i),
+                    { ...c, nodes: found.newNodes },
+                    ...collections.slice(i + 1),
+                ],
+            };
+        }
     }
-  }
-  return null;
+    return null;
 }
 
 function withCollection(
-  collections: ApiCollection[],
-  index: number,
-  collection: ApiCollection,
+    collections: ApiCollection[],
+    index: number,
+    collection: ApiCollection,
 ): ApiCollection[] {
-  return [...collections.slice(0, index), collection, ...collections.slice(index + 1)];
+    return [
+        ...collections.slice(0, index),
+        collection,
+        ...collections.slice(index + 1),
+    ];
 }
 
 /**
@@ -284,153 +328,297 @@ function withCollection(
  * what the drag-and-drop tests covered.
  */
 function insertRelativeToNode(
-  nodes: ApiCollectionNode[],
-  targetNodeId: string,
-  node: ApiCollectionNode,
-  placement: "before" | "after" | "inside",
+    nodes: ApiCollectionNode[],
+    targetNodeId: string,
+    node: ApiCollectionNode,
+    placement: "before" | "after" | "inside",
 ): ApiCollectionNode[] | null {
-  for (let i = 0; i < nodes.length; i++) {
-    const n = nodes[i];
-    if (n.id === targetNodeId) {
-      if (placement === "inside") {
-        if (n.type === "Folder") {
-          return [...nodes.slice(0, i), { ...n, children: [...n.children, node] }, ...nodes.slice(i + 1)];
+    for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        if (n.id === targetNodeId) {
+            if (placement === "inside") {
+                if (n.type === "Folder") {
+                    return [
+                        ...nodes.slice(0, i),
+                        { ...n, children: [...n.children, node] },
+                        ...nodes.slice(i + 1),
+                    ];
+                }
+                // A request cannot hold children, so treat "inside a request" as "after it".
+                return [...nodes.slice(0, i + 1), node, ...nodes.slice(i + 1)];
+            }
+            const index = placement === "before" ? i : i + 1;
+            return [...nodes.slice(0, index), node, ...nodes.slice(index)];
         }
-        // A request cannot hold children, so treat "inside a request" as "after it".
-        return [...nodes.slice(0, i + 1), node, ...nodes.slice(i + 1)];
-      }
-      const index = placement === "before" ? i : i + 1;
-      return [...nodes.slice(0, index), node, ...nodes.slice(index)];
+        if (n.type === "Folder") {
+            const children = insertRelativeToNode(
+                n.children,
+                targetNodeId,
+                node,
+                placement,
+            );
+            if (children) {
+                return [
+                    ...nodes.slice(0, i),
+                    { ...n, children },
+                    ...nodes.slice(i + 1),
+                ];
+            }
+        }
     }
-    if (n.type === "Folder") {
-      const children = insertRelativeToNode(n.children, targetNodeId, node, placement);
-      if (children) {
-        return [...nodes.slice(0, i), { ...n, children }, ...nodes.slice(i + 1)];
-      }
-    }
-  }
-  return null;
+    return null;
 }
 
 function insertNode(
-  collections: ApiCollection[],
-  node: ApiCollectionNode,
-  target: MoveNodeTarget,
+    collections: ApiCollection[],
+    node: ApiCollectionNode,
+    target: MoveNodeTarget,
 ): ApiCollection[] {
-  const collectionIndex = collections.findIndex((c) => c.id === target.targetCollectionId);
-  if (collectionIndex === -1) return collections;
+    const collectionIndex = collections.findIndex(
+        (c) => c.id === target.targetCollectionId,
+    );
+    if (collectionIndex === -1) return collections;
 
-  const collection = collections[collectionIndex];
+    const collection = collections[collectionIndex];
 
-  if (!target.targetNodeId) {
-    // Dropping onto the collection root: prepend for "before", append otherwise.
-    const nodes =
-      target.placement === "before" ? [node, ...collection.nodes] : [...collection.nodes, node];
-    return withCollection(collections, collectionIndex, { ...collection, nodes });
-  }
+    if (!target.targetNodeId) {
+        // Dropping onto the collection root: prepend for "before", append otherwise.
+        const nodes =
+            target.placement === "before"
+                ? [node, ...collection.nodes]
+                : [...collection.nodes, node];
+        return withCollection(collections, collectionIndex, {
+            ...collection,
+            nodes,
+        });
+    }
 
-  const nodes = insertRelativeToNode(collection.nodes, target.targetNodeId, node, target.placement);
-  if (!nodes) return collections;
-  return withCollection(collections, collectionIndex, { ...collection, nodes });
+    const nodes = insertRelativeToNode(
+        collection.nodes,
+        target.targetNodeId,
+        node,
+        target.placement,
+    );
+    if (!nodes) return collections;
+    return withCollection(collections, collectionIndex, {
+        ...collection,
+        nodes,
+    });
 }
 
 /** Moves a node (request or folder) to a new position. Returns a new collections array. */
 export function moveNode(
-  collections: ApiCollection[],
-  sourceId: string,
-  target: MoveNodeTarget,
+    collections: ApiCollection[],
+    sourceId: string,
+    target: MoveNodeTarget,
 ): ApiCollection[] {
-  if (sourceId === target.targetNodeId) return collections;
+    if (sourceId === target.targetNodeId) return collections;
 
-  const removal = removeNode(collections, sourceId);
-  if (!removal) return collections;
+    const removal = removeNode(collections, sourceId);
+    if (!removal) return collections;
 
-  const { node, collectionsAfterRemoval } = removal;
+    const { node, collectionsAfterRemoval } = removal;
 
-  if (target.targetNodeId && node.type === "Folder" && nodeContains(node, target.targetNodeId)) {
-    return collections;
-  }
+    if (
+        target.targetNodeId &&
+        node.type === "Folder" &&
+        nodeContains(node, target.targetNodeId)
+    ) {
+        return collections;
+    }
 
-  return insertNode(collectionsAfterRemoval, node, target);
+    return insertNode(collectionsAfterRemoval, node, target);
+}
+
+/** Every '/'-separated folder path in a collection, for pickers that target a folder. */
+export function collectFolderPaths(collection: ApiCollection): string[] {
+    const paths: string[] = [];
+    const walk = (nodes: ApiCollectionNode[], prefix: string) => {
+        for (const n of nodes) {
+            if (n.type !== "Folder") continue;
+            const path = prefix ? `${prefix}/${n.name}` : n.name;
+            paths.push(path);
+            walk(n.children, path);
+        }
+    };
+    walk(collection.nodes, "");
+    return paths;
+}
+
+function newFolderNode(
+    name: string,
+    children: ApiCollectionNode[],
+): ApiCollectionNode {
+    return {
+        id: crypto.randomUUID(),
+        type: "Folder",
+        name,
+        // Imported folders open expanded so the request that was just dropped into
+        // them is visible — a collapsed new folder looks like the import lost it.
+        isExpanded: true,
+        children,
+        defaultAuth: null,
+        request: null,
+    };
+}
+
+function insertIntoFolderSegments(
+    nodes: ApiCollectionNode[],
+    segments: string[],
+    node: ApiCollectionNode,
+): ApiCollectionNode[] {
+    if (segments.length === 0) return [...nodes, node];
+    const [head, ...rest] = segments;
+    const index = nodes.findIndex(
+        (n) => n.type === "Folder" && n.name === head,
+    );
+    if (index === -1) {
+        return [
+            ...nodes,
+            newFolderNode(head, insertIntoFolderSegments([], rest, node)),
+        ];
+    }
+    return nodes.map((n, i) =>
+        i === index
+            ? {
+                  ...n,
+                  children: insertIntoFolderSegments(n.children, rest, node),
+              }
+            : n,
+    );
+}
+
+/**
+ * Inserts `node` into the collection resolved by `collectionIdOrName` — id first,
+ * then case-insensitive name, mirroring the agent create path. A ref matching
+ * nothing creates a new collection under that name; missing '/'-separated folder
+ * segments are materialized along the way. Returns the new store plus the resolved
+ * collection id so the caller can select/open the created node.
+ */
+export function insertRequestAtFolderPath(
+    collections: ApiCollection[],
+    collectionIdOrName: string,
+    folderPath: string | null,
+    node: ApiCollectionNode,
+): { collections: ApiCollection[]; collectionId: string } {
+    const ref = collectionIdOrName.trim();
+    const existing = collections.find(
+        (c) => c.id === ref || c.name.toLowerCase() === ref.toLowerCase(),
+    );
+    const collection =
+        existing ??
+        ({
+            id: crypto.randomUUID(),
+            name: ref,
+            nodes: [],
+            variables: [],
+            defaultAuth: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        } satisfies ApiCollection);
+
+    const segments = (folderPath ?? "")
+        .split("/")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const updated: ApiCollection = {
+        ...collection,
+        nodes: insertIntoFolderSegments(collection.nodes, segments, node),
+        updatedAt: new Date().toISOString(),
+    };
+
+    const next = existing
+        ? collections.map((c) => (c.id === existing.id ? updated : c))
+        : [...collections, updated];
+    return { collections: next, collectionId: updated.id };
 }
 
 /** Moves a top-level collection to a new position. Demo collection stays pinned at index 0. */
 export function moveCollection(
-  collections: ApiCollection[],
-  sourceId: string,
-  target: MoveCollectionTarget,
+    collections: ApiCollection[],
+    sourceId: string,
+    target: MoveCollectionTarget,
 ): ApiCollection[] {
-  if (sourceId === DEMO_COLLECTION_ID) return collections;
-  if (sourceId === target.targetCollectionId) return collections;
+    if (sourceId === DEMO_COLLECTION_ID) return collections;
+    if (sourceId === target.targetCollectionId) return collections;
 
-  const sourceIndex = collections.findIndex((c) => c.id === sourceId);
-  const targetIndex = collections.findIndex((c) => c.id === target.targetCollectionId);
-  if (sourceIndex === -1 || targetIndex === -1) return collections;
+    const sourceIndex = collections.findIndex((c) => c.id === sourceId);
+    const targetIndex = collections.findIndex(
+        (c) => c.id === target.targetCollectionId,
+    );
+    if (sourceIndex === -1 || targetIndex === -1) return collections;
 
-  const next = collections.slice();
-  const [removed] = next.splice(sourceIndex, 1);
+    const next = collections.slice();
+    const [removed] = next.splice(sourceIndex, 1);
 
-  const newTargetIndex = next.findIndex((c) => c.id === target.targetCollectionId);
-  let insertIndex = target.placement === "before" ? newTargetIndex : newTargetIndex + 1;
+    const newTargetIndex = next.findIndex(
+        (c) => c.id === target.targetCollectionId,
+    );
+    let insertIndex =
+        target.placement === "before" ? newTargetIndex : newTargetIndex + 1;
 
-  // Keep the demo collection pinned at the top.
-  const demoIndex = next.findIndex((c) => c.id === DEMO_COLLECTION_ID);
-  if (demoIndex !== -1 && insertIndex <= demoIndex) {
-    insertIndex = demoIndex + 1;
-  }
+    // Keep the demo collection pinned at the top.
+    const demoIndex = next.findIndex((c) => c.id === DEMO_COLLECTION_ID);
+    if (demoIndex !== -1 && insertIndex <= demoIndex) {
+        insertIndex = demoIndex + 1;
+    }
 
-  next.splice(insertIndex, 0, removed);
-  return next;
+    next.splice(insertIndex, 0, removed);
+    return next;
 }
 
 /** Resolves a pointer drop over a target row into a concrete move instruction. */
 export function resolveDropTarget(
-  draggingRow: FlatRow,
-  targetRow: FlatRow,
-  clientY: number,
-  targetRect: DOMRect,
-): { kind: "collection"; target: MoveCollectionTarget } | { kind: "node"; target: MoveNodeTarget } | null {
-  const threshold = targetRect.height * 0.25;
-  const relative = clientY - targetRect.top;
+    draggingRow: FlatRow,
+    targetRow: FlatRow,
+    clientY: number,
+    targetRect: DOMRect,
+):
+    | { kind: "collection"; target: MoveCollectionTarget }
+    | { kind: "node"; target: MoveNodeTarget }
+    | null {
+    const threshold = targetRect.height * 0.25;
+    const relative = clientY - targetRect.top;
 
-  if (draggingRow.isCollection) {
-    if (!targetRow.isCollection) return null;
-    const placement: "before" | "after" = relative < targetRect.height / 2 ? "before" : "after";
+    if (draggingRow.isCollection) {
+        if (!targetRow.isCollection) return null;
+        const placement: "before" | "after" =
+            relative < targetRect.height / 2 ? "before" : "after";
+        return {
+            kind: "collection",
+            target: { targetCollectionId: targetRow.collectionId, placement },
+        };
+    }
+
+    let placement: "before" | "after" | "inside";
+    if (relative < threshold) {
+        placement = "before";
+    } else if (relative > targetRect.height - threshold) {
+        placement = "after";
+    } else {
+        placement = "inside";
+    }
+
+    if (targetRow.isCollection) {
+        // Dropping a node around a collection root: place it at the start/end of the root node list.
+        const target: MoveNodeTarget = {
+            targetCollectionId: targetRow.collectionId,
+            targetNodeId: undefined,
+            placement: placement === "before" ? "before" : "after",
+        };
+        return { kind: "node", target };
+    }
+
+    if (placement === "inside" && targetRow.node.type !== "Folder") {
+        placement = "after";
+    }
+
     return {
-      kind: "collection",
-      target: { targetCollectionId: targetRow.collectionId, placement },
+        kind: "node",
+        target: {
+            targetCollectionId: targetRow.collectionId,
+            targetNodeId: targetRow.node.id,
+            placement,
+        },
     };
-  }
-
-  let placement: "before" | "after" | "inside";
-  if (relative < threshold) {
-    placement = "before";
-  } else if (relative > targetRect.height - threshold) {
-    placement = "after";
-  } else {
-    placement = "inside";
-  }
-
-  if (targetRow.isCollection) {
-    // Dropping a node around a collection root: place it at the start/end of the root node list.
-    const target: MoveNodeTarget = {
-      targetCollectionId: targetRow.collectionId,
-      targetNodeId: undefined,
-      placement: placement === "before" ? "before" : "after",
-    };
-    return { kind: "node", target };
-  }
-
-  if (placement === "inside" && targetRow.node.type !== "Folder") {
-    placement = "after";
-  }
-
-  return {
-    kind: "node",
-    target: {
-      targetCollectionId: targetRow.collectionId,
-      targetNodeId: targetRow.node.id,
-      placement,
-    },
-  };
 }

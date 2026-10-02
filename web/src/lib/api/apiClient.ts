@@ -1,5 +1,5 @@
 import { apiFetch, apiSend } from "./transport";
-import type { CollectionImportResult } from "../types";
+import type { CollectionImportResult, HttpRequestEntry } from "../types";
 
 export interface KeyVaultPreviewResult {
     status: "ok" | "error";
@@ -97,6 +97,24 @@ export async function importCollection(payload: {
         "POST",
         payload,
     );
+}
+
+// Paste-a-cURL import — the sidecar only parses; the caller inserts the returned
+// request into the collections store itself (same path as every other tree edit).
+export async function importCurlRequest(
+    command: string,
+): Promise<HttpRequestEntry> {
+    return apiSend<HttpRequestEntry>("/api/api-client/import-curl", "POST", {
+        command,
+    });
+}
+
+/** Where collections.json lives on disk — shown in Settings → API Client. */
+export async function getCollectionsLocation(): Promise<{
+    path: string;
+    directory: string | null;
+}> {
+    return apiFetch("/api/config/collections/location");
 }
 
 export async function evaluateJsonPath(

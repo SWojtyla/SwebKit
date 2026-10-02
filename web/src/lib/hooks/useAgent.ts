@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiSend, postAgentFeedback, streamAgentChat } from "../api";
+import { describeApiError, apiFetch, apiSend, postAgentFeedback, streamAgentChat } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
 import type {
   AcpPermission,
@@ -58,7 +58,7 @@ export function useRespondAcpPermission() {
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["acp-permissions"] }),
     onError: (error) =>
-      notify("error", "Couldn't respond to the agent's permission request", String(error)),
+      notify("error", "Couldn't respond to the agent's permission request", describeApiError(error)),
   });
 }
 
@@ -174,7 +174,7 @@ export function useConfirmAction() {
   return useMutation({
     mutationFn: (actionId: string) =>
       apiSend<AgentActionApplyResult>(`/api/agent/pending-approvals/${actionId}/confirm`, "POST"),
-    onError: (error) => notify("error", "Couldn't confirm action", String(error)),
+    onError: (error) => notify("error", "Couldn't confirm action", describeApiError(error)),
   });
 }
 
@@ -185,7 +185,7 @@ export function useRejectAction() {
     mutationFn: (actionId: string) =>
       apiSend(`/api/agent/pending-approvals/${actionId}/reject`, "POST"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["pending-approvals"] }),
-    onError: (error) => notify("error", "Couldn't reject action", String(error)),
+    onError: (error) => notify("error", "Couldn't reject action", describeApiError(error)),
   });
 }
 
@@ -226,7 +226,7 @@ export function useAgentChat(sessionId?: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agent", "status", sessionKey(sessionId)] });
     },
-    onError: (error) => notify("error", "Couldn't send message to the agent", String(error)),
+    onError: (error) => notify("error", "Couldn't send message to the agent", describeApiError(error)),
   });
 }
 
@@ -353,7 +353,7 @@ export function useSubmitAgentFeedback() {
     mutationFn: (vars: { exchangeId: string; comment?: string; tags?: string[] }) =>
       postAgentFeedback({ exchangeId: vars.exchangeId, sentiment: "down", comment: vars.comment, tags: vars.tags }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["agent-feedback"] }),
-    onError: (error) => notify("error", "Couldn't record feedback", String(error)),
+    onError: (error) => notify("error", "Couldn't record feedback", describeApiError(error)),
   });
 }
 
@@ -369,7 +369,7 @@ export function useAgentClear(sessionId?: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["agent", "status", sessionKey(sessionId)] });
     },
-    onError: (error) => notify("error", "Couldn't clear conversation", String(error)),
+    onError: (error) => notify("error", "Couldn't clear conversation", describeApiError(error)),
   });
 }
 
@@ -384,6 +384,6 @@ export function useTestAgentProfile() {
   return useMutation({
     mutationFn: (profile: AgentProfile) =>
       apiSend<AgentCapabilityTestResult>(`/api/agent/profiles/${profile.id}/test`, "POST", profile),
-    onError: (error) => notify("error", "Couldn't test agent connection", String(error)),
+    onError: (error) => notify("error", "Couldn't test agent connection", describeApiError(error)),
   });
 }

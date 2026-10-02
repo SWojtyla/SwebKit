@@ -79,11 +79,15 @@ function AksPageContent() {
         "aks-page",
         "Aks",
         () => ({
-            context: ws.currentContext,
-            namespaces: ws.selectedNamespaces,
+            context: ws.defaultContext,
+            contexts: ws.selectedContexts,
+            namespaces: ws.selectedNamespaces.map(
+                (s) => `${s.context}:${s.namespace}`,
+            ),
             activeTab: ws.activeTab,
             podCount: ws.allPods?.length ?? 0,
             pods: (ws.allPods ?? []).slice(0, 30).map((p) => ({
+                context: p.context ?? ws.defaultContext,
                 namespace: p.namespace,
                 name: p.name,
                 phase: p.phase,
@@ -94,6 +98,7 @@ function AksPageContent() {
             podOverflow: Math.max(0, (ws.allPods?.length ?? 0) - 30),
             selectedPod: ws.selectedPod
                 ? {
+                      context: ws.selectedPod.context ?? ws.defaultContext,
                       namespace: ws.selectedPod.namespace,
                       name: ws.selectedPod.name,
                       phase: ws.selectedPod.phase,
@@ -104,7 +109,8 @@ function AksPageContent() {
                 : null,
         }),
         [
-            ws.currentContext,
+            ws.defaultContext,
+            ws.selectedContexts,
             ws.selectedNamespaces,
             ws.activeTab,
             ws.allPods,
@@ -122,24 +128,19 @@ function AksPageContent() {
                 <span className="text-sm font-medium">Context:</span>
                 <ContextSelector
                     contexts={ws.contexts}
-                    currentContext={ws.currentContext}
-                    onChange={ws.handleContextChange}
-                    isLoading={ws.contextLoading}
-                    pendingContext={ws.pendingContext}
+                    selectedContexts={ws.selectedContexts}
+                    onToggle={ws.toggleContext}
+                    onSelectOnly={(ctx) => ws.selectContexts([ctx])}
                 />
 
                 <span className="text-sm font-medium">Namespace:</span>
                 <NamespaceSelector
-                    namespaces={ws.namespaces}
+                    scopes={ws.nsScopes}
                     selected={ws.selectedNamespaces}
+                    defaultContext={ws.defaultContext}
                     onChange={ws.setSelectedNamespaces}
-                    isLoading={ws.contextLoading || ws.nsLoading}
-                    loadingLabel={
-                        ws.contextLoading
-                            ? `Switching to ${ws.pendingContext ?? "…"}`
-                            : "Loading namespaces…"
-                    }
-                    contextName={ws.currentContext}
+                    isLoading={ws.nsLoading}
+                    loadingLabel="Loading namespaces…"
                     error={ws.nsError}
                     disabledReason={
                         ws.activeTab === "gatewayclasses"
@@ -150,22 +151,14 @@ function AksPageContent() {
                 {ws.selectedNamespaces.length > 0 && (
                     <PinResourceButton
                         resource={pinAksNamespaces(
-                            ws.currentContext,
+                            ws.selectedContexts,
                             ws.selectedNamespaces,
                         )}
                         testId="aks-pin-namespaces"
                     />
                 )}
 
-                {ws.contextLoading ? (
-                    <div
-                        className="flex items-center gap-1.5 text-xs text-primary"
-                        data-testid="aks-loading-indicator"
-                    >
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Switching context…
-                    </div>
-                ) : ws.nsLoading ? (
+                {ws.nsLoading ? (
                     <div
                         className="flex items-center gap-1.5 text-xs text-muted-foreground"
                         data-testid="aks-ns-loading-indicator"
@@ -191,9 +184,9 @@ function AksPageContent() {
                             onChange={(e) =>
                                 ws.setAutoRefresh(e.target.checked)
                             }
-                            disabled={!ws.namespaceToken}
+                            disabled={ws.queryTargets.length === 0}
                             title={
-                                !ws.namespaceToken
+                                ws.queryTargets.length === 0
                                     ? "Namespace is still loading"
                                     : undefined
                             }
@@ -206,13 +199,17 @@ function AksPageContent() {
                         onChange={(e) =>
                             ws.setRefreshInterval(Number(e.target.value))
                         }
-                        disabled={!ws.autoRefresh || !ws.namespaceToken}
+                        disabled={
+                            !ws.autoRefresh || ws.queryTargets.length === 0
+                        }
                         title={
-                            !ws.namespaceToken
+                            ws.queryTargets.length === 0
                                 ? "Namespace is still loading"
                                 : !ws.autoRefresh
                                   ? "Enable Auto to pick an interval"
-                                  : undefined
+                                  : ws.isMultiContext && ws.refreshInterval < 30
+                                    ? "Intervals under 30s are floored to 30s while multiple clusters are attached"
+                                    : undefined
                         }
                         className="rounded-md border bg-card px-2 py-1 text-xs disabled:opacity-40"
                         aria-label="Auto-refresh interval"
@@ -233,9 +230,9 @@ function AksPageContent() {
                     />
                     <button
                         onClick={ws.handleManualRefresh}
-                        disabled={!ws.namespaceToken}
+                        disabled={ws.queryTargets.length === 0}
                         title={
-                            !ws.namespaceToken
+                            ws.queryTargets.length === 0
                                 ? "Namespace is still loading"
                                 : "Refresh the resources in view"
                         }
@@ -249,15 +246,14 @@ function AksPageContent() {
                     </button>
                     <button
                         onClick={async () => {
-                            const pods =
-                                ws.allPods ??
-                                (await ws.refetchPods()).data ??
-                                [];
+                            const pods = ws.allPods ?? (await ws.refetchPods());
                             ws.openMultiPodLogs(pods);
                         }}
-                        disabled={!ws.namespaceToken || ws.podsFetching}
+                        disabled={
+                            ws.queryTargets.length === 0 || ws.podsFetching
+                        }
                         title={
-                            !ws.namespaceToken
+                            ws.queryTargets.length === 0
                                 ? "Namespace is still loading"
                                 : ws.podsFetching
                                   ? "Pods are still loading"
@@ -388,19 +384,9 @@ function AksPageContent() {
             >
                 <div className="flex min-w-0 flex-1 flex-col">
                     <div className="flex-1 overflow-auto">
-                        {ws.contextLoading ? (
-                            // namespaceToken is held null while the POST is in flight, so the
-                            // previous cluster's rows are gone already — this is the stage label.
-                            <div
-                                className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground"
-                                data-testid="aks-switching-state"
-                            >
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Switching to {ws.pendingContext ?? "…"}
-                            </div>
-                        ) : ws.profileLoaded &&
-                          !ws.currentContext &&
-                          !ws.isDemoMode ? (
+                        {ws.profileLoaded &&
+                        !ws.defaultContext &&
+                        !ws.isDemoMode ? (
                             <EmptyState
                                 icon={Ship}
                                 title="No AKS cluster configured"
@@ -421,123 +407,145 @@ function AksPageContent() {
                                 }
                                 testId="aks-first-run"
                             />
-                        ) : !ws.namespaceToken ? (
+                        ) : ws.queryTargets.length === 0 ? (
                             <div
                                 className="flex h-full items-center justify-center text-sm text-muted-foreground"
                                 data-testid="aks-empty-state"
                             >
-                                {ws.currentContext
-                                    ? "Select a namespace to view resources"
-                                    : "Select a context to get started"}
+                                {ws.selectedContexts.length === 0
+                                    ? "Select a context to get started"
+                                    : "Select a namespace to view resources"}
                             </div>
                         ) : (
                             <>
                                 {ws.activeTab === "deployments" && (
                                     <DeploymentsTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "statefulsets" && (
                                     <StatefulSetsTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "pods" && (
                                     <PodsTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "services" && (
                                     <ServicesTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "ingresses" && (
                                     <IngressesTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "httproutes" && (
                                     <HttpRoutesTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "envoy" && (
                                     <EnvoyTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "gatewayclasses" && (
-                                    <GatewayClassesTab />
+                                    <GatewayClassesTab
+                                        contexts={ws.selectedContexts}
+                                        showContext={ws.isMultiContext}
+                                    />
                                 )}
                                 {ws.activeTab === "gateways" && (
                                     <GatewaysTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "cronjobs" && (
                                     <CronJobsTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "jobs" && (
                                     <JobsTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "configmaps" && (
                                     <ConfigMapsTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "secrets" && (
                                     <SecretsTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "hpa" && (
                                     <AutoscalingTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "helm" && (
                                     <HelmTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "events" && (
                                     <EventsTab
-                                        ns={ws.namespaceToken}
+                                        targets={ws.queryTargets}
                                         isMulti={ws.isMultiNamespace}
+                                        showContext={ws.isMultiContext}
                                     />
                                 )}
                                 {ws.activeTab === "portforward" && (
                                     <PortForwardPanel
-                                        ns={ws.namespaceToken}
-                                        selectedPod={
-                                            ws.selectedPod?.name ?? null
+                                        selectedPod={ws.selectedPod}
+                                        onPodConsumed={() => ws.setPodKey(null)}
+                                        context={
+                                            ws.selectedPod?.context ??
+                                            ws.defaultContext
                                         }
-                                        context={ws.currentContext}
                                         kubeconfig={ws.kubeconfigPath}
                                         pods={ws.allPods}
                                     />
                                 )}
                                 {ws.activeTab === "analysis" && (
-                                    <AnalysisPanel ns={ws.namespaceToken} />
+                                    <AnalysisPanel
+                                        targets={ws.queryTargets}
+                                        showContext={ws.isMultiContext}
+                                    />
                                 )}
                             </>
                         )}
@@ -551,7 +559,7 @@ function AksPageContent() {
                             namespace={ws.shellPod.namespace}
                             pod={ws.shellPod.name}
                             container={ws.shellPod.containers[0] ?? null}
-                            context={ws.currentContext}
+                            context={ws.shellPod.context ?? ws.defaultContext}
                             kubeconfig={ws.kubeconfigPath}
                             onClose={() => ws.setShellPod(null)}
                         />
@@ -576,6 +584,7 @@ function AksPageContent() {
                                     "pod",
                                     ws.selectedPod!.name,
                                     ws.selectedPod!.namespace,
+                                    ws.selectedPod!.context,
                                 )
                             }
                             onOpenShell={() => ws.setShellPod(ws.selectedPod)}
@@ -609,6 +618,7 @@ function AksPageContent() {
                             ns={ws.yamlResource.namespace}
                             kind={ws.yamlResource.kind}
                             name={ws.yamlResource.name}
+                            context={ws.yamlResource.context}
                             onClose={() => ws.setYamlResource(null)}
                         />
                     </ResizablePanel>
@@ -624,6 +634,7 @@ function AksPageContent() {
                         <HelmDetailPanel
                             ns={ws.helmRelease.namespace}
                             release={ws.helmRelease.name}
+                            context={ws.helmRelease.context}
                             onClose={() => ws.setHelmRelease(null)}
                             onRequestConfirm={ws.requestConfirm}
                         />
@@ -673,12 +684,13 @@ function AksPageContent() {
                                     "httproute",
                                     ws.selectedHttpRoute!.name,
                                     ws.selectedHttpRoute!.namespace,
+                                    ws.selectedHttpRoute!.context,
                                 )
                             }
                         />
                     </ResizablePanel>
                 )}
-                {ws.showMultiPodLogs && ws.multiPodNamespace && (
+                {ws.showMultiPodLogs && (
                     <ResizablePanel
                         storageKey="aks-multi-pod-logs"
                         defaultWidth={620}
@@ -687,8 +699,7 @@ function AksPageContent() {
                         showHeader={false}
                     >
                         <MultiPodLogView
-                            ns={ws.multiPodNamespace}
-                            pods={ws.multiPodNames}
+                            pods={ws.multiLogPods}
                             onClose={() => ws.closeMultiPodLogs()}
                         />
                     </ResizablePanel>
@@ -705,6 +716,7 @@ function AksPageContent() {
                         <ContainerDetailPanel
                             ns={ws.containerDetail.namespace}
                             podName={ws.containerDetail.podName}
+                            context={ws.containerDetail.context}
                         />
                     </ResizablePanel>
                 )}

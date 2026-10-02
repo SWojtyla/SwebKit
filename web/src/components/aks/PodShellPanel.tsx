@@ -41,7 +41,7 @@ function clampHeight(value: number): number {
  * locked the whole UI behind the session and was killed the moment you switched tabs. The dock
  * keeps the pods table (and everything else) usable while the session runs, and the session
  * survives resource-tab switches; only a cluster context change tears it down (see
- * `AksWorkspaceContext.handleContextChange`). Closing is only ever via the explicit button,
+ * `AksWorkspaceContext.applyContextSelection`). Closing is only ever via the explicit button,
  * which also tears down the pty session server-side — Escape is deliberately not handled so a
  * real terminal session (vim, less) receives it untouched.
  */

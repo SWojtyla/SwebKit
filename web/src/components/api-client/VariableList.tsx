@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Wand2 } from "lucide-react";
 import { GeneratorConfig } from "./GeneratorConfig";
-import { previewCredential, previewKeyVaultSecret, saveCredential, deleteCredential } from "@/lib/api";
+import { describeApiError, previewCredential, previewKeyVaultSecret, saveCredential, deleteCredential } from "@/lib/api";
 import { useNotification } from "@/components/layout/notification-context";
 import type { VariableGeneratorDefinition, KeyVaultEntry } from "@/lib/types";
 
@@ -406,7 +406,7 @@ function CredentialField({ variable, index, onChange, onPreview, preview, testId
         setSaved(true);
       }
     } catch (ex) {
-      notify("error", "Couldn't store secret", ex instanceof Error ? ex.message : "Save failed");
+      notify("error", "Couldn't store secret", describeApiError(ex) || "Save failed");
     }
   }
 

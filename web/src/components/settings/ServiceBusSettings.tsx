@@ -3,7 +3,9 @@ import { useProfile, useUpdateProfile } from "@/lib/hooks";
 import { useSbTestConnection } from "@/lib/hooks/useServiceBus";
 import type { ServiceBusNamespace } from "@/lib/types";
 import { DraftInput } from "./DraftInput";
+import { normalizeServiceBusNamespace } from "@/lib/azure-hostname";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { ConnectionTestResultLine } from "@/components/shared/ConnectionTestResultLine";
 import { ProfileListLayout } from "./ProfileListLayout";
 
 /** A namespace is worth confirming removal of once it has real configured data — an
@@ -30,7 +32,9 @@ export function ServiceBusSettings() {
             id: crypto.randomUUID(),
             alias: "New Namespace",
             fullyQualifiedNamespace: "",
-            authMode: "ConnectionString",
+            // Entra is the recommended path — new namespaces default to it; existing
+            // profiles keep whichever mode they were saved with.
+            authMode: "DefaultAzureCredential",
             credentialKey: "",
             transportType: "Amqp",
             createdAt: new Date().toISOString(),
@@ -156,29 +160,27 @@ function NamespaceRow({
                 </button>
             </div>
 
-            <DraftInput
-                type="text"
-                value={ns.fullyQualifiedNamespace}
-                onCommit={(fullyQualifiedNamespace) =>
-                    onUpdate({ fullyQualifiedNamespace })
-                }
-                className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-                placeholder="e.g. sb-dev-shared-sb-weu.servicebus.windows.net"
-            />
+            <div>
+                <DraftInput
+                    type="text"
+                    value={ns.fullyQualifiedNamespace}
+                    onCommit={(v) =>
+                        onUpdate({
+                            fullyQualifiedNamespace:
+                                normalizeServiceBusNamespace(v),
+                        })
+                    }
+                    className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
+                    placeholder="Namespace, e.g. sb-dev-shared-sb-weu"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                    Just the namespace name —{" "}
+                    <code>.servicebus.windows.net</code> is added automatically.
+                    A full hostname is accepted as-is.
+                </p>
+            </div>
 
             <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm">
-                    <input
-                        type="radio"
-                        name={`sb-auth-${ns.id}`}
-                        checked={ns.authMode === "ConnectionString"}
-                        onChange={() =>
-                            onUpdate({ authMode: "ConnectionString" })
-                        }
-                        data-testid={`sb-auth-connstring-${ns.id}`}
-                    />
-                    Connection String
-                </label>
                 <label className="flex items-center gap-2 text-sm">
                     <input
                         type="radio"
@@ -190,6 +192,18 @@ function NamespaceRow({
                         data-testid={`sb-auth-entra-${ns.id}`}
                     />
                     Entra ID
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                    <input
+                        type="radio"
+                        name={`sb-auth-${ns.id}`}
+                        checked={ns.authMode === "ConnectionString"}
+                        onChange={() =>
+                            onUpdate({ authMode: "ConnectionString" })
+                        }
+                        data-testid={`sb-auth-connstring-${ns.id}`}
+                    />
+                    Connection String
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                     Transport:
@@ -265,14 +279,10 @@ function NamespaceRow({
                     {test.isFetching ? "Testing…" : "Test connection"}
                 </button>
                 {test.data && (
-                    <span
-                        className={`text-xs ${test.data.connected ? "text-success" : "text-destructive"}`}
-                        data-testid={`sb-test-result-${ns.id}`}
-                    >
-                        {test.data.connected
-                            ? "Connected"
-                            : `Failed: ${test.data.error ?? "unknown error"}`}
-                    </span>
+                    <ConnectionTestResultLine
+                        result={test.data}
+                        testId={`sb-test-result-${ns.id}`}
+                    />
                 )}
                 {test.isError && (
                     <span className="text-xs text-destructive">

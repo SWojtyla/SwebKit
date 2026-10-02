@@ -1,6 +1,15 @@
-import { Globe, Folder, Settings2, GitBranch, AlertTriangle } from "lucide-react";
+import {
+    Globe,
+    Folder,
+    Settings2,
+    GitBranch,
+    AlertTriangle,
+} from "lucide-react";
 import { ApiClientPageProvider } from "./ApiClientPageContext";
-import { useApiClientPageContext, useApiClientTabs } from "./api-client-context";
+import {
+    useApiClientPageContext,
+    useApiClientTabs,
+} from "./api-client-context";
 import { CollectionTree } from "./CollectionTree";
 import { RequestEditor } from "./RequestEditor";
 import { ResponseViewer } from "./ResponseViewer";
@@ -13,259 +22,333 @@ import { GitDrawer } from "./GitDrawer";
 import { ResizablePanels } from "@/components/ui/ResizablePanels";
 
 export function ApiClientPage() {
-  return (
-    <ApiClientPageProvider>
-      <ApiClientPageContent />
-    </ApiClientPageProvider>
-  );
+    return (
+        <ApiClientPageProvider>
+            <ApiClientPageContent />
+        </ApiClientPageProvider>
+    );
 }
 
 function ApiClientPageContent() {
-  const ctx = useApiClientPageContext();
+    const ctx = useApiClientPageContext();
 
-  if (ctx.isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center" data-testid="api-client-page">
-        Loading collections...
-      </div>
+    if (ctx.isLoading) {
+        return (
+            <div
+                className="flex h-full items-center justify-center"
+                data-testid="api-client-page"
+            >
+                Loading collections...
+            </div>
+        );
+    }
+
+    // Split once so each picker offers only environments of its own scope. An environment
+    // scoped to some *other* collection is deliberately in neither list — it cannot apply
+    // here — but the Environment Manager still shows it, so it is never lost.
+    const globalEnvironments = ctx.environments.filter(
+        (env) => env.collectionId === null,
     );
-  }
+    const scopedEnvironments = ctx.currentCollection
+        ? ctx.environments.filter(
+              (env) => env.collectionId === ctx.currentCollection!.id,
+          )
+        : [];
 
-  // Split once so each picker offers only environments of its own scope. An environment
-  // scoped to some *other* collection is deliberately in neither list — it cannot apply
-  // here — but the Environment Manager still shows it, so it is never lost.
-  const globalEnvironments = ctx.environments.filter((env) => env.collectionId === null);
-  const scopedEnvironments = ctx.currentCollection
-    ? ctx.environments.filter((env) => env.collectionId === ctx.currentCollection!.id)
-    : [];
-
-  return (
-    // `relative` anchors the Git drawer to the page content area instead of the
-    // whole viewport, so it no longer covers the app titlebar and status bar.
-    <div className="relative flex h-full min-w-0 flex-col" data-testid="api-client-page">
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5 bg-card">
-        {/* Two layers apply at once, so both pickers are always shown: a Global
+    return (
+        // `relative` anchors the Git drawer to the page content area instead of the
+        // whole viewport, so it no longer covers the app titlebar and status bar.
+        <div
+            className="relative flex h-full min-w-0 flex-col"
+            data-testid="api-client-page"
+        >
+            {/* Toolbar */}
+            <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5 bg-card">
+                {/* Two layers apply at once, so both pickers are always shown: a Global
             environment shared by every collection, and one scoped to the current
             collection that overrides it. The project picker is rendered even with no
             collection in context — disabled and saying why — because hiding it was how
             an estate of entirely collection-scoped environments ended up with nothing
             selectable anywhere. */}
-        <div className="flex items-center gap-1" title="Global environment — applies to every collection">
-          <Globe className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Global</span>
-          <select
-            data-testid="env-selector"
-            value={ctx.activeGlobalEnvironment?.id ?? ""}
-            onChange={(e) => ctx.handleSetActiveEnvironment(e.target.value || null)}
-            className="rounded border bg-background px-2 py-1 text-xs"
-          >
-            <option value="">— None —</option>
-            {globalEnvironments.map((env) => (
-              <option key={env.id} value={env.id}>{env.name}</option>
-            ))}
-          </select>
-        </div>
+                <div
+                    className="flex items-center gap-1"
+                    title="Global environment — applies to every collection"
+                >
+                    <Globe className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">
+                        Global
+                    </span>
+                    <select
+                        data-testid="env-selector"
+                        value={ctx.activeGlobalEnvironment?.id ?? ""}
+                        onChange={(e) =>
+                            ctx.handleSetActiveEnvironment(
+                                e.target.value || null,
+                            )
+                        }
+                        className="rounded border bg-background px-2 py-1 text-xs"
+                    >
+                        <option value="">— None —</option>
+                        {globalEnvironments.map((env) => (
+                            <option key={env.id} value={env.id}>
+                                {env.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
 
-        <span className="text-xs text-muted-foreground">+</span>
+                <span className="text-xs text-muted-foreground">+</span>
 
-        <div
-          className="flex items-center gap-1"
-          title={
-            ctx.currentCollection
-              ? `Environment for ${ctx.currentCollection.name} — overrides the global one`
-              : "Select a collection to choose its environment"
-          }
-        >
-          <Folder className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">
-            {ctx.currentCollection ? ctx.currentCollection.name : "Project"}
-          </span>
-          <select
-            data-testid="env-selector-scoped"
-            disabled={!ctx.currentCollection}
-            value={ctx.activeScopedEnvironment?.id ?? ""}
-            onChange={(e) =>
-              ctx.currentCollection &&
-              ctx.handleSetScopedEnvironment(ctx.currentCollection.id, e.target.value || null)
-            }
-            className="rounded border bg-background px-2 py-1 text-xs disabled:opacity-50"
-          >
-            {ctx.currentCollection ? (
-              <>
-                <option value="">— None —</option>
-                {scopedEnvironments.map((env) => (
-                  <option key={env.id} value={env.id}>{env.name}</option>
-                ))}
-              </>
-            ) : (
-              <option value="">— Select a collection first —</option>
-            )}
-          </select>
-        </div>
+                <div
+                    className="flex items-center gap-1"
+                    title={
+                        ctx.currentCollection
+                            ? `Environment for ${ctx.currentCollection.name} — overrides the global one`
+                            : "Select a collection to choose its environment"
+                    }
+                >
+                    <Folder className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">
+                        {ctx.currentCollection
+                            ? ctx.currentCollection.name
+                            : "Project"}
+                    </span>
+                    <select
+                        data-testid="env-selector-scoped"
+                        disabled={!ctx.currentCollection}
+                        value={ctx.activeScopedEnvironment?.id ?? ""}
+                        onChange={(e) =>
+                            ctx.currentCollection &&
+                            ctx.handleSetScopedEnvironment(
+                                ctx.currentCollection.id,
+                                e.target.value || null,
+                            )
+                        }
+                        className="rounded border bg-background px-2 py-1 text-xs disabled:opacity-50"
+                    >
+                        {ctx.currentCollection ? (
+                            <>
+                                <option value="">— None —</option>
+                                {scopedEnvironments.map((env) => (
+                                    <option key={env.id} value={env.id}>
+                                        {env.name}
+                                    </option>
+                                ))}
+                            </>
+                        ) : (
+                            <option value="">
+                                — Select a collection first —
+                            </option>
+                        )}
+                    </select>
+                </div>
 
-        <button
-          onClick={() => ctx.setShowEnvManager(true)}
-          className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent"
-          data-testid="env-manager-button"
-        >
-          <Settings2 className="h-3 w-3" /> Manage
-        </button>
-        {ctx.selectedCollection && (
-          <button
-            onClick={() => ctx.setShowColVarEditor(true)}
-            className="rounded border px-2 py-1 text-xs hover:bg-accent"
-            data-testid="col-vars-button"
-          >
-            Collection Variables
-          </button>
-        )}
-        {/* What the two layers actually resolve to. The count is of the *merged* scope,
+                <button
+                    onClick={() => ctx.setShowEnvManager(true)}
+                    className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent"
+                    data-testid="env-manager-button"
+                >
+                    <Settings2 className="h-3 w-3" /> Manage
+                </button>
+                {ctx.selectedCollection && (
+                    <button
+                        onClick={() => ctx.setShowColVarEditor(true)}
+                        className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                        data-testid="col-vars-button"
+                    >
+                        Collection Variables
+                    </button>
+                )}
+                {/* What the two layers actually resolve to. The count is of the *merged* scope,
             which is the number that matters and which neither layer's own count gives. */}
-        {ctx.activeEnvironment && (
-          <span className="text-xs text-muted-foreground" data-testid="active-env-name">
-            {ctx.activeEnvironment.name} ({Object.keys(ctx.variableScope).length} vars in scope)
-          </span>
-        )}
-        <div className="ml-auto" />
-        <button
-          onClick={() => ctx.setShowGitPanel(!ctx.showGitPanel)}
-          className={`flex items-center gap-1 rounded border px-2 py-1 text-xs ${ctx.showGitPanel ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-          data-testid="api-client-git-toggle"
-        >
-          <GitBranch className="h-3 w-3" /> Git
-        </button>
-      </div>
+                {ctx.activeEnvironment && (
+                    <span
+                        className="text-xs text-muted-foreground"
+                        data-testid="active-env-name"
+                    >
+                        {ctx.activeEnvironment.name} (
+                        {Object.keys(ctx.variableScope).length} vars in scope)
+                    </span>
+                )}
+                <div className="ml-auto" />
+                <button
+                    onClick={() => ctx.setShowGitPanel(!ctx.showGitPanel)}
+                    className={`flex items-center gap-1 rounded border px-2 py-1 text-xs ${ctx.showGitPanel ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                    data-testid="api-client-git-toggle"
+                >
+                    <GitBranch className="h-3 w-3" /> Git
+                </button>
+            </div>
 
-      {/* Conflict-resolution banner */}
-      {ctx.conflict && (
-        <div className="flex flex-wrap items-center gap-3 border-b bg-destructive/10 px-4 py-3" data-testid="conflict-banner">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
-          <span className="flex-1 text-sm">{ctx.conflict.message}</span>
-          <button onClick={ctx.handleReloadConflict} className="rounded border px-3 py-1.5 text-xs hover:bg-accent" data-testid="conflict-reload">Reload</button>
-          <button onClick={ctx.handleOverwriteConflict} className="rounded bg-destructive px-3 py-1.5 text-xs text-destructive-foreground hover:opacity-90" data-testid="conflict-overwrite">Overwrite</button>
-          <button onClick={ctx.handleSaveAsCopy} className="rounded border px-3 py-1.5 text-xs hover:bg-accent" data-testid="conflict-copy">Save as copy</button>
-          <button onClick={ctx.dismissConflict} className="rounded border px-3 py-1.5 text-xs hover:bg-accent" data-testid="conflict-dismiss">Dismiss</button>
-        </div>
-      )}
+            {/* Conflict-resolution banner */}
+            {ctx.conflict && (
+                <div
+                    className="flex flex-wrap items-center gap-3 border-b bg-destructive/10 px-4 py-3"
+                    data-testid="conflict-banner"
+                >
+                    <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
+                    <span className="flex-1 text-sm">
+                        {ctx.conflict.message}
+                    </span>
+                    <button
+                        onClick={ctx.handleReloadConflict}
+                        className="rounded border px-3 py-1.5 text-xs hover:bg-accent"
+                        data-testid="conflict-reload"
+                    >
+                        Reload
+                    </button>
+                    <button
+                        onClick={ctx.handleOverwriteConflict}
+                        className="rounded bg-destructive px-3 py-1.5 text-xs text-destructive-foreground hover:opacity-90"
+                        data-testid="conflict-overwrite"
+                    >
+                        Overwrite
+                    </button>
+                    <button
+                        onClick={ctx.handleSaveAsCopy}
+                        className="rounded border px-3 py-1.5 text-xs hover:bg-accent"
+                        data-testid="conflict-copy"
+                    >
+                        Save as copy
+                    </button>
+                    <button
+                        onClick={ctx.dismissConflict}
+                        className="rounded border px-3 py-1.5 text-xs hover:bg-accent"
+                        data-testid="conflict-dismiss"
+                    >
+                        Dismiss
+                    </button>
+                </div>
+            )}
 
-      {/* Legacy plaintext secret notice */}
-      {ctx.legacySecretCount > 0 && !ctx.legacyNoticeDismissed && (
-        <div className="flex items-start gap-2 border-b px-3 py-2 text-xs"
-          style={{
-            color: "var(--warning)",
-            backgroundColor: "color-mix(in oklch, var(--warning) 12%, transparent)",
-          }}
-          data-testid="legacy-secret-notice">
-          <span className="flex-1">
-            {ctx.legacySecretCount} API Client auth value{ctx.legacySecretCount === 1 ? "" : "s"} look{ctx.legacySecretCount === 1 ? "s" : ""} like a raw secret stored in collections.json.
-            Re-enter {ctx.legacySecretCount === 1 ? "it" : "them"} to move {ctx.legacySecretCount === 1 ? "it" : "them"} to the secure store.
-          </span>
-          <button
-            onClick={ctx.dismissLegacyNotice}
-            className="shrink-0 rounded border px-2 py-0.5 hover:bg-accent"
-            data-testid="legacy-secret-notice-dismiss"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
+            {/* Legacy plaintext secret notice */}
+            {ctx.legacySecretCount > 0 && !ctx.legacyNoticeDismissed && (
+                <div
+                    className="flex items-start gap-2 border-b px-3 py-2 text-xs"
+                    style={{
+                        color: "var(--warning)",
+                        backgroundColor:
+                            "color-mix(in oklch, var(--warning) 12%, transparent)",
+                    }}
+                    data-testid="legacy-secret-notice"
+                >
+                    <span className="flex-1">
+                        {ctx.legacySecretCount} API Client auth value
+                        {ctx.legacySecretCount === 1 ? "" : "s"} look
+                        {ctx.legacySecretCount === 1 ? "s" : ""} like a raw
+                        secret stored in collections.json. Re-enter{" "}
+                        {ctx.legacySecretCount === 1 ? "it" : "them"} to move{" "}
+                        {ctx.legacySecretCount === 1 ? "it" : "them"} to the
+                        secure store.
+                    </span>
+                    <button
+                        onClick={ctx.dismissLegacyNotice}
+                        className="shrink-0 rounded border px-2 py-0.5 hover:bg-accent"
+                        data-testid="legacy-secret-notice-dismiss"
+                    >
+                        Dismiss
+                    </button>
+                </div>
+            )}
 
-      {/* Main 3-pane layout */}
-      <div className="flex min-w-0 flex-1 overflow-hidden">
-        {/* The tree's useful width does not scale with the window, so it stays
+            {/* Main 3-pane layout */}
+            <div className="flex min-w-0 flex-1 overflow-hidden">
+                {/* The tree's useful width does not scale with the window, so it stays
             roughly fixed while request and response split the leftover space —
             previously the response pane was the only `flex: 1` child and absorbed
             every spare pixel on a wide monitor. */}
-        {/* Minimums are sized so all three panes still fit — and stay draggable —
+                {/* Minimums are sized so all three panes still fit — and stay draggable —
             at a 1280px-wide window; larger values pinned every pane to its
             minimum on a laptop and overflowed the container. */}
-        <ResizablePanels
-          initialWidths={[300, "1fr", "1fr"]}
-          minWidths={[200, 340, 320]}
-          storageKey="api-client-panels"
-          panelLabels={["collections", "request", "response"]}
-          className="w-full min-w-0"
-        >
-          <CollectionTree
-            collections={ctx.collections}
-            selectedNodeId={ctx.selectedNodeId}
-            selectedCollectionId={ctx.selectedCollectionId}
-            onSelectNode={ctx.handleSelectNode}
-            onAddCollection={ctx.handleAddCollection}
-            onAddRequest={ctx.handleAddRequest}
-            onAddFolder={ctx.handleAddFolder}
-            onDeleteNode={ctx.handleDeleteNode}
-            onRenameNode={ctx.handleRenameNode}
-            onMoveNode={ctx.handleMoveNode}
-            onMoveCollection={ctx.handleMoveCollection}
-            onExportCollection={ctx.setExportCollectionId}
-          />
+                <ResizablePanels
+                    initialWidths={[300, "1fr", "1fr"]}
+                    minWidths={[200, 340, 320]}
+                    storageKey="api-client-panels"
+                    panelLabels={["collections", "request", "response"]}
+                    className="w-full min-w-0"
+                >
+                    <CollectionTree
+                        collections={ctx.collections}
+                        selectedNodeId={ctx.selectedNodeId}
+                        selectedCollectionId={ctx.selectedCollectionId}
+                        onSelectNode={ctx.handleSelectNode}
+                        onAddCollection={ctx.handleAddCollection}
+                        onAddRequest={ctx.handleAddRequest}
+                        onAddFolder={ctx.handleAddFolder}
+                        onDeleteNode={ctx.handleDeleteNode}
+                        onRenameNode={ctx.handleRenameNode}
+                        onMoveNode={ctx.handleMoveNode}
+                        onMoveCollection={ctx.handleMoveCollection}
+                        onExportCollection={ctx.setExportCollectionId}
+                        onImportCurl={ctx.handleImportCurlRequest}
+                    />
 
-          {/* No `border-r` here — RequestEditor already carries one, and the
+                    {/* No `border-r` here — RequestEditor already carries one, and the
               resizer provides the visual divider. */}
-          <div className="flex h-full w-full flex-col">
-            <TabStripPane />
-            <ActiveEditorPane />
-          </div>
+                    <div className="flex h-full w-full flex-col">
+                        <TabStripPane />
+                        <ActiveEditorPane />
+                    </div>
 
-          <div className="flex h-full w-full flex-col overflow-hidden">
-            <ActiveResponsePane />
-          </div>
-        </ResizablePanels>
-      </div>
+                    <div className="flex h-full w-full flex-col overflow-hidden">
+                        <ActiveResponsePane />
+                    </div>
+                </ResizablePanels>
+            </div>
 
-      {/* Dialogs */}
-      {ctx.nameDialog && (
-        <NameDialog
-          title={ctx.nameDialog.title}
-          label={ctx.nameDialog.label}
-          defaultValue={ctx.nameDialog.defaultValue}
-          confirmText={ctx.nameDialog.confirmText}
-          onConfirm={ctx.nameDialog.onConfirm}
-          onCancel={() => ctx.setNameDialog(null)}
-        />
-      )}
-      {ctx.confirmDialog && (
-        <ConfirmDialog
-          message={ctx.confirmDialog.message}
-          confirmText={ctx.confirmDialog.confirmText}
-          onConfirm={ctx.confirmDialog.onConfirm}
-          onCancel={() => ctx.setConfirmDialog(null)}
-        />
-      )}
-      {ctx.showEnvManager && (
-        <EnvironmentManager
-          environments={ctx.environments}
-          collections={ctx.collections}
-          activeEnvironmentId={ctx.activeEnvironmentId}
-          activeEnvironmentIdByCollection={ctx.activeEnvironmentIdByCollection}
-          onSave={ctx.handleSaveEnvironments}
-          onClose={() => ctx.setShowEnvManager(false)}
-        />
-      )}
-      {ctx.showColVarEditor && ctx.selectedCollection && (
-        <CollectionVariableEditor
-          collection={ctx.selectedCollection}
-          onSave={ctx.handleSaveCollectionVariables}
-          onClose={() => ctx.setShowColVarEditor(false)}
-        />
-      )}
-      {ctx.exportCollectionId && ctx.exportCollection && (
-        <CollectionExportDialog
-          collection={ctx.exportCollection}
-          environments={ctx.environments}
-          onClose={() => ctx.setExportCollectionId(null)}
-        />
-      )}
+            {/* Dialogs */}
+            {ctx.nameDialog && (
+                <NameDialog
+                    title={ctx.nameDialog.title}
+                    label={ctx.nameDialog.label}
+                    defaultValue={ctx.nameDialog.defaultValue}
+                    confirmText={ctx.nameDialog.confirmText}
+                    onConfirm={ctx.nameDialog.onConfirm}
+                    onCancel={() => ctx.setNameDialog(null)}
+                />
+            )}
+            {ctx.confirmDialog && (
+                <ConfirmDialog
+                    message={ctx.confirmDialog.message}
+                    confirmText={ctx.confirmDialog.confirmText}
+                    onConfirm={ctx.confirmDialog.onConfirm}
+                    onCancel={() => ctx.setConfirmDialog(null)}
+                />
+            )}
+            {ctx.showEnvManager && (
+                <EnvironmentManager
+                    environments={ctx.environments}
+                    collections={ctx.collections}
+                    activeEnvironmentId={ctx.activeEnvironmentId}
+                    activeEnvironmentIdByCollection={
+                        ctx.activeEnvironmentIdByCollection
+                    }
+                    onSave={ctx.handleSaveEnvironments}
+                    onClose={() => ctx.setShowEnvManager(false)}
+                />
+            )}
+            {ctx.showColVarEditor && ctx.selectedCollection && (
+                <CollectionVariableEditor
+                    collection={ctx.selectedCollection}
+                    onSave={ctx.handleSaveCollectionVariables}
+                    onClose={() => ctx.setShowColVarEditor(false)}
+                />
+            )}
+            {ctx.exportCollectionId && ctx.exportCollection && (
+                <CollectionExportDialog
+                    collection={ctx.exportCollection}
+                    environments={ctx.environments}
+                    onClose={() => ctx.setExportCollectionId(null)}
+                />
+            )}
 
-      {/* Git drawer — sits inside the page content area rather than covering the
+            {/* Git drawer — sits inside the page content area rather than covering the
           app titlebar and status bar as the previous fixed overlay did. */}
-      {ctx.showGitPanel && (
-        <GitDrawer onClose={() => ctx.setShowGitPanel(false)} />
-      )}
-    </div>
-  );
+            {ctx.showGitPanel && (
+                <GitDrawer onClose={() => ctx.setShowGitPanel(false)} />
+            )}
+        </div>
+    );
 }
 
 // Tab-pane wrappers are the only consumers of `useApiClientTabs`: per-keystroke
@@ -273,59 +356,63 @@ function ApiClientPageContent() {
 // toolbar or dialogs above. The wrapped components stay prop-driven.
 
 function TabStripPane() {
-  const tabs = useApiClientTabs();
-  return (
-    <RequestTabStrip
-      tabs={tabs.tabs}
-      activeTabId={tabs.activeTabId}
-      onSelectTab={tabs.setActiveTabId}
-      onCloseTab={tabs.closeTab}
-      onCloseOtherTabs={tabs.closeOtherTabs}
-      onCloseAllTabs={tabs.closeAllTabs}
-      onPromoteTab={tabs.promoteTab}
-    />
-  );
+    const tabs = useApiClientTabs();
+    return (
+        <RequestTabStrip
+            tabs={tabs.tabs}
+            activeTabId={tabs.activeTabId}
+            onSelectTab={tabs.setActiveTabId}
+            onCloseTab={tabs.closeTab}
+            onCloseOtherTabs={tabs.closeOtherTabs}
+            onCloseAllTabs={tabs.closeAllTabs}
+            onPromoteTab={tabs.promoteTab}
+        />
+    );
 }
 
 function ActiveEditorPane() {
-  const ctx = useApiClientPageContext();
-  const tabs = useApiClientTabs();
-  const tabState = tabs.activeTabId ? tabs.tabStates[tabs.activeTabId] : undefined;
-  if (!tabs.activeTabId || !tabState) {
+    const ctx = useApiClientPageContext();
+    const tabs = useApiClientTabs();
+    const tabState = tabs.activeTabId
+        ? tabs.tabStates[tabs.activeTabId]
+        : undefined;
+    if (!tabs.activeTabId || !tabState) {
+        return (
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
+                <span data-testid="api-client-empty-editor">
+                    Select or create a request to start editing.
+                </span>
+            </div>
+        );
+    }
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
-        <span data-testid="api-client-empty-editor">
-          Select or create a request to start editing.
-        </span>
-      </div>
+        <RequestEditor
+            request={tabState.draft}
+            onChange={(req) => tabs.updateTabDraft(tabs.activeTabId!, req)}
+            onSend={tabs.handleSend}
+            onSave={tabs.handleSave}
+            sending={tabState.sending}
+            variableScope={ctx.variableScope}
+            environments={ctx.environments}
+            captureWarnings={tabState.response?.captureWarnings ?? []}
+        />
     );
-  }
-  return (
-    <RequestEditor
-      request={tabState.draft}
-      onChange={(req) => tabs.updateTabDraft(tabs.activeTabId!, req)}
-      onSend={tabs.handleSend}
-      onSave={tabs.handleSave}
-      sending={tabState.sending}
-      variableScope={ctx.variableScope}
-      environments={ctx.environments}
-      captureWarnings={tabState.response?.captureWarnings ?? []}
-    />
-  );
 }
 
 function ActiveResponsePane() {
-  const ctx = useApiClientPageContext();
-  const tabs = useApiClientTabs();
-  const tabState = tabs.activeTabId ? tabs.tabStates[tabs.activeTabId] : undefined;
-  return (
-    <ResponseViewer
-      response={tabState?.response ?? null}
-      sending={tabState?.sending ?? false}
-      request={tabState?.draft ?? null}
-      history={tabState?.history ?? []}
-      onSaveExample={tabs.handleSaveExample}
-      variableScope={ctx.variableScope}
-    />
-  );
+    const ctx = useApiClientPageContext();
+    const tabs = useApiClientTabs();
+    const tabState = tabs.activeTabId
+        ? tabs.tabStates[tabs.activeTabId]
+        : undefined;
+    return (
+        <ResponseViewer
+            response={tabState?.response ?? null}
+            sending={tabState?.sending ?? false}
+            request={tabState?.draft ?? null}
+            history={tabState?.history ?? []}
+            onSaveExample={tabs.handleSaveExample}
+            variableScope={ctx.variableScope}
+        />
+    );
 }

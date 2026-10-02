@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace SwebKit.Core.Domain;
 
 // ─── Collection hierarchy ────────────────────────────────────────────────────
@@ -174,9 +176,21 @@ public sealed class RequestBody
     public string? RawContent { get; set; }
     /// <summary>Content type for the raw body (e.g., "application/json").</summary>
     public string? ContentType { get; set; }
-    public List<KeyValuePair<string>> FormData { get; set; } = [];
+    public List<FormDataField> FormData { get; set; } = [];
     /// <summary>File path for binary uploads.</summary>
     public string? FilePath { get; set; }
+}
+
+/// <summary>One row in a multipart form-data body. When <see cref="IsFile"/> is set,
+/// <see cref="Value"/> holds a local file path (post-variable-substitution) and the
+/// executor sends it as a real file part with a filename instead of the path text.</summary>
+public sealed class FormDataField
+{
+    public string Key { get; set; } = string.Empty;
+    public string? Value { get; set; }
+    public bool IsEnabled { get; set; } = true;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsFile { get; set; }
 }
 
 public enum RequestBodyMode

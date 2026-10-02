@@ -19,16 +19,25 @@ import {
 import { Dialog } from "@/components/shared/Dialog";
 import { X } from "lucide-react";
 import type { ContextMenuItem } from "./ContextMenu";
-import type { HpaInfo, ScaledJobInfo } from "@/lib/types";
+import type { AksQueryTarget, HpaInfo, ScaledJobInfo } from "@/lib/types";
+import type { AksContextError } from "@/lib/hooks/useAks";
 
 /**
  * The "Autoscaling" tab: everything that scales workloads on the cluster in one
  * place — plain HPAs, KEDA ScaledObjects (which surface as KEDA-managed HPAs),
  * and KEDA ScaledJobs (which scale Jobs and therefore never appear as HPAs).
  */
-export function AutoscalingTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
-    const { data: hpas, isLoading, error } = useAksHpas(ns);
-    const scaledJobs = useAksScaledJobs(ns);
+export function AutoscalingTab({
+    targets,
+    isMulti,
+    showContext,
+}: {
+    targets: AksQueryTarget[];
+    isMulti?: boolean;
+    showContext?: boolean;
+}) {
+    const { data: hpas, isLoading, error, contextErrors } = useAksHpas(targets);
+    const scaledJobs = useAksScaledJobs(targets);
 
     return (
         <div className="space-y-6 p-4">
@@ -40,7 +49,9 @@ export function AutoscalingTab({ ns, isMulti }: { ns: string; isMulti?: boolean 
                     hpas={hpas}
                     isLoading={isLoading}
                     error={error}
+                    contextErrors={contextErrors}
                     isMulti={isMulti}
+                    showContext={showContext}
                 />
             </section>
             <section>
@@ -51,7 +62,9 @@ export function AutoscalingTab({ ns, isMulti }: { ns: string; isMulti?: boolean 
                     scaledJobs={scaledJobs.data}
                     isLoading={scaledJobs.isLoading}
                     error={scaledJobs.error}
+                    contextErrors={scaledJobs.contextErrors}
                     isMulti={isMulti}
+                    showContext={showContext}
                 />
             </section>
         </div>
@@ -62,12 +75,16 @@ function HpaTable({
     hpas,
     isLoading,
     error,
+    contextErrors,
     isMulti,
+    showContext,
 }: {
     hpas: HpaInfo[] | undefined;
     isLoading: boolean;
     error: unknown;
+    contextErrors?: AksContextError[];
     isMulti?: boolean;
+    showContext?: boolean;
 }) {
     const ws = useAksActions();
     const scaleMutation = useAksScaleHpa();
@@ -87,9 +104,15 @@ function HpaTable({
             confirmMutation(
                 ws,
                 scaleMutation,
-                `Scale HPA "${hpa.name}" to min ${min} / max ${max} replicas?`,
+                `Scale HPA "${hpa.name}" to min ${min} / max ${max} replicas${hpa.context ? ` in ${hpa.context}` : ""}?`,
                 hpa.name,
-                { ns: hpa.namespace, name: hpa.name, minReplicas: min, maxReplicas: max },
+                {
+                    ns: hpa.namespace,
+                    name: hpa.name,
+                    minReplicas: min,
+                    maxReplicas: max,
+                    context: hpa.context,
+                },
             );
         },
         [ws, scaleTarget, scaleMutation],
@@ -105,9 +128,9 @@ function HpaTable({
                 deleteMutation,
                 hpa.isKedaManaged
                     ? `"${hpa.name}" is managed by KEDA ScaledObject "${hpa.scaledObjectName ?? "?"}". Delete the ScaledObject to remove autoscaling?`
-                    : `Delete HPA ${hpa.name} in ${hpa.namespace}?`,
+                    : `Delete HPA ${hpa.name} in ${hpa.namespace}${hpa.context ? ` (${hpa.context})` : ""}?`,
                 hpa.name,
-                { ns: hpa.namespace, name: hpa.name },
+                { ns: hpa.namespace, name: hpa.name, context: hpa.context },
             );
         },
         [ws, deleteMutation],
@@ -119,9 +142,14 @@ function HpaTable({
             confirmMutation(
                 ws,
                 toggleMutation,
-                `${next ? "Disable" : "Enable"} scaling for ${hpa.name}?`,
+                `${next ? "Disable" : "Enable"} scaling for ${hpa.name}${hpa.context ? ` in ${hpa.context}` : ""}?`,
                 hpa.name,
-                { ns: hpa.namespace, name: hpa.name, enabled: !next },
+                {
+                    ns: hpa.namespace,
+                    name: hpa.name,
+                    enabled: !next,
+                    context: hpa.context,
+                },
             );
         },
         [ws, toggleMutation],
@@ -132,7 +160,11 @@ function HpaTable({
             resourceMenuItems(ws, hpa, "horizontalpodautoscaler", {
                 middle: [
                     { label: "", separator: true, onClick: () => {} },
-                    { label: "Scale…", icon: "⇳", onClick: () => setScaleTarget(hpa) },
+                    {
+                        label: "Scale…",
+                        icon: "⇳",
+                        onClick: () => setScaleTarget(hpa),
+                    },
                     {
                         label: hpa.isScalingDisabled
                             ? "Enable autoscaling"
@@ -250,6 +282,8 @@ function HpaTable({
                 isLoading={isLoading}
                 error={error}
                 isMulti={isMulti}
+                showContext={showContext}
+                contextErrors={contextErrors}
                 compact
                 testIdPrefix="hpa"
                 tableBodyTestId="hpas-table-body"
@@ -259,6 +293,7 @@ function HpaTable({
                         "horizontalpodautoscaler",
                         hpa.name,
                         hpa.namespace,
+                        hpa.context,
                     )
                 }
                 onRowContextMenu={handleRowContextMenu}
@@ -296,12 +331,16 @@ function ScaledJobsTable({
     scaledJobs,
     isLoading,
     error,
+    contextErrors,
     isMulti,
+    showContext,
 }: {
     scaledJobs: ScaledJobInfo[] | undefined;
     isLoading: boolean;
     error: unknown;
+    contextErrors?: AksContextError[];
     isMulti?: boolean;
+    showContext?: boolean;
 }) {
     const ws = useAksActions();
     const scaleMutation = useAksScaleScaledJob();
@@ -318,9 +357,15 @@ function ScaledJobsTable({
             confirmMutation(
                 ws,
                 scaleMutation,
-                `Scale ScaledJob "${job.name}" to min ${min} / max ${max} replicas?`,
+                `Scale ScaledJob "${job.name}" to min ${min} / max ${max} replicas${job.context ? ` in ${job.context}` : ""}?`,
                 job.name,
-                { ns: job.namespace, name: job.name, minReplicas: min, maxReplicas: max },
+                {
+                    ns: job.namespace,
+                    name: job.name,
+                    minReplicas: min,
+                    maxReplicas: max,
+                    context: job.context,
+                },
             );
         },
         [ws, scaleTarget, scaleMutation],
@@ -331,9 +376,9 @@ function ScaledJobsTable({
             confirmMutation(
                 ws,
                 deleteMutation,
-                `Delete ScaledJob ${job.name} in ${job.namespace}?`,
+                `Delete ScaledJob ${job.name} in ${job.namespace}${job.context ? ` (${job.context})` : ""}?`,
                 job.name,
-                { ns: job.namespace, name: job.name },
+                { ns: job.namespace, name: job.name, context: job.context },
             );
         },
         [ws, deleteMutation],
@@ -345,9 +390,14 @@ function ScaledJobsTable({
             confirmMutation(
                 ws,
                 toggleMutation,
-                `${enable ? "Resume" : "Pause"} KEDA scaling for ${job.name}?`,
+                `${enable ? "Resume" : "Pause"} KEDA scaling for ${job.name}${job.context ? ` in ${job.context}` : ""}?`,
                 job.name,
-                { ns: job.namespace, name: job.name, enabled: enable },
+                {
+                    ns: job.namespace,
+                    name: job.name,
+                    enabled: enable,
+                    context: job.context,
+                },
             );
         },
         [ws, toggleMutation],
@@ -358,9 +408,15 @@ function ScaledJobsTable({
             resourceMenuItems(ws, job, "scaledjob", {
                 middle: [
                     { label: "", separator: true, onClick: () => {} },
-                    { label: "Scale…", icon: "⇳", onClick: () => setScaleTarget(job) },
                     {
-                        label: job.isPaused ? "Resume scaling" : "Pause scaling",
+                        label: "Scale…",
+                        icon: "⇳",
+                        onClick: () => setScaleTarget(job),
+                    },
+                    {
+                        label: job.isPaused
+                            ? "Resume scaling"
+                            : "Pause scaling",
                         icon: "⏸",
                         onClick: () => handleToggleScaling(job),
                     },
@@ -432,12 +488,19 @@ function ScaledJobsTable({
                 isLoading={isLoading}
                 error={error}
                 isMulti={isMulti}
+                showContext={showContext}
+                contextErrors={contextErrors}
                 compact
                 testIdPrefix="scaledjob"
                 tableBodyTestId="scaledjobs-table-body"
                 emptyMessage="No KEDA ScaledJobs found"
                 onRowClick={(job) =>
-                    ws.openYaml("scaledjob", job.name, job.namespace)
+                    ws.openYaml(
+                        "scaledjob",
+                        job.name,
+                        job.namespace,
+                        job.context,
+                    )
                 }
                 onRowContextMenu={handleRowContextMenu}
                 columns={columns}

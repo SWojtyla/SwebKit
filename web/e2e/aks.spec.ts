@@ -327,7 +327,8 @@ test.describe("AKS", () => {
         // The auth failure has to be visible instead.
         const authError =
             "The cluster rejected the request as unauthorized (HTTP 401): no valid Azure AD token could be obtained.";
-        await page.route("**/api/aks/namespaces", async (route) => {
+        // Scoped namespace calls carry ?context= — the trailing glob has to cover it.
+        await page.route("**/api/aks/namespaces**", async (route) => {
             await route.fulfill({
                 status: 401,
                 contentType: "application/json",

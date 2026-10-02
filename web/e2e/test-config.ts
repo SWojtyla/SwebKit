@@ -1,4 +1,4 @@
-import { execSync, spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,11 +13,16 @@ import { fileURLToPath } from "node:url";
  * all) in the returned teardown, keeping all process management in one place.
  */
 
-const e2eAppDataRoot = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    ".e2e-appdata",
-);
+// Overridable so a second run can coexist with an in-flight suite — a concurrent
+// globalSetup on the default path would wipe the appdata out from under a running
+// sidecar (and killProcessOnPort only respects the port, not the appdata dir).
+const e2eAppDataRoot =
+    process.env.PLAYWRIGHT_APPDATA_ROOT ??
+    path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "..",
+        ".e2e-appdata",
+    );
 
 export const sidecarPort = process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198";
 export const vitePort = process.env.PLAYWRIGHT_VITE_PORT ?? "1419";
@@ -35,17 +40,39 @@ const sidecarProject = path.resolve(
  * uses `Get-NetTCPConnection`; on Unix it uses `lsof`. Errors are ignored.
  */
 function killProcessOnPort(port: string) {
+    // Numeric-only guard plus argv-style spawns (no shell): the port is a
+    // process.env value, so it must never be interpolated into a command line.
+    if (!/^\d+$/.test(port)) return;
     try {
         if (process.platform === "win32") {
-            execSync(
-                `powershell -Command "Get-NetTCPConnection -LocalPort ${port} -LocalAddress 127.0.0.1 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }"`,
+            // No -LocalAddress filter: a stale vite can hold only [::1]:<port>, which
+            // a 127.0.0.1-scoped query misses — Playwright's localhost probe then sees
+            // the zombie and browsers get served by it instead of this run's server.
+            spawnSync(
+                "powershell",
+                [
+                    "-NoProfile",
+                    "-Command",
+                    "Get-NetTCPConnection -LocalPort $args[0] -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }",
+                    port,
+                ],
                 { stdio: "ignore", timeout: 10000 },
             );
         } else {
-            execSync(`lsof -ti:${port} | xargs -r kill -9`, {
-                stdio: "ignore",
+            const pids = spawnSync("lsof", [`-ti:${port}`], {
+                stdio: ["ignore", "pipe", "ignore"],
                 timeout: 10000,
-            });
+            })
+                .stdout?.toString()
+                .split("\n")
+                .map((p) => p.trim())
+                .filter((p) => /^\d+$/.test(p));
+            for (const pid of pids ?? []) {
+                spawnSync("kill", ["-9", pid], {
+                    stdio: "ignore",
+                    timeout: 10000,
+                });
+            }
         }
     } catch {
         // Best effort: port may be free or we may lack permission.
@@ -59,6 +86,9 @@ function killProcessOnPort(port: string) {
  */
 export async function resetE2EAppData() {
     killProcessOnPort(sidecarPort);
+    // Playwright's webServer teardown can orphan vite on [::1]:<vitePort> —
+    // clear it here too so the next run's port check doesn't see the zombie.
+    killProcessOnPort(vitePort);
 
     for (let i = 0; i < 30; i++) {
         try {
@@ -78,10 +108,15 @@ export async function resetE2EAppData() {
 }
 
 async function waitForSidecarHealth(port: string, timeoutMs: number) {
+    if (!/^\d+$/.test(port)) throw new Error(`Invalid sidecar port: ${port}`);
+    // Build the URL structurally rather than interpolating the env-sourced port
+    // into a request string.
+    const health = new URL("http://127.0.0.1/health");
+    health.port = port;
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
         try {
-            const res = await fetch(`http://127.0.0.1:${port}/health`);
+            const res = await fetch(health);
             if (res.ok) return;
         } catch {
             // not ready yet
@@ -137,10 +172,12 @@ export function stopSidecar(proc: ChildProcess | undefined) {
 
     if (process.platform === "win32") {
         try {
-            execSync(`taskkill /T /F /PID ${proc.pid}`, {
-                stdio: "ignore",
-                timeout: 10000,
-            });
+            const pid = proc.pid;
+            if (pid !== undefined)
+                spawnSync("taskkill", ["/T", "/F", "/PID", String(pid)], {
+                    stdio: "ignore",
+                    timeout: 10000,
+                });
         } catch {
             proc.kill("SIGTERM");
         }

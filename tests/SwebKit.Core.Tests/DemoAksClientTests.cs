@@ -225,6 +225,31 @@ public class DemoAksClientTests
     }
 
     [Fact]
+    public async Task GetNamespacesAsync_ContextSpecificClient_ReturnsThatClustersNamespaces()
+    {
+        // Multi-context demo browsing relies on per-context clients serving different
+        // namespace lists — a shared list would make the merged view untestable.
+        var prod = new DemoAksClient("aks-ecommerce-prod");
+        var platform = new DemoAksClient("aks-platform-dev");
+
+        var prodNamespaces = await prod.GetNamespacesAsync();
+        var platformNamespaces = await platform.GetNamespacesAsync();
+
+        Assert.Contains("infrastructure", prodNamespaces);
+        Assert.DoesNotContain("infrastructure", platformNamespaces);
+        Assert.Contains("platform", platformNamespaces);
+        Assert.DoesNotContain("platform", prodNamespaces);
+    }
+
+    [Fact]
+    public async Task GetNamespacesAsync_UnknownContext_FallsBackToDefaultSet()
+    {
+        var client = new DemoAksClient("no-such-demo-context");
+
+        Assert.Equal(await _client.GetNamespacesAsync(), await client.GetNamespacesAsync());
+    }
+
+    [Fact]
     public async Task GetEventsAsync_FiltersByInvolvedObject()
     {
         var all = await _client.GetEventsAsync("default");

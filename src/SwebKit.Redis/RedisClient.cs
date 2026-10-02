@@ -61,6 +61,18 @@ public sealed class RedisClient : IRedisClient
     }
 
     /// <summary>
+    /// Resolves the configured cache value to an endpoint host. A bare resource name gets
+    /// the standard Azure Cache suffix; anything containing a dot is treated as a full
+    /// hostname — public FQDN, private-link, or custom DNS — and used verbatim. Without
+    /// the dot check a pasted FQDN would silently become
+    /// "host.redis.cache.windows.net.redis.cache.windows.net".
+    /// </summary>
+    public static string ResolveAadHost(string cacheName)
+        => cacheName.Contains('.')
+            ? cacheName
+            : $"{cacheName}.redis.cache.windows.net";
+
+    /// <summary>
     /// Builds the multiplexer options for connecting to Azure Cache for Redis via Entra ID
     /// (AAD), authenticating with the app-wide <see cref="AzureCredentialFactory"/> credential
     /// instead of a password embedded in a connection string.
@@ -73,7 +85,7 @@ public sealed class RedisClient : IRedisClient
 
         var options = new ConfigurationOptions
         {
-            EndPoints = { $"{cacheEntry.CacheName}.redis.cache.windows.net:6380" }
+            EndPoints = { $"{ResolveAadHost(cacheEntry.CacheName)}:6380" }
         };
 
         // See AzureCredentialFactory for why EnvironmentCredential is excluded.

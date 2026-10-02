@@ -330,7 +330,7 @@ function Toast({
                     )}
                 </div>
                 {notification.body && (
-                    <div className="mt-0.5 text-xs text-muted-foreground">
+                    <div className="mt-0.5 whitespace-pre-line text-xs text-muted-foreground">
                         {notification.body}
                     </div>
                 )}
@@ -365,4 +365,3 @@ function NotificationIcon({ type }: { type: NotificationType }) {
         return <AlertCircle className="h-4 w-4 text-destructive" />;
     return <Info className="h-4 w-4 text-blue-500" />;
 }
-

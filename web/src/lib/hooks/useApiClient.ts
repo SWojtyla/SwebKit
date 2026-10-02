@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiSend, importCollection } from "../api";
+import { describeApiError, apiFetch, apiSend, importCollection } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
 import type {
   ApiCollection,
@@ -52,7 +52,7 @@ export function useUpdateCollections() {
     onSuccess: (data) => {
       qc.setQueryData(["collections"], data);
     },
-    onError: (error) => notify("error", "Couldn't save collections", String(error)),
+    onError: (error) => notify("error", "Couldn't save collections", describeApiError(error)),
   });
 }
 
@@ -67,7 +67,7 @@ export function useExecuteRequest() {
       /** The global layer, applied underneath `environmentId`. */
       globalEnvironmentId?: string;
     }) => apiSend<ApiClientExecutionResponse>("/api/api-client/execute", "POST", vars),
-    onError: (error) => notify("error", "Couldn't execute request", String(error)),
+    onError: (error) => notify("error", "Couldn't execute request", describeApiError(error)),
   });
 }
 
@@ -80,6 +80,6 @@ export function useImportCollection() {
       qc.invalidateQueries({ queryKey: ["collections"] });
       qc.invalidateQueries({ queryKey: ["environments"] });
     },
-    onError: (error) => notify("error", "Couldn't import collection", String(error)),
+    onError: (error) => notify("error", "Couldn't import collection", describeApiError(error)),
   });
 }

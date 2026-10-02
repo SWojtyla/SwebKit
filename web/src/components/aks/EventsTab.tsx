@@ -3,6 +3,7 @@ import { AlertCircle } from "lucide-react";
 import { useAksEvents } from "@/lib/hooks";
 import { useAksNav, type TabId } from "./shared/aks-workspace-context";
 import { formatLocalTime } from "@/lib/datetime";
+import type { AksQueryTarget } from "@/lib/types";
 
 /** Kubernetes `involvedObject.kind` -> the AKS tab that shows that resource, for click-through.
  * Kinds with no dedicated tab (ReplicaSet, Node, Endpoints, ...) are left unmapped and simply
@@ -23,8 +24,21 @@ const KIND_TO_TAB: Partial<Record<string, TabId>> = {
     HTTPRoute: "httproutes",
 };
 
-export function EventsTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
-    const { data: events, isLoading, error } = useAksEvents(ns);
+export function EventsTab({
+    targets,
+    isMulti,
+    showContext,
+}: {
+    targets: AksQueryTarget[];
+    isMulti?: boolean;
+    showContext?: boolean;
+}) {
+    const {
+        data: events,
+        isLoading,
+        error,
+        contextErrors,
+    } = useAksEvents(targets);
     const ws = useAksNav();
     const [warningsOnly, setWarningsOnly] = useState(false);
 
@@ -75,6 +89,28 @@ export function EventsTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
                 />
                 Warnings only
             </label>
+            {contextErrors.length > 0 && (
+                <div
+                    className="mb-2 flex flex-col gap-1"
+                    data-testid="events-context-errors"
+                >
+                    {contextErrors.map((e) => (
+                        <div
+                            key={e.context}
+                            className="flex items-center gap-2 rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive"
+                            data-testid={`events-context-error-${e.context}`}
+                        >
+                            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                            <span>
+                                {e.context}:{" "}
+                                {e.error instanceof Error
+                                    ? e.error.message
+                                    : String(e.error)}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            )}
             {!events || events.length === 0 ? (
                 <div className="text-sm text-muted-foreground">
                     No events found
@@ -91,7 +127,7 @@ export function EventsTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
                             : undefined;
                         return (
                             <div
-                                key={`${evt.namespace}/${evt.name}-${evt.involvedObjectName}`}
+                                key={`${evt.context}:${evt.namespace}/${evt.name}-${evt.involvedObjectName}`}
                                 data-testid={`event-item-${evt.name}`}
                                 className="flex items-start gap-3 rounded-md border p-2 text-sm"
                             >
@@ -106,6 +142,14 @@ export function EventsTab({ ns, isMulti }: { ns: string; isMulti?: boolean }) {
                                 </span>
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
+                                        {showContext && evt.context && (
+                                            <span
+                                                className="rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium text-primary"
+                                                data-testid={`event-context-${evt.name}`}
+                                            >
+                                                {evt.context}
+                                            </span>
+                                        )}
                                         {isMulti && (
                                             <span className="text-xs text-muted-foreground">
                                                 {evt.namespace}

@@ -20,6 +20,10 @@ Plan files are the shared intent record: any tool or later session reads them to
 - `service-bus-power-ops.md` — reach-message DLQ-park/restore op, DLQ triage + resend-with-edit fix, session awareness, cross-env replay.
 - `ux-power-pack.md` — palette deepening, pinned rail, env badgeing, keyboard grids, toast dedupe.
 - `distribution-onboarding.md` — team workspace packs, "PRD day" demo tour stop, update channel, `swebkit://` deep links.
+- `aks-multi-context.md` — phased multi-context AKS workspace: attached secondary contexts (URL/view-pref state), grouped namespace picker, merged resource tables with a Context column, context-routed mutations; primary context keeps profile semantics.
+- `api-client-agent-fixes.md` — agent create-request resolves collection by id-or-name and auto-creates missing collection/folders, `list_api_collections` tool, non-AI cURL import dialog, chat markdown styling + drop stale context-window stats.
+- `api-client-agent-variables.md` — `propose_collection_variable_change` tool (static + generator vars incl. guid), file-typed multipart form fields (`FormDataField.IsFile`) across model/executor/UI/agent schema, Postman file-field import.
+- `api-client-settings-tab.md` — API Client settings split out of General into their own tab (incl. Key Vaults), and a Storage section showing the real `collections.json` path via `GET /api/config/collections/location`.
 
 ## Plan file contract
 

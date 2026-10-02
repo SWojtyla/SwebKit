@@ -119,7 +119,7 @@ public class AksEndpointsTests
         var (profile, demo) = Deps();
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
-        var result = await AksEndpoints.GetPodsAsync("ecommerce", null, profile, demo, pool, CancellationToken.None);
+        var result = await AksEndpoints.GetPodsAsync("ecommerce", null, null, profile, demo, pool, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.PodInfo>>>(result);
         // 3+2+2+3+2+1+2+2+1+1 replicas across the demo deployments.
@@ -132,7 +132,7 @@ public class AksEndpointsTests
         var (profile, demo) = Deps();
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
-        var result = await AksEndpoints.GetPodsAsync("ecommerce", "app=order-api", profile, demo, pool, CancellationToken.None);
+        var result = await AksEndpoints.GetPodsAsync("ecommerce", null, "app=order-api", profile, demo, pool, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.PodInfo>>>(result);
         Assert.Equal(3, ok.Value!.Count); // order-api has 3 replicas in demo data
@@ -146,7 +146,7 @@ public class AksEndpointsTests
         demo.IsDemoMode = true;
         var pool = new FakeMonitoringConnectionPool { AksClient = demo.GetAksClient() };
 
-        var result = await AksEndpoints.GetPodsAsync("ecommerce", null, profile, demo, pool, CancellationToken.None);
+        var result = await AksEndpoints.GetPodsAsync("ecommerce", null, null, profile, demo, pool, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.PodInfo>>>(result);
         Assert.NotEmpty(ok.Value!);
@@ -160,7 +160,7 @@ public class AksEndpointsTests
         var (profile, demo) = Deps();
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
-        var result = await AksEndpoints.GetHpasAsync("ecommerce", profile, demo, pool, CancellationToken.None);
+        var result = await AksEndpoints.GetHpasAsync("ecommerce", null, profile, demo, pool, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.HpaInfo>>>(result);
         Assert.Contains(ok.Value!, h => h.Name == "order-api-hpa");
@@ -173,7 +173,7 @@ public class AksEndpointsTests
         demo.IsDemoMode = true;
         var pool = new FakeMonitoringConnectionPool { AksClient = demo.GetAksClient() };
 
-        var result = await AksEndpoints.GetHpasAsync("ecommerce", profile, demo, pool, CancellationToken.None);
+        var result = await AksEndpoints.GetHpasAsync("ecommerce", null, profile, demo, pool, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.HpaInfo>>>(result);
         Assert.NotEmpty(ok.Value!);
@@ -186,7 +186,7 @@ public class AksEndpointsTests
         var pool = new FakeMonitoringConnectionPool { AksClient = null };
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => AksEndpoints.GetHpasAsync("infra", profile, demo, pool, CancellationToken.None));
+            () => AksEndpoints.GetHpasAsync("infra", null, profile, demo, pool, CancellationToken.None));
     }
 
     // ── HTTPRoutes — regression coverage for the "no longer swallows all exceptions" fix ──────────
@@ -197,7 +197,7 @@ public class AksEndpointsTests
         var (profile, demo) = Deps();
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
-        var result = await AksEndpoints.GetHttpRoutesAsync("ecommerce", profile, demo, pool, CancellationToken.None);
+        var result = await AksEndpoints.GetHttpRoutesAsync("ecommerce", null, profile, demo, pool, CancellationToken.None);
 
         var ok = Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.HttpRouteInfo>>>(result);
         Assert.NotEmpty(ok.Value!);
@@ -214,7 +214,7 @@ public class AksEndpointsTests
         var pool = new FakeMonitoringConnectionPool { AksClient = new ThrowingHttpRoutesAksClient() };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => AksEndpoints.GetHttpRoutesAsync("ecommerce", profile, demo, pool, CancellationToken.None));
+            () => AksEndpoints.GetHttpRoutesAsync("ecommerce", null, profile, demo, pool, CancellationToken.None));
         Assert.Equal("simulated RBAC/connectivity failure", ex.Message);
     }
 
@@ -234,7 +234,7 @@ public class AksEndpointsTests
         demo.IsDemoMode = true;
         var pool = new FakeMonitoringConnectionPool { AksClient = demo.GetAksClient() };
 
-        var result = await AksEndpoints.TriggerCronJobAsync("ecommerce", "inventory-sync", profile, demo, pool, CancellationToken.None);
+        var result = await AksEndpoints.TriggerCronJobAsync("ecommerce", "inventory-sync", null, profile, demo, pool, CancellationToken.None);
 
         var jobName = Assert.Single(ReadJobNames(result));
         Assert.StartsWith("inventory-sync-manual-", jobName);
@@ -246,7 +246,7 @@ public class AksEndpointsTests
         var (profile, demo) = Deps();
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
-        var result = await AksEndpoints.TriggerCronJobAsync("ecommerce,infra", "inventory-sync", profile, demo, pool, CancellationToken.None);
+        var result = await AksEndpoints.TriggerCronJobAsync("ecommerce,infra", "inventory-sync", null, profile, demo, pool, CancellationToken.None);
 
         var jobNames = ReadJobNames(result);
         Assert.Equal(2, jobNames.Length);
@@ -260,7 +260,7 @@ public class AksEndpointsTests
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => AksEndpoints.TriggerCronJobAsync("ecommerce", "no-such-cronjob", profile, demo, pool, CancellationToken.None));
+            () => AksEndpoints.TriggerCronJobAsync("ecommerce", "no-such-cronjob", null, profile, demo, pool, CancellationToken.None));
     }
 
     [Fact]
@@ -270,7 +270,7 @@ public class AksEndpointsTests
         var pool = new FakeMonitoringConnectionPool { AksClient = null };
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => AksEndpoints.TriggerCronJobAsync("ecommerce", "inventory-sync", profile, demo, pool, CancellationToken.None));
+            () => AksEndpoints.TriggerCronJobAsync("ecommerce", "inventory-sync", null, profile, demo, pool, CancellationToken.None));
     }
 
     // ── CronJob schedule ─────────────────────────────────────────────────────
@@ -283,7 +283,7 @@ public class AksEndpointsTests
         var pool = new FakeMonitoringConnectionPool { AksClient = client };
 
         var result = await AksEndpoints.SetCronJobScheduleAsync(
-            "ecommerce", "report-generator", new SetCronJobScheduleRequest("*/10 * * * *"),
+            "ecommerce", "report-generator", null, new SetCronJobScheduleRequest("*/10 * * * *"),
             profile, demo, pool, CancellationToken.None);
 
         Assert.Equal(200, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
@@ -302,7 +302,7 @@ public class AksEndpointsTests
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
         var result = await AksEndpoints.SetCronJobScheduleAsync(
-            "ecommerce", "report-generator", new SetCronJobScheduleRequest(schedule),
+            "ecommerce", "report-generator", null, new SetCronJobScheduleRequest(schedule),
             profile, demo, pool, CancellationToken.None);
 
         Assert.Equal(400, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
@@ -315,7 +315,7 @@ public class AksEndpointsTests
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
         var result = await AksEndpoints.SetCronJobScheduleAsync(
-            "ecommerce", "report-generator", new SetCronJobScheduleRequest("@daily"),
+            "ecommerce", "report-generator", null, new SetCronJobScheduleRequest("@daily"),
             profile, demo, pool, CancellationToken.None);
 
         Assert.Equal(200, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
@@ -330,7 +330,7 @@ public class AksEndpointsTests
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
         var result = await AksEndpoints.GetEnvoyResourcesAsync(
-            "ecommerce", "backendtrafficpolicies", profile, demo, pool, CancellationToken.None);
+            "ecommerce", "backendtrafficpolicies", null, profile, demo, pool, CancellationToken.None);
 
         Assert.Equal(200, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
         var items = Assert.IsAssignableFrom<IValueHttpResult>(result).Value
@@ -347,7 +347,7 @@ public class AksEndpointsTests
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
         var result = await AksEndpoints.GetEnvoyResourcesAsync(
-            "ecommerce", "foobarpolicies", profile, demo, pool, CancellationToken.None);
+            "ecommerce", "foobarpolicies", null, profile, demo, pool, CancellationToken.None);
 
         Assert.Equal(400, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
     }
@@ -359,9 +359,37 @@ public class AksEndpointsTests
         var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
 
         var result = await AksEndpoints.GetEnvoyResourcesAsync(
-            "ecommerce", "SecurityPolicies", profile, demo, pool, CancellationToken.None);
+            "ecommerce", "SecurityPolicies", null, profile, demo, pool, CancellationToken.None);
 
         Assert.Equal(200, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+    }
+
+    // ── Multi-context browsing (aks-multi-context) ───────────────────────────
+
+    [Fact]
+    public async Task GetDeploymentsAsync_ExplicitContext_RoutesToThatContextsClient()
+    {
+        // Every namespaced list handler takes ?context= and must resolve the client for that
+        // kubeconfig context — the merged multi-cluster view relies on each fan-out call
+        // landing on its own cluster, not silently the primary's.
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.GetDeploymentsAsync("ecommerce", "aks-prd", profile, demo, pool, CancellationToken.None);
+
+        Assert.Equal(200, Assert.IsAssignableFrom<IStatusCodeHttpResult>(result).StatusCode);
+        Assert.Equal(["aks-prd"], pool.RequestedContexts);
+    }
+
+    [Fact]
+    public async Task GetDeploymentsAsync_NoContext_RequestsDefaultContext()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        await AksEndpoints.GetDeploymentsAsync("ecommerce", null, profile, demo, pool, CancellationToken.None);
+
+        Assert.Equal([null], pool.RequestedContexts);
     }
 
     // ── Contexts list ────────────────────────────────────────────────────────
@@ -516,5 +544,47 @@ public class AksEndpointsTests
         // Demo context names don't exist in the user's kubeconfig — persisting one would
         // restore a broken context after demo mode ends.
         Assert.Equal("real-ctx", profile.GetProfileData().Config.AksConfig!.KubeconfigContext);
+    }
+
+    // ── Multi-context routing (?context=) ────────────────────────────────────
+    // The merged workspace sends ?context= on every request that targets an attached
+    // cluster. These pin the contract for a representative read (pods) and a
+    // representative mutation (cronjob trigger): the handler must resolve the pooled
+    // client for *that* context, never the configured one.
+
+    [Fact]
+    public async Task GetPodsAsync_ExplicitContext_RequestsThatContext()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.GetPodsAsync("web", "aks-staging", null, profile, demo, pool, CancellationToken.None);
+
+        Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.PodInfo>>>(result);
+        Assert.Equal(["aks-staging"], pool.RequestedContexts);
+    }
+
+    [Fact]
+    public async Task TriggerCronJobAsync_ExplicitContext_RequestsThatContext()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.TriggerCronJobAsync("default", "inventory-sync", "aks-staging", profile, demo, pool, CancellationToken.None);
+
+        Assert.IsAssignableFrom<IValueHttpResult>(result);
+        Assert.Equal(["aks-staging"], pool.RequestedContexts);
+    }
+
+    [Fact]
+    public async Task GetEnvoyResourcesAsync_ExplicitContext_RequestsThatContext()
+    {
+        var (profile, demo) = Deps();
+        var pool = new FakeMonitoringConnectionPool { AksClient = new DemoAksClient() };
+
+        var result = await AksEndpoints.GetEnvoyResourcesAsync("default", "envoyproxies", "aks-staging", profile, demo, pool, CancellationToken.None);
+
+        Assert.IsAssignableFrom<Ok<IReadOnlyList<Core.Models.EnvoyResourceInfo>>>(result);
+        Assert.Equal(["aks-staging"], pool.RequestedContexts);
     }
 }

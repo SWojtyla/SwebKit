@@ -4,9 +4,11 @@ import { saveCredential } from "@/lib/api";
 import { useRedisTestConnection } from "@/lib/hooks/useRedis";
 import { useNotification } from "@/components/layout/notification-context";
 import { clampInt } from "@/lib/clamp-int";
+import { normalizeRedisCacheHost } from "@/lib/azure-hostname";
 import type { RedisCacheEntry } from "@/lib/types";
 import { DraftInput } from "./DraftInput";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { ConnectionTestResultLine } from "@/components/shared/ConnectionTestResultLine";
 import { ProfileListLayout } from "./ProfileListLayout";
 
 /** A cache is worth confirming removal of once it has real configured data — an untouched
@@ -56,7 +58,9 @@ export function RedisSettings() {
             credentialKey: "",
             connectionString: "",
             database: 0,
-            useAad: false,
+            // Entra is the recommended path — new caches default to it; existing
+            // caches keep whichever mode they were saved with.
+            useAad: true,
             cacheName: "",
         };
         update({
@@ -133,6 +137,10 @@ export function RedisSettings() {
                 getSubtitle={(c) =>
                     c.useAad
                         ? c.cacheName
+                            ? c.cacheName.includes(".")
+                                ? c.cacheName
+                                : `${c.cacheName}.redis.cache.windows.net`
+                            : ""
                         : c.connectionString ||
                           (c.credentialKey ? "Credential store" : "")
                 }
@@ -252,21 +260,21 @@ function CacheRow({
                     <input
                         type="radio"
                         name={`redis-auth-${cache.id}`}
-                        checked={!cache.useAad}
-                        onChange={() => onUpdate({ useAad: false })}
-                        data-testid={`redis-auth-connstring-${cache.id}`}
+                        checked={cache.useAad}
+                        onChange={() => onUpdate({ useAad: true })}
+                        data-testid={`redis-auth-entra-${cache.id}`}
                     />
-                    Connection String
+                    Entra ID
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                     <input
                         type="radio"
                         name={`redis-auth-${cache.id}`}
-                        checked={cache.useAad}
-                        onChange={() => onUpdate({ useAad: true })}
-                        data-testid={`redis-auth-entra-${cache.id}`}
+                        checked={!cache.useAad}
+                        onChange={() => onUpdate({ useAad: false })}
+                        data-testid={`redis-auth-connstring-${cache.id}`}
                     />
-                    Entra ID (AAD)
+                    Connection String
                 </label>
             </div>
 
@@ -275,15 +283,18 @@ function CacheRow({
                     <DraftInput
                         type="text"
                         value={cache.cacheName}
-                        onCommit={(v) => onUpdate({ cacheName: v })}
+                        onCommit={(v) =>
+                            onUpdate({ cacheName: normalizeRedisCacheHost(v) })
+                        }
                         className="w-full rounded-md border bg-card px-3 py-1.5 text-sm"
-                        placeholder="my-cache"
+                        placeholder="Cache name, e.g. my-cache"
                     />
                     <p className="mt-1 text-xs text-muted-foreground">
-                        The cache's resource name from the Azure portal —
-                        connects to{" "}
-                        <code>&lt;name&gt;.redis.cache.windows.net</code> using
-                        your signed-in Azure identity.
+                        The cache name or its hostname —{" "}
+                        <code>&lt;name&gt;.redis.cache.windows.net</code> is
+                        assumed for bare names, and a pasted FQDN (including
+                        private-link) is used as-is. Connects with your
+                        signed-in Azure identity.
                     </p>
                     <DraftInput
                         type="text"
@@ -368,14 +379,10 @@ function CacheRow({
                     {test.isFetching ? "Testing…" : "Test connection"}
                 </button>
                 {test.data && (
-                    <span
-                        className={`text-xs ${test.data.connected ? "text-success" : "text-destructive"}`}
-                        data-testid={`redis-test-result-${cache.id}`}
-                    >
-                        {test.data.connected
-                            ? "Connected"
-                            : `Failed: ${test.data.error ?? "unknown error"}`}
-                    </span>
+                    <ConnectionTestResultLine
+                        result={test.data}
+                        testId={`redis-test-result-${cache.id}`}
+                    />
                 )}
                 {test.isError && (
                     <span className="text-xs text-destructive">

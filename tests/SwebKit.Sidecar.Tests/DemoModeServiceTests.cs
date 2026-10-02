@@ -129,6 +129,32 @@ public class DemoModeServiceTests
     }
 
     [Fact]
+    public void GetAksClient_SameContext_ReturnsCachedInstance()
+    {
+        var service = new DemoModeService();
+
+        Assert.Same(service.GetAksClient("aks-ecommerce-prod"), service.GetAksClient("aks-ecommerce-prod"));
+        Assert.Same(service.GetAksClient(), service.GetAksClient(null));
+    }
+
+    [Fact]
+    public async Task GetAksClient_DifferentContexts_ReturnClientsWithDifferentNamespaces()
+    {
+        // Each attached demo context must be a distinct client — a single shared demo
+        // client would serve identical namespace lists and leave the merged
+        // multi-context view untestable.
+        var service = new DemoModeService();
+
+        var prod = service.GetAksClient("aks-ecommerce-prod");
+        var platform = service.GetAksClient("aks-platform-dev");
+
+        Assert.NotSame(prod, platform);
+        Assert.NotEqual(
+            await prod.GetNamespacesAsync(),
+            await platform.GetNamespacesAsync());
+    }
+
+    [Fact]
     public void Dispose_DoesNotThrow()
     {
         var service = new DemoModeService();

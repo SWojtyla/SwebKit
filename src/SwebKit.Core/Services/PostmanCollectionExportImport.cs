@@ -230,9 +230,11 @@ public sealed class PostmanCollectionImporter : ICollectionImporter
                         foreach (var item in fd.EnumerateArray())
                         {
                             var key = GetStr(item, "key") ?? "";
-                            var value = GetStr(item, "value") ?? "";
+                            var isFile = GetStr(item, "type") == "file";
+                            // Postman file fields carry the path in "src", text fields in "value".
+                            var value = GetStr(item, isFile ? "src" : "value") ?? "";
                             if (!string.IsNullOrWhiteSpace(key))
-                                req.Body.FormData.Add(new KeyValuePair<string> { Key = key, Value = value });
+                                req.Body.FormData.Add(new FormDataField { Key = key, Value = value, IsFile = isFile });
                         }
                     }
                     break;

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import {
+import { describeApiError,
     getMonitoringRules,
     createMonitoringRule,
     updateMonitoringRule,
@@ -49,7 +49,7 @@ export function useCreateMonitoringRule() {
             qc.invalidateQueries({ queryKey: ["monitoring", "rules"] });
         },
         onError: (error) =>
-            notify("error", "Couldn't create alert rule", String(error)),
+            notify("error", "Couldn't create alert rule", describeApiError(error)),
     });
 }
 
@@ -62,7 +62,7 @@ export function useUpdateMonitoringRule() {
             qc.invalidateQueries({ queryKey: ["monitoring", "rules"] });
         },
         onError: (error) =>
-            notify("error", "Couldn't save alert rule", String(error)),
+            notify("error", "Couldn't save alert rule", describeApiError(error)),
     });
 }
 
@@ -75,7 +75,7 @@ export function useDeleteMonitoringRule() {
             qc.invalidateQueries({ queryKey: ["monitoring", "rules"] });
         },
         onError: (error) =>
-            notify("error", "Couldn't delete alert rule", String(error)),
+            notify("error", "Couldn't delete alert rule", describeApiError(error)),
     });
 }
 
@@ -118,7 +118,7 @@ export function useCreateMonitoringSilence() {
             qc.invalidateQueries({ queryKey: ["monitoring", "silences"] });
         },
         onError: (error) =>
-            notify("error", "Couldn't create the silence", String(error)),
+            notify("error", "Couldn't create the silence", describeApiError(error)),
     });
 }
 
@@ -131,7 +131,7 @@ export function useDeleteMonitoringSilence() {
             qc.invalidateQueries({ queryKey: ["monitoring", "silences"] });
         },
         onError: (error) =>
-            notify("error", "Couldn't delete the silence", String(error)),
+            notify("error", "Couldn't delete the silence", describeApiError(error)),
     });
 }
 
@@ -157,7 +157,7 @@ export function useMuteMonitoringRule() {
             );
         },
         onError: (error) =>
-            notify("error", "Couldn't update the rule mute", String(error)),
+            notify("error", "Couldn't update the rule mute", describeApiError(error)),
     });
 }
 
@@ -185,7 +185,7 @@ export function useDeleteMonitoringInsight() {
             qc.invalidateQueries({ queryKey: ["monitoring", "insights"] });
         },
         onError: (error) =>
-            notify("error", "Couldn't delete the AI report", String(error)),
+            notify("error", "Couldn't delete the AI report", describeApiError(error)),
     });
 }
 

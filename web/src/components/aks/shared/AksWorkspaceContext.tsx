@@ -10,16 +10,15 @@ import {
 } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient, useIsFetching } from "@tanstack/react-query";
-import { useNotification } from "@/components/layout/notification-context";
 import {
-    useAksNamespaces,
+    useAksNamespacesScoped,
     useAksTestConnection,
-    useAksSetContext,
     useAksContexts,
     useAksPods,
     useProfile,
     useDemoMode,
     useUpdateSearchParams,
+    aksUrl,
 } from "@/lib/hooks";
 import { apiFetch } from "@/lib/api";
 import {
@@ -41,6 +40,8 @@ import type {
 } from "@/lib/types";
 
 import {
+    LEGACY_ATTACHED_CONTEXTS_PREF,
+    SELECTED_CONTEXTS_PREF,
     AUTO_REFRESH_PREF,
     AksActionsContext,
     AksClusterContext,
@@ -51,11 +52,15 @@ import {
     DEFAULT_REFRESH_SECONDS,
     REFRESH_INTERVAL_PREF,
     aksRefreshIntervals,
-    encodeNamespaces,
-    makeKey,
+    encodeContextParam,
+    encodeNamespaceSelection,
+    makeLogsParam,
+    makeScopedKey,
     makeYamlKey,
-    parseKey,
-    parseNamespaces,
+    parseContextParam,
+    parseLogsParam,
+    parseNamespaceSelection,
+    parseScopedKey,
     parseTab,
     parseYamlKey,
     selectedNsPrefKey,
@@ -63,14 +68,17 @@ import {
 import type {
     AksActionsValue,
     AksClusterValue,
+    AksNamespaceScope,
     AksNavValue,
     AksOpsValue,
     AksOverlaysValue,
     AksQueriesValue,
     ContextMenuState,
+    NsSelection,
     PendingConfirm,
     TabId,
 } from "./aks-workspace-context";
+import type { AksQueryTarget } from "@/lib/types";
 
 export function AksWorkspaceProvider({
     children,
@@ -80,7 +88,6 @@ export function AksWorkspaceProvider({
     const location = useLocation();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const { notify } = useNotification();
     const queryClient = useQueryClient();
 
     const [networkMenuOpen, setNetworkMenuOpen] = useState(false);
@@ -120,31 +127,11 @@ export function AksWorkspaceProvider({
         null,
     );
 
-    const {
-        data: namespaces,
-        isLoading: nsLoading,
-        error: nsErrorRaw,
-    } = useAksNamespaces();
-    const nsError =
-        nsErrorRaw instanceof Error
-            ? nsErrorRaw.message
-            : nsErrorRaw
-              ? String(nsErrorRaw)
-              : null;
     const { data: contexts } = useAksContexts();
     const { data: testResult } = useAksTestConnection();
     const { data: profile } = useProfile();
     const { data: demoMode } = useDemoMode();
     const isDemoMode = demoMode?.isDemoMode ?? false;
-    const setContextMutation = useAksSetContext();
-    // `mutate`/`variables` are referentially stable; the mutation object itself is
-    // fresh every render and would churn `handleContextChange`'s identity.
-    const { mutate: setContextMutate, variables: setContextVariables } =
-        setContextMutation;
-    const contextLoading = setContextMutation.isPending;
-    const pendingContext = contextLoading
-        ? (setContextVariables?.context ?? null)
-        : null;
     const profileLoaded = profile !== undefined;
     const isAksFetching =
         useIsFetching({
@@ -191,70 +178,176 @@ export function AksWorkspaceProvider({
             setSelectedHttpRoute(null);
             // `shellPod` deliberately survives a tab switch: it renders as a bottom-docked
             // terminal, not a tab-scoped detail panel, so bouncing between Pods and Services
-            // must not kill a live session. It's still cleared on a cluster context change
-            // (`handleContextChange`), where the session's pod no longer exists.
+            // must not kill a live session. Deselecting its context closes it via
+            // `applyContextSelection`'s anchored-panel cleanup only for URL params —
+            // shellPod is component state, so it's left alone (the stream errors and closes).
             setAskAiPod(null);
         },
         [updateParams],
     );
 
+    const configuredContext =
+        profile?.config.aksConfig?.kubeconfigContext ?? null;
+    /**
+     * The default context: the configured profile context when set, else the kubeconfig's
+     * `current-context` marker (demo mode has no profile config, so the demo context list's
+     * isCurrent is what lands), else the first listed context. Nothing is privileged here —
+     * it only seeds the first-visit selection, decodes legacy bare URL keys, and backs
+     * `p.context ??` fallbacks on unstamped rows. The fallbacks only apply when a kubeconfig
+     * is actually configured (or demo mode is on) — with no AKS config at all the first-run
+     * empty state must show.
+     */
+    const defaultContext =
+        configuredContext ??
+        (isDemoMode || profile?.config.aksConfig
+            ? (contexts?.find((c) => c.isCurrent)?.name ??
+              contexts?.[0]?.name ??
+              null)
+            : null);
+
+    // The selection is just the `ctxs` URL param — every listed context is checked into
+    // the merged view. No param means the default selection (the configured context),
+    // so first visits and old links land on it; a present-but-empty param is a deliberate
+    // "nothing selected" that survives as `ctxs=`.
+    const ctxsParam = searchParams.get("ctxs");
+    const selectedContexts = useMemo(
+        () =>
+            ctxsParam !== null
+                ? parseContextParam(ctxsParam)
+                : defaultContext
+                  ? [defaultContext]
+                  : [],
+        [ctxsParam, defaultContext],
+    );
+    const isMultiContext = selectedContexts.length > 1;
+
+    // Restore last session's selection once — an explicit `ctxs` param (a deep link,
+    // even an empty one) always wins over the persisted set.
+    const selectionSeededRef = useRef(false);
+    useEffect(() => {
+        if (selectionSeededRef.current || !contexts || contexts.length === 0)
+            return;
+        selectionSeededRef.current = true;
+        if (searchParams.get("ctxs") !== null) return;
+        const saved = loadViewPreference<string[]>(SELECTED_CONTEXTS_PREF, []);
+        // Migrate the old attached-only pref: the configured context was implied
+        // then, so it joins the restored set explicitly now.
+        const legacy = loadViewPreference<string[]>(
+            LEGACY_ATTACHED_CONTEXTS_PREF,
+            [],
+        );
+        const candidate =
+            Array.isArray(saved) && saved.length > 0
+                ? saved
+                : [
+                      ...(defaultContext ? [defaultContext] : []),
+                      ...(Array.isArray(legacy) ? legacy : []),
+                  ];
+        const valid = [...new Set(candidate)].filter((c) =>
+            contexts.some((k) => k.name === c),
+        );
+        if (valid.length > 1)
+            updateParams(
+                { ctxs: encodeContextParam(valid) },
+                { replace: true },
+            );
+    }, [contexts, searchParams, defaultContext, updateParams]);
+
+    // One namespace-list query per selected context — each caches and fails
+    // independently (the picker keeps a healthy cluster usable while another is
+    // unreachable or RBAC-denied).
+    const nsScopeResults = useAksNamespacesScoped(selectedContexts);
+    const nsScopes = useMemo<AksNamespaceScope[]>(
+        () =>
+            selectedContexts.map((context, i) => {
+                const r = nsScopeResults[i];
+                return {
+                    context,
+                    namespaces: r?.data,
+                    isLoading: r ? r.isPending : true,
+                    error:
+                        r?.error instanceof Error
+                            ? r.error.message
+                            : r?.error
+                              ? String(r.error)
+                              : null,
+                };
+            }),
+        [selectedContexts, nsScopeResults],
+    );
+    // Header aliases — the loading/error labels and the "no namespaces" empty state
+    // describe the first selected context (the configured one when it's in the set).
+    const headScope =
+        nsScopes.find((s) => s.context === defaultContext) ?? nsScopes[0];
+    const namespaces = headScope?.namespaces;
+    const nsLoading = headScope?.isLoading ?? false;
+    const nsError = headScope?.error ?? null;
+
     const selectedNamespaces = useMemo(
-        () => parseNamespaces(searchParams.get("ns")),
-        [searchParams],
+        () => parseNamespaceSelection(searchParams.get("ns"), defaultContext),
+        [searchParams, defaultContext],
+    );
+
+    const setSelectedNamespaces = useCallback(
+        (sel: NsSelection[]) => {
+            updateParams({
+                ns: encodeNamespaceSelection(sel, defaultContext),
+            });
+            // Persist each context's picks under its own pref key — the init effect
+            // restores them the next time that context is selected.
+            const byCtx = new Map<string, string[]>();
+            for (const s of sel) {
+                const list = byCtx.get(s.context) ?? [];
+                list.push(s.namespace);
+                byCtx.set(s.context, list);
+            }
+            for (const [ctx, list] of byCtx)
+                saveViewPreference(selectedNsPrefKey(ctx), list);
+        },
+        [updateParams, defaultContext],
     );
 
     /**
-     * Set the moment the operator picks a namespace themselves, so the
-     * initialization effect below can never overwrite that pick.
-     *
-     * It otherwise does exactly that, and reproducibly: the namespace list arriving
-     * is what populates the `<select>`, so the change event can land after that
-     * commit but before React flushes the passive effect it scheduled. The effect
-     * then still sees the pre-selection `searchParams`, decides no namespace is set,
-     * and `replace`s the URL back to the default — silently discarding the choice.
-     * Cleared on a context switch, where the previous selection no longer applies.
+     * The fan-out targets: one (context, ns-token) pair per selected context that has a
+     * namespace pick. Contexts with no selection contribute nothing — a cluster whose list
+     * is still loading simply isn't queried yet.
      */
-    const namespacePickedRef = useRef(false);
-
-    const currentContextName =
-        profile?.config.aksConfig?.kubeconfigContext ?? null;
-
-    const setSelectedNamespaces = useCallback(
-        (namespaces: string[]) => {
-            namespacePickedRef.current = true;
-            updateParams({ ns: encodeNamespaces(namespaces) });
-            if (currentContextName)
-                saveViewPreference(
-                    selectedNsPrefKey(currentContextName),
-                    namespaces,
-                );
-        },
-        [updateParams, currentContextName],
-    );
-
-    // Resolving this used to require the cluster's full namespace list, which the code's own comments
-    // put at ~18s cold — so `AksPage` rendered "Select a namespace", mounted no tab and started no
-    // resource query until that returned, even when the URL already named the namespace to show.
-    // An explicit selection is enough to start fetching; the list is only needed to recognise "the
-    // user picked every namespace" as the cluster-wide `*`, which is refined once it arrives.
-    const namespaceToken = useMemo(() => {
-        // Hold every namespaced query while a context switch is in flight. The sidecar resolves
-        // the *configured* context — still the old cluster until the POST lands — so a fetch fired
-        // now would fill the new context's cache key with the old cluster's rows.
-        if (contextLoading) return null;
-        if (selectedNamespaces.length === 0) return null;
-        if (selectedNamespaces.includes("*")) return "*";
-        if (
-            namespaces &&
-            namespaces.length > 0 &&
-            selectedNamespaces.length === namespaces.length
-        )
-            return "*";
-        return selectedNamespaces.join(",");
-    }, [selectedNamespaces, namespaces, contextLoading]);
+    const queryTargets = useMemo<AksQueryTarget[]>(() => {
+        const byCtx = new Map<string, string[]>();
+        for (const s of selectedNamespaces) {
+            const list = byCtx.get(s.context) ?? [];
+            list.push(s.namespace);
+            byCtx.set(s.context, list);
+        }
+        const targets: AksQueryTarget[] = [];
+        for (const ctx of selectedContexts) {
+            const sel = byCtx.get(ctx);
+            if (!sel || sel.length === 0) continue;
+            if (sel.includes("*")) {
+                targets.push({ context: ctx, ns: "*" });
+                continue;
+            }
+            // Resolving this used to require the cluster's full namespace list (~18s cold) —
+            // the list is only needed to recognise "the user picked every namespace" as the
+            // cluster-wide `*`, which is refined once it arrives.
+            const available = nsScopes.find(
+                (s) => s.context === ctx,
+            )?.namespaces;
+            if (
+                available &&
+                available.length > 0 &&
+                sel.length === available.length
+            ) {
+                targets.push({ context: ctx, ns: "*" });
+            } else {
+                targets.push({ context: ctx, ns: sel.join(",") });
+            }
+        }
+        return targets;
+    }, [selectedNamespaces, selectedContexts, nsScopes]);
 
     const isMultiNamespace =
-        namespaceToken === "*" || selectedNamespaces.length > 1;
+        queryTargets.some((t) => t.ns === "*") || selectedNamespaces.length > 1;
 
     const podParam = searchParams.get("pod");
     const yamlParam = searchParams.get("yaml");
@@ -263,32 +356,55 @@ export function AksWorkspaceProvider({
     const logsParam = searchParams.get("logs");
     const logsNsParam = searchParams.get("logsNs");
 
-    const showMultiPodLogs = !!logsParam && !!logsNsParam;
+    const multiLogPods = useMemo(
+        () => parseLogsParam(logsParam, logsNsParam),
+        [logsParam, logsNsParam],
+    );
+    const showMultiPodLogs = multiLogPods.length > 0;
     const podsQueryEnabled =
         activeTab === "pods" ||
         !!podParam ||
         showMultiPodLogs ||
         activeTab === "portforward";
 
-    const {
-        data: allPods,
-        refetch: refetchPods,
-        isFetching: podsFetching,
-    } = useAksPods(namespaceToken, undefined, podsQueryEnabled);
+    const podsQuery = useAksPods(queryTargets, { enabled: podsQueryEnabled });
+    const { refetch: refetchPodsQuery } = podsQuery;
+    const allPods = podsQuery.data;
+    const podsFetching = podsQuery.isFetching;
+    const refetchPods = useCallback(async (): Promise<PodInfo[]> => {
+        const results = (await refetchPodsQuery()) as {
+            data?: PodInfo[];
+        }[];
+        return results.flatMap((r) => r.data ?? []);
+    }, [refetchPodsQuery]);
 
+    const podRef = useMemo(() => parseScopedKey(podParam), [podParam]);
     const selectedPod = useMemo(() => {
-        if (!podParam || !allPods) return null;
+        if (!podRef || !allPods) return null;
+        const ctx = podRef.context ?? defaultContext;
         return (
-            allPods.find((p) => makeKey(p.namespace, p.name) === podParam) ??
-            null
+            allPods.find(
+                (p) =>
+                    p.namespace === podRef.ns &&
+                    p.name === podRef.name &&
+                    (p.context ?? defaultContext) === ctx,
+            ) ?? null
         );
-    }, [podParam, allPods]);
+    }, [podRef, allPods, defaultContext]);
 
     const setPodKey = useCallback(
         (pod: PodInfo | null, options?: { clearOthers?: boolean }) => {
+            const key = pod
+                ? makeScopedKey(
+                      pod.context,
+                      defaultContext,
+                      pod.namespace,
+                      pod.name,
+                  )
+                : null;
             if (options?.clearOthers) {
                 updateParams({
-                    pod: pod ? makeKey(pod.namespace, pod.name) : null,
+                    pod: key,
                     yaml: null,
                     helm: null,
                     container: null,
@@ -296,88 +412,168 @@ export function AksWorkspaceProvider({
                     logsNs: null,
                 });
             } else {
-                updateParams({
-                    pod: pod ? makeKey(pod.namespace, pod.name) : null,
-                });
+                updateParams({ pod: key });
             }
         },
-        [updateParams],
+        [updateParams, defaultContext],
     );
 
     const yamlResource = useMemo(() => parseYamlKey(yamlParam), [yamlParam]);
     const setYamlResource = useCallback(
-        (res: { kind: string; namespace: string; name: string } | null) => {
+        (
+            res: {
+                kind: string;
+                context?: string | null;
+                namespace: string;
+                name: string;
+            } | null,
+        ) => {
             updateParams({
                 yaml: res
-                    ? makeYamlKey(res.kind, res.namespace, res.name)
+                    ? makeYamlKey(
+                          res.kind,
+                          res.context,
+                          defaultContext,
+                          res.namespace,
+                          res.name,
+                      )
                     : null,
             });
         },
-        [updateParams],
+        [updateParams, defaultContext],
     );
 
     const helmRelease = useMemo(() => {
-        const parsed = parseKey(helmParam);
+        const parsed = parseScopedKey(helmParam);
         if (!parsed) return null;
-        return { name: parsed.name, namespace: parsed.ns } as HelmReleaseInfo;
+        return {
+            name: parsed.name,
+            namespace: parsed.ns,
+            context: parsed.context ?? undefined,
+        } as HelmReleaseInfo;
     }, [helmParam]);
     const setHelmRelease = useCallback(
         (rel: HelmReleaseInfo | null) => {
             updateParams({
-                helm: rel ? makeKey(rel.namespace, rel.name) : null,
-            });
-        },
-        [updateParams],
-    );
-
-    const containerDetail = useMemo(() => {
-        const parsed = parseKey(containerParam);
-        if (!parsed) return null;
-        return { podName: parsed.name, namespace: parsed.ns };
-    }, [containerParam]);
-    const setContainerDetail = useCallback(
-        (detail: { podName: string; namespace: string } | null) => {
-            updateParams({
-                container: detail
-                    ? makeKey(detail.namespace, detail.podName)
+                helm: rel
+                    ? makeScopedKey(
+                          rel.context,
+                          defaultContext,
+                          rel.namespace,
+                          rel.name,
+                      )
                     : null,
             });
         },
-        [updateParams],
+        [updateParams, defaultContext],
     );
 
-    const multiPodNames = useMemo(
-        () => logsParam?.split(",").filter(Boolean) ?? [],
-        [logsParam],
+    const containerDetail = useMemo(() => {
+        const parsed = parseScopedKey(containerParam);
+        if (!parsed) return null;
+        return {
+            podName: parsed.name,
+            namespace: parsed.ns,
+            context: parsed.context,
+        };
+    }, [containerParam]);
+    const setContainerDetail = useCallback(
+        (
+            detail: {
+                podName: string;
+                context?: string | null;
+                namespace: string;
+            } | null,
+        ) => {
+            updateParams({
+                container: detail
+                    ? makeScopedKey(
+                          detail.context,
+                          defaultContext,
+                          detail.namespace,
+                          detail.podName,
+                      )
+                    : null,
+            });
+        },
+        [updateParams, defaultContext],
     );
-    const multiPodNamespace = logsNsParam;
 
-    // Initialize namespace selection once namespaces are loaded. Prefers this
-    // cluster's last-picked namespace(s) — restored so leaving the AKS view and
-    // coming back doesn't drop the selection — falling back to the configured
-    // default namespace, then the first namespace in the list.
+    /**
+     * Per-context namespace initialization. A context's picks are seeded once — when its
+     * namespace list lands — preferring that cluster's remembered selection, then its
+     * kubeconfig namespace hint (the profile's `defaultNamespace` for the primary), then the
+     * first namespace in the list. Only fires for contexts the `ns` param doesn't already
+     * cover, so an explicit user pick or deep link can never be overwritten by the effect.
+     * A context whose list failed is marked initialized without a pick — its picker shows
+     * the error rather than silently selecting something else.
+     */
+    const initializedContextsRef = useRef(new Set<string>());
     useEffect(() => {
-        if (namespacePickedRef.current) return;
-        const nsParam = searchParams.get("ns");
-        if (nsParam || !namespaces || namespaces.length === 0) return;
-        const persistedRaw = currentContextName
-            ? loadViewPreference<string[]>(
-                  selectedNsPrefKey(currentContextName),
-                  [],
-              )
-            : [];
-        const persisted = Array.isArray(persistedRaw)
-            ? persistedRaw.filter((ns) => ns === "*" || namespaces.includes(ns))
-            : [];
-        const defaultNs = profile?.config.aksConfig?.defaultNamespace;
-        const initial =
-            persisted.length > 0
-                ? persisted
-                : defaultNs && namespaces.includes(defaultNs)
-                  ? [defaultNs]
-                  : [namespaces[0]];
-        updateParams({ ns: initial.join(",") }, { replace: true });
-    }, [searchParams, namespaces, profile, currentContextName, updateParams]);
+        for (const scope of nsScopes) {
+            if (
+                initializedContextsRef.current.has(scope.context) ||
+                scope.isLoading
+            )
+                continue;
+            const existing = parseNamespaceSelection(
+                searchParams.get("ns"),
+                defaultContext,
+            );
+            // Skip paths intentionally don't mark the context as initialized:
+            // `searchParams`/`namespaces` may still be settling (a deselect strips
+            // a context's entries one navigation later), so only a successful seed
+            // earns the mark — otherwise a re-selected context could be marked by
+            // a stale pass and never get its persisted namespaces back.
+            if (existing.some((s) => s.context === scope.context)) continue;
+            if (!scope.namespaces || scope.namespaces.length === 0) continue;
+            initializedContextsRef.current.add(scope.context);
+            const persistedRaw = loadViewPreference<string[]>(
+                selectedNsPrefKey(scope.context),
+                [],
+            );
+            const persisted = Array.isArray(persistedRaw)
+                ? persistedRaw.filter(
+                      (ns) => ns === "*" || scope.namespaces!.includes(ns),
+                  )
+                : [];
+            const hint =
+                scope.context === defaultContext
+                    ? (profile?.config.aksConfig?.defaultNamespace ??
+                      contexts?.find((c) => c.name === scope.context)
+                          ?.namespace)
+                    : contexts?.find((c) => c.name === scope.context)
+                          ?.namespace;
+            const initial =
+                persisted.length > 0
+                    ? persisted
+                    : hint && scope.namespaces.includes(hint)
+                      ? [hint]
+                      : [scope.namespaces[0]];
+            updateParams(
+                {
+                    ns: encodeNamespaceSelection(
+                        [
+                            ...existing,
+                            ...initial.map((namespace) => ({
+                                context: scope.context,
+                                namespace,
+                            })),
+                        ],
+                        defaultContext,
+                    ),
+                },
+                { replace: true },
+            );
+        }
+    }, [
+        nsScopes,
+        searchParams,
+        defaultContext,
+        contexts,
+        profile,
+        updateParams,
+    ]);
 
     // Apply a namespace selected from the command palette.
     useEffect(() => {
@@ -405,109 +601,110 @@ export function AksWorkspaceProvider({
         [queryClient],
     );
 
-    const handleContextChange = useCallback(
-        (context: string, defaultNamespace?: string) => {
-            if (context === currentContextName) return;
-            namespacePickedRef.current = false;
-            // Restore the *target* context's remembered selection — never the current cluster's
-            // namespace list, which used to leak a ghost namespace into the new context. The
-            // kubeconfig's own namespace hint is the fallback; with neither, `ns` clears and the
-            // init effect picks the configured default or first entry once the new list lands.
-            const persisted = loadViewPreference<string[]>(
-                selectedNsPrefKey(context),
-                [],
-            );
-            const restored =
-                Array.isArray(persisted) && persisted.length > 0
-                    ? persisted
-                    : defaultNamespace
-                      ? [defaultNamespace]
+    /**
+     * Replace the whole context selection. Removing a context drops its namespace
+     * picks, forgets its namespace-init flag (a later re-select re-seeds), and closes
+     * detail panels anchored to it — bare keys resolve to the configured context, so
+     * deselecting that one cleans bare keys too. An empty selection persists as `ctxs=`
+     * — "nothing selected" is a valid state.
+     */
+    const applyContextSelection = useCallback(
+        (next: string[]) => {
+            const live = new URLSearchParams(window.location.search);
+            const current =
+                live.get("ctxs") !== null
+                    ? parseContextParam(live.get("ctxs"))
+                    : defaultContext
+                      ? [defaultContext]
                       : [];
-            // Read from the live URL, not the render-time searchParams snapshot —
-            // the same reason useUpdateSearchParams exists. Keeping this dep-free
-            // stops handleContextChange churning identity on every URL change.
-            const previousNs = new URLSearchParams(window.location.search).get(
-                "ns",
-            );
-            updateParams({
-                ns: encodeNamespaces(restored),
-                pod: null,
-                yaml: null,
-                helm: null,
-                container: null,
-                logs: null,
-                logsNs: null,
-            });
-            setSelectedSecret(null);
-            setSelectedConfigMap(null);
-            setSelectedHttpRoute(null);
-            // A pod shell or "Ask AI about this pod" targeting the previous cluster must never be left
-            // running/silently reconnected under the new context for a pod of the same name.
-            setShellPod(null);
-            setAskAiPod(null);
-            // "Updated 3s ago" would otherwise keep describing the previous cluster's data.
-            setLastRefreshedAt(null);
-            setContextMutate(
-                { context, defaultNamespace },
-                {
-                    onSuccess: (data) => {
-                        if (data?.connected) {
-                            notify("success", "AKS context switched", context);
-                            // Recency order for the context picker's MRU section (cap 5).
-                            const mru = [
-                                context,
-                                ...loadViewPreference<string[]>(
-                                    "aks-context-mru",
-                                    [],
-                                ).filter((c) => c !== context),
-                            ].slice(0, 5);
-                            saveViewPreference("aks-context-mru", mru);
-                        } else {
-                            notify(
-                                "error",
-                                "Couldn't switch AKS context",
-                                data?.error ?? "The cluster did not respond.",
-                            );
-                            // The profile stayed on the previous context — put its selection back.
-                            updateParams({ ns: previousNs }, { replace: true });
-                        }
-                    },
-                    onError: (error) => {
-                        notify(
-                            "error",
-                            "Couldn't switch AKS context",
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                        );
-                        updateParams({ ns: previousNs }, { replace: true });
-                    },
-                },
-            );
+            const removed = new Set(current.filter((c) => !next.includes(c)));
+            saveViewPreference(SELECTED_CONTEXTS_PREF, next);
+            for (const c of removed) initializedContextsRef.current.delete(c);
+            const updates: Record<string, string | null> = {
+                ctxs: next.length > 0 ? encodeContextParam(next) : "",
+            };
+            if (removed.size === 0) {
+                updateParams(updates);
+                return;
+            }
+            const sel = parseNamespaceSelection(
+                live.get("ns"),
+                defaultContext,
+            ).filter((s) => !removed.has(s.context));
+            updates.ns = encodeNamespaceSelection(sel, defaultContext);
+            for (const key of ["pod", "helm", "container"] as const) {
+                const parsed = parseScopedKey(live.get(key));
+                if (
+                    parsed &&
+                    removed.has(parsed.context ?? defaultContext ?? "")
+                )
+                    updates[key] = null;
+            }
+            const yaml = parseYamlKey(live.get("yaml"));
+            if (yaml && removed.has(yaml.context ?? defaultContext ?? ""))
+                updates.yaml = null;
+            if (live.get("logs")) {
+                const all = parseLogsParam(
+                    live.get("logs"),
+                    live.get("logsNs"),
+                );
+                const kept = all.filter(
+                    (p) => !removed.has(p.context ?? defaultContext ?? ""),
+                );
+                if (kept.length !== all.length) {
+                    updates.logs = kept.length
+                        ? kept
+                              .map((k) =>
+                                  makeScopedKey(
+                                      k.context,
+                                      defaultContext,
+                                      k.ns,
+                                      k.name,
+                                  ),
+                              )
+                              .join(",")
+                        : null;
+                    updates.logsNs = null;
+                }
+            }
+            updateParams(updates);
         },
-        [
-            currentContextName,
-            setContextMutate,
-            updateParams,
-            notify,
-        ],
+        [defaultContext, updateParams],
     );
 
-    // Apply a kube context switch requested via the command palette
-    // (`state.context`). Waits for the context list so an unknown name can't
-    // fire a mutation, then goes through the same path the header's context
-    // picker takes — including the kubeconfig's default-namespace hint.
-    // Declared after `handleContextChange` (block-scoped const ordering).
+    const toggleContext = useCallback(
+        (context: string) => {
+            if (!context) return;
+            const live = new URLSearchParams(window.location.search);
+            const current =
+                live.get("ctxs") !== null
+                    ? parseContextParam(live.get("ctxs"))
+                    : defaultContext
+                      ? [defaultContext]
+                      : [];
+            if (current.includes(context)) {
+                // Minimum one context: removing the last one would leave nothing
+                // to query, so the deselect is ignored.
+                if (current.length === 1) return;
+                applyContextSelection(current.filter((c) => c !== context));
+            } else {
+                applyContextSelection([...current, context]);
+            }
+        },
+        [applyContextSelection, defaultContext],
+    );
+
+    // Apply a context jump requested via the command palette (`state.context`) —
+    // with free multi-select there is no "switch" anymore, so a jump selects that
+    // context exclusively. Waits for the context list so an unknown name can't
+    // clear the selection. Declared after `applyContextSelection` (const ordering).
     useEffect(() => {
         const state = location.state as { context?: string } | null;
         if (!state?.context || !contexts) return;
         const target = contexts.find((c) => c.name === state.context);
-        if (target && !target.isCurrent) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
-            handleContextChange(target.name, target.namespace ?? undefined);
-        }
+        if (target) applyContextSelection([target.name]);
         navigate(location.pathname, { replace: true, state: null });
-    }, [location, navigate, contexts, handleContextChange]);
+    }, [location, navigate, contexts, applyContextSelection]);
 
     const setAutoRefresh = useCallback((value: boolean) => {
         setAutoRefreshState(value);
@@ -541,6 +738,7 @@ export function AksWorkspaceProvider({
         async (
             namespace: string,
             selectorLabels: Record<string, string>,
+            context?: string,
         ): Promise<PodInfo[]> => {
             const entries = Object.entries(selectorLabels);
             if (entries.length === 0) return [];
@@ -548,7 +746,10 @@ export function AksWorkspaceProvider({
                 .map(([k, v]) => `${k}=${v}`)
                 .join(",");
             return apiFetch<PodInfo[]>(
-                `/api/aks/${namespace}/pods?labelSelector=${encodeURIComponent(labelSelector)}`,
+                aksUrl(
+                    `/api/aks/${namespace}/pods?labelSelector=${encodeURIComponent(labelSelector)}`,
+                    context,
+                ),
             );
         },
         [],
@@ -579,26 +780,34 @@ export function AksWorkspaceProvider({
             showMultiPodLogs,
         );
 
+    // Multi-context fan-out floor: every tick costs one list call per (context,
+    // ns-token), so a 5s cadence over N clusters multiplies into real load. The
+    // merged view holds the interval at ≥30s; single-context keeps the full range.
+    const effectiveRefreshSeconds = isMultiContext
+        ? Math.max(refreshInterval, 30)
+        : refreshInterval;
+
     useEffect(() => {
-        if (!autoRefresh || autoRefreshPaused || !namespaceToken) return;
+        if (!autoRefresh || autoRefreshPaused || queryTargets.length === 0)
+            return;
         const id = setInterval(() => {
             // Skip a tick while the tab is hidden: a background window quietly hammering
             // the cluster API is exactly what gets a kubeconfig throttled.
             if (document.visibilityState === "hidden") return;
             void refreshAksResources();
-        }, refreshInterval * 1000);
+        }, effectiveRefreshSeconds * 1000);
         return () => clearInterval(id);
     }, [
         autoRefresh,
         autoRefreshPaused,
-        refreshInterval,
-        namespaceToken,
+        effectiveRefreshSeconds,
+        queryTargets.length,
         refreshAksResources,
     ]);
 
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
-            if (!namespaceToken) return;
+            if (queryTargets.length === 0) return;
             if (
                 e.key === "r" &&
                 !e.ctrlKey &&
@@ -629,13 +838,14 @@ export function AksWorkspaceProvider({
                         kind: "Pod",
                         name: selectedPod.name,
                         namespace: selectedPod.namespace,
+                        context: selectedPod.context,
                     });
             }
         };
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
     }, [
-        namespaceToken,
+        queryTargets.length,
         refreshAksResources,
         selectedPod,
         setActiveTab,
@@ -657,9 +867,15 @@ export function AksWorkspaceProvider({
     );
 
     const openYaml = useCallback(
-        (kind: string, name: string, namespace: string) => {
+        (kind: string, name: string, namespace: string, context?: string) => {
             updateParams({
-                yaml: makeYamlKey(kind, namespace, name),
+                yaml: makeYamlKey(
+                    kind,
+                    context,
+                    defaultContext,
+                    namespace,
+                    name,
+                ),
                 pod: null,
                 helm: null,
                 container: null,
@@ -670,13 +886,18 @@ export function AksWorkspaceProvider({
             setSelectedConfigMap(null);
             setSelectedHttpRoute(null);
         },
-        [updateParams],
+        [updateParams, defaultContext],
     );
 
     const openContainerDetails = useCallback(
-        (podName: string, namespace: string) => {
+        (podName: string, namespace: string, context?: string) => {
             updateParams({
-                container: makeKey(namespace, podName),
+                container: makeScopedKey(
+                    context,
+                    defaultContext,
+                    namespace,
+                    podName,
+                ),
                 pod: null,
                 yaml: null,
                 helm: null,
@@ -687,16 +908,15 @@ export function AksWorkspaceProvider({
             setSelectedConfigMap(null);
             setSelectedHttpRoute(null);
         },
-        [updateParams],
+        [updateParams, defaultContext],
     );
 
     const openMultiPodLogs = useCallback(
         (pods: PodInfo[]) => {
             if (pods.length === 0) return;
-            const ns = pods[0].namespace ?? namespaceToken;
             updateParams({
-                logs: pods.map((p) => p.name).join(","),
-                logsNs: ns,
+                logs: makeLogsParam(pods, defaultContext),
+                logsNs: null,
                 pod: null,
                 yaml: null,
                 helm: null,
@@ -706,7 +926,7 @@ export function AksWorkspaceProvider({
             setSelectedConfigMap(null);
             setSelectedHttpRoute(null);
         },
-        [namespaceToken, updateParams],
+        [defaultContext, updateParams],
     );
 
     const closeMultiPodLogs = useCallback(() => {
@@ -721,13 +941,26 @@ export function AksWorkspaceProvider({
         (pod: PodInfo) => {
             updateParams({
                 tab: "portforward",
-                pod: makeKey(pod.namespace, pod.name),
+                pod: makeScopedKey(
+                    pod.context,
+                    defaultContext,
+                    pod.namespace,
+                    pod.name,
+                ),
+                // Same overlay cleanup as openYaml/openContainerDetails — without it a
+                // YAML viewer or log panel opened from the pod detail stays docked over
+                // the Port Forwards tab.
+                yaml: null,
+                helm: null,
+                container: null,
+                logs: null,
+                logsNs: null,
             });
             setSelectedSecret(null);
             setSelectedConfigMap(null);
             setSelectedHttpRoute(null);
         },
-        [updateParams],
+        [updateParams, defaultContext],
     );
 
     const showContextMenu = useCallback(
@@ -738,8 +971,6 @@ export function AksWorkspaceProvider({
         [],
     );
 
-    const kubeconfigContext =
-        profile?.config.aksConfig?.kubeconfigContext ?? null;
     const kubeconfigPath = profile?.config.aksConfig?.kubeconfigPath ?? null;
 
     const clusterValue: AksClusterValue = useMemo(
@@ -747,14 +978,15 @@ export function AksWorkspaceProvider({
             namespaces,
             nsLoading,
             nsError,
-            contextLoading,
-            pendingContext,
             contexts,
-            currentContext: kubeconfigContext,
+            defaultContext,
+            selectedContexts,
+            nsScopes,
+            toggleContext,
+            selectContexts: applyContextSelection,
             profileLoaded,
             isDemoMode,
             testResult,
-            handleContextChange,
             kubeconfigPath,
             isProduction,
         }),
@@ -762,14 +994,15 @@ export function AksWorkspaceProvider({
             namespaces,
             nsLoading,
             nsError,
-            contextLoading,
-            pendingContext,
             contexts,
-            kubeconfigContext,
+            defaultContext,
+            selectedContexts,
+            nsScopes,
+            toggleContext,
+            applyContextSelection,
             profileLoaded,
             isDemoMode,
             testResult,
-            handleContextChange,
             kubeconfigPath,
             isProduction,
         ],
@@ -783,8 +1016,9 @@ export function AksWorkspaceProvider({
             setNetworkMenuOpen,
             selectedNamespaces,
             setSelectedNamespaces,
-            namespaceToken,
+            queryTargets,
             isMultiNamespace,
+            isMultiContext,
             selectedPod,
             yamlResource,
             helmRelease,
@@ -794,8 +1028,7 @@ export function AksWorkspaceProvider({
             shellPod,
             askAiPod,
             containerDetail,
-            multiPodNames,
-            multiPodNamespace,
+            multiLogPods,
             showMultiPodLogs,
             setHelmRelease,
             setSelectedSecret,
@@ -813,8 +1046,9 @@ export function AksWorkspaceProvider({
             networkMenuOpen,
             selectedNamespaces,
             setSelectedNamespaces,
-            namespaceToken,
+            queryTargets,
             isMultiNamespace,
+            isMultiContext,
             selectedPod,
             yamlResource,
             helmRelease,
@@ -824,8 +1058,7 @@ export function AksWorkspaceProvider({
             shellPod,
             askAiPod,
             containerDetail,
-            multiPodNames,
-            multiPodNamespace,
+            multiLogPods,
             showMultiPodLogs,
             setHelmRelease,
             setPodKey,

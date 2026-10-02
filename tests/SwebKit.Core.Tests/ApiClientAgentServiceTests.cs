@@ -1,0 +1,326 @@
+using SwebKit.Core.Abstractions;
+using SwebKit.Core.Configuration;
+using SwebKit.Core.Domain;
+using SwebKit.Core.Services;
+using Xunit;
+
+namespace SwebKit.Core.Tests;
+
+/// <summary>
+/// Covers the collection/folder resolution that confirmed agent mutations rely on:
+/// resolve by ID or name, create the collection when only a name is known, and
+/// materialize missing folder segments instead of failing.
+/// </summary>
+public sealed class ApiClientAgentServiceTests : IDisposable
+{
+    private readonly AppDataSandbox _sandbox = new();
+    private readonly CollectionRepository _repo = new();
+    private readonly ApiClientAgentService _service;
+
+    public ApiClientAgentServiceTests()
+    {
+        _repo.LoadAsync().GetAwaiter().GetResult();
+        _service = new ApiClientAgentService(
+            _repo,
+            new LinkedCollectionRootRepository(),
+            new LinkedCollectionFileService(new LinkedGitService()),
+            new AppEventBus(Microsoft.Extensions.Logging.Abstractions.NullLogger<AppEventBus>.Instance));
+    }
+
+    public void Dispose() => _sandbox.Dispose();
+
+    [Fact]
+    public async Task CreateRequest_ById_PutsRequestAtCollectionRoot()
+    {
+        var collection = await _repo.AddCollectionAsync("Auth API");
+
+        var result = await _service.CreateRequestAsync(
+            collection.Id, null, "Get token", ApiRequestMethod.Post, "https://x.test/token");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(collection.Id, result.CollectionId);
+        var node = Assert.Single(_repo.Collections.Single(c => c.Id == collection.Id).Nodes);
+        Assert.Equal("Get token", node.Request?.Name);
+    }
+
+    [Fact]
+    public async Task CreateRequest_ByName_ResolvesExistingCollection()
+    {
+        var collection = await _repo.AddCollectionAsync("Phone Notification");
+
+        var result = await _service.CreateRequestAsync(
+            "phone notification", null, "Send sms", ApiRequestMethod.Post, "https://x.test/sms");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(collection.Id, result.CollectionId);
+        Assert.Single(_repo.Collections); // resolved, not duplicated
+    }
+
+    [Fact]
+    public async Task CreateRequest_UnknownName_CreatesCollectionAndFolders()
+    {
+        var result = await _service.CreateRequestAsync(
+            "Phone Notification", "Signing/Onboarding", "1. Create package",
+            ApiRequestMethod.Post, "https://x.test/packages");
+
+        Assert.True(result.IsSuccess);
+        var collection = Assert.Single(_repo.Collections);
+        Assert.Equal("Phone Notification", collection.Name);
+        Assert.Equal(result.CollectionId, collection.Id);
+
+        var signing = Assert.Single(collection.Nodes);
+        Assert.Equal(ApiCollectionNodeType.Folder, signing.Type);
+        Assert.Equal("Signing", signing.Name);
+
+        var onboarding = Assert.Single(signing.Children);
+        Assert.Equal(ApiCollectionNodeType.Folder, onboarding.Type);
+        Assert.Equal("Onboarding", onboarding.Name);
+
+        var request = Assert.Single(onboarding.Children);
+        Assert.Equal("1. Create package", request.Request?.Name);
+        Assert.Equal(result.RequestId, request.Request?.Id);
+    }
+
+    [Fact]
+    public async Task CreateRequest_ExistingCollection_MaterializesOnlyMissingFolderSegments()
+    {
+        var collection = await _repo.AddCollectionAsync("Phone Notification");
+        collection.Nodes.Add(new ApiCollectionNode
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Type = ApiCollectionNodeType.Folder,
+            Name = "Signing",
+        });
+        await _repo.UpdateCollectionAsync(collection);
+
+        var result = await _service.CreateRequestAsync(
+            collection.Id, "Signing/Onboarding", "r", ApiRequestMethod.Get, "https://x.test");
+
+        Assert.True(result.IsSuccess);
+        var signing = Assert.Single(_repo.Collections.Single(c => c.Id == collection.Id).Nodes);
+        Assert.Equal("Signing", signing.Name);
+        Assert.Equal("Onboarding", Assert.Single(signing.Children).Name);
+    }
+
+    [Fact]
+    public async Task CreateRequest_StaleGeneratedId_FailsInsteadOfNamingACollectionAfterIt()
+    {
+        var result = await _service.CreateRequestAsync(
+            new string('a', 32), null, "r", ApiRequestMethod.Get, "https://x.test");
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("not found", result.ErrorMessage);
+        Assert.Empty(_repo.Collections);
+    }
+
+    [Fact]
+    public async Task CreateRequest_WithDetails_PersistsHeadersBodyAuthAndCaptureRules()
+    {
+        var collection = await _repo.AddCollectionAsync("Auth API");
+
+        var result = await _service.CreateRequestAsync(
+            collection.Id, null, "Get token", ApiRequestMethod.Post, "https://x.test/token",
+            new ApiRequestDetails
+            {
+                Headers = [new KeyValuePair<string> { Key = "Accept", Value = "application/json" }],
+                QueryParams = [new KeyValuePair<string> { Key = "v", Value = "2" }],
+                Body = new RequestBody { Mode = RequestBodyMode.Json, RawContent = """{"u":"{{user}}"}""", ContentType = "application/json" },
+                Auth = new AuthConfig { Type = AuthType.BearerToken, CredentialKey = "{{token}}" },
+                CaptureRules =
+                [
+                    new CaptureRule { TargetVariable = "token", Source = CaptureSource.BodyJsonPath, JsonPath = "$.access_token" },
+                ],
+            });
+
+        Assert.True(result.IsSuccess);
+        var request = _repo.Collections.Single(c => c.Id == collection.Id).Nodes[0].Request!;
+        Assert.Equal("Accept", Assert.Single(request.Headers).Key);
+        Assert.Equal("v", Assert.Single(request.QueryParams).Key);
+        Assert.Equal(RequestBodyMode.Json, request.Body.Mode);
+        Assert.Equal("""{"u":"{{user}}"}""", request.Body.RawContent);
+        Assert.Equal(AuthType.BearerToken, request.Auth!.Type);
+        Assert.Equal("{{token}}", request.Auth.CredentialKey);
+        var rule = Assert.Single(request.CaptureRules);
+        Assert.Equal("token", rule.TargetVariable);
+        Assert.False(string.IsNullOrEmpty(rule.Id)); // each rule gets a stable id
+    }
+
+    [Fact]
+    public async Task CreateRequest_AuthWithCredentialSecret_NeverPersistsThePlaintext()
+    {
+        var collection = await _repo.AddCollectionAsync("Auth API");
+
+        await _service.CreateRequestAsync(
+            collection.Id, null, "r", ApiRequestMethod.Get, "https://x.test",
+            new ApiRequestDetails
+            {
+                Auth = new AuthConfig { Type = AuthType.BearerToken, CredentialKey = "sw-secret:k", CredentialSecret = "hunter2" },
+            });
+
+        var request = _repo.Collections.Single(c => c.Id == collection.Id).Nodes[0].Request!;
+        Assert.Null(request.Auth!.CredentialSecret);
+    }
+
+    [Fact]
+    public async Task UpdateRequest_WithDetails_ReplacesOnlyProvidedFields()
+    {
+        var collection = await _repo.AddCollectionAsync("Auth API");
+        await _service.CreateRequestAsync(
+            collection.Id, null, "r", ApiRequestMethod.Get, "https://x.test",
+            new ApiRequestDetails
+            {
+                Headers = [new KeyValuePair<string> { Key = "X-Keep", Value = "1" }],
+                CaptureRules = [new CaptureRule { TargetVariable = "a" }],
+            });
+        var requestId = _repo.Collections.Single(c => c.Id == collection.Id).Nodes[0].Request!.Id;
+
+        var result = await _service.UpdateRequestAsync(
+            requestId,
+            details: new ApiRequestDetails
+            {
+                // Capture rules replaced; headers left untouched.
+                CaptureRules = [new CaptureRule { TargetVariable = "b", Source = CaptureSource.StatusCode }],
+            });
+
+        Assert.True(result.IsSuccess);
+        var request = _repo.Collections.Single(c => c.Id == collection.Id).Nodes[0].Request!;
+        Assert.Equal("X-Keep", Assert.Single(request.Headers).Key);
+        Assert.Equal("b", Assert.Single(request.CaptureRules).TargetVariable);
+    }
+
+    [Fact]
+    public async Task GetCollections_ListsIdsFoldersAndRequestCounts()
+    {
+        var collection = await _repo.AddCollectionAsync("Auth API");
+        await _service.CreateRequestAsync(collection.Id, "Tokens", "r", ApiRequestMethod.Get, "https://x.test");
+
+        var summaries = await _service.GetCollectionsAsync();
+
+        var summary = Assert.Single(summaries);
+        Assert.Equal(collection.Id, summary.Id);
+        Assert.Equal("Auth API", summary.Name);
+        Assert.Equal("local", summary.Origin);
+        Assert.Equal(["Tokens"], summary.FolderPaths);
+        Assert.Equal(1, summary.RequestCount);
+    }
+// ── SetCollectionVariableAsync (api-client-agent-variables) ────────────────
+
+    [Fact]
+    public async Task SetCollectionVariable_NewKey_AddsStaticVariable()
+    {
+        var collection = await _repo.AddCollectionAsync("Sign");
+
+        var result = await _service.SetCollectionVariableAsync(
+            collection.Id, "baseUrl", "https://dev-sign-api.eu");
+
+        Assert.True(result.IsSuccess);
+        var variable = Assert.Single(_repo.Collections.Single(c => c.Id == collection.Id).Variables);
+        Assert.Equal("baseUrl", variable.Key);
+        Assert.Equal("https://dev-sign-api.eu", variable.Value);
+        Assert.Null(variable.Generator);
+        Assert.True(variable.IsEnabled);
+    }
+
+    [Fact]
+    public async Task SetCollectionVariable_ExistingKey_UpdatesInPlace_CaseInsensitive()
+    {
+        var collection = await _repo.AddCollectionAsync("Sign");
+        collection.Variables.Add(new CollectionVariable { Key = "BASEURL", Value = "https://old.test" });
+
+        var result = await _service.SetCollectionVariableAsync(
+            collection.Id, "baseurl", "https://new.test");
+
+        Assert.True(result.IsSuccess);
+        var variables = _repo.Collections.Single(c => c.Id == collection.Id).Variables;
+        var variable = Assert.Single(variables);
+        Assert.Equal("BASEURL", variable.Key); // existing key casing preserved
+        Assert.Equal("https://new.test", variable.Value);
+    }
+
+    [Fact]
+    public async Task SetCollectionVariable_Generator_ClearsStaticValue()
+    {
+        var collection = await _repo.AddCollectionAsync("Sign");
+        collection.Variables.Add(new CollectionVariable { Key = "pkg", Value = "stale-guid" });
+
+        var result = await _service.SetCollectionVariableAsync(
+            collection.Id, "pkg", generator: VariableGeneratorKind.Guid);
+
+        Assert.True(result.IsSuccess);
+        var variable = _repo.Collections.Single(c => c.Id == collection.Id).Variables.Single();
+        Assert.Null(variable.Value);
+        Assert.NotNull(variable.Generator);
+        Assert.Equal(VariableGeneratorKind.Guid, variable.Generator!.Kind);
+    }
+
+    [Fact]
+    public async Task SetCollectionVariable_UnknownName_CreatesCollection()
+    {
+        var result = await _service.SetCollectionVariableAsync(
+            "Sign", "baseUrl", "https://dev-sign-api.eu");
+
+        Assert.True(result.IsSuccess);
+        var collection = Assert.Single(_repo.Collections);
+        Assert.Equal("Sign", collection.Name);
+        Assert.Single(collection.Variables);
+    }
+
+    [Fact]
+    public async Task SetCollectionVariable_GeneratedIdName_Fails()
+    {
+        var result = await _service.SetCollectionVariableAsync(
+            "0123456789abcdef0123456789abcdef", "k", "v");
+
+        Assert.False(result.IsSuccess);
+        Assert.Empty(_repo.Collections);
+    }
+
+    [Fact]
+    public async Task SetCollectionVariable_Disabled_KeepsVariableButDisables()
+    {
+        var collection = await _repo.AddCollectionAsync("Sign");
+
+        await _service.SetCollectionVariableAsync(collection.Id, "x", "1");
+        var result = await _service.SetCollectionVariableAsync(collection.Id, "x", "2", enabled: false);
+
+        Assert.True(result.IsSuccess);
+        var variable = _repo.Collections.Single(c => c.Id == collection.Id).Variables.Single();
+        Assert.False(variable.IsEnabled);
+        Assert.Equal("2", variable.Value);
+    }
+
+    [Fact]
+    public async Task SetCollectionVariable_BlankKey_Fails()
+    {
+        var collection = await _repo.AddCollectionAsync("Sign");
+
+        var result = await _service.SetCollectionVariableAsync(collection.Id, "", "v");
+
+        Assert.False(result.IsSuccess);
+        Assert.Empty(collection.Variables);
+    }
+
+    [Fact]
+    public async Task DuplicateRequest_CopiesFormDataAndFilePath()
+    {
+        var collection = await _repo.AddCollectionAsync("Sign");
+        var created = await _service.CreateRequestAsync(
+            collection.Id, null, "Upload", ApiRequestMethod.Post, "https://x.test/u",
+            new ApiRequestDetails
+            {
+                Body = new RequestBody
+                {
+                    Mode = RequestBodyMode.FormData,
+                    FormData = [new FormDataField { Key = "file", Value = "C:/t.pdf", IsFile = true }],
+                },
+            });
+
+        var dup = await _service.DuplicateRequestAsync(created.RequestId!);
+
+        Assert.True(dup.IsSuccess);
+        var copy = _repo.Collections.Single(c => c.Id == collection.Id).Nodes[1].Request!;
+        var field = Assert.Single(copy.Body.FormData);
+        Assert.True(field.IsFile);
+        Assert.Equal("C:/t.pdf", field.Value);
+    }
+}

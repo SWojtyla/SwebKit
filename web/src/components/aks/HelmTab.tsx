@@ -3,12 +3,13 @@ import { useAksHelmReleases } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksActions, useAksNav } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
-import type { HelmReleaseInfo } from "@/lib/types";
+import type { AksQueryTarget, HelmReleaseInfo } from "@/lib/types";
 import { formatLocalDateTime } from "@/lib/datetime";
 
 interface HelmTabProps {
-    ns: string;
+    targets: AksQueryTarget[];
     isMulti?: boolean;
+    showContext?: boolean;
 }
 
 // `failed` is a hard failure and gets the same destructive-red every other broken resource in
@@ -56,11 +57,18 @@ const columns: Column<HelmReleaseInfo>[] = [
                 {rel.updated ? formatLocalDateTime(rel.updated) : "—"}
             </span>
         ),
+        // "Mar 21, 2026, …" sorts by month name — the raw timestamp is the real sort key.
+        sortValue: (rel) => rel.updated ?? "",
     },
 ];
 
-export function HelmTab({ ns, isMulti }: HelmTabProps) {
-    const { data: releases, isLoading, error } = useAksHelmReleases(ns);
+export function HelmTab({ targets, isMulti, showContext }: HelmTabProps) {
+    const {
+        data: releases,
+        isLoading,
+        error,
+        contextErrors,
+    } = useAksHelmReleases(targets);
     const nav = useAksNav();
     const actions = useAksActions();
     const ws = useMemo(() => ({ ...nav, ...actions }), [nav, actions]);
@@ -105,6 +113,8 @@ export function HelmTab({ ns, isMulti }: HelmTabProps) {
             isLoading={isLoading}
             error={error}
             isMulti={isMulti}
+            showContext={showContext}
+            contextErrors={contextErrors}
             testIdPrefix="helm"
             tableBodyTestId="helm-table-body"
             emptyMessage="No Helm releases found"

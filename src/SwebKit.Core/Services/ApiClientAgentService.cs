@@ -73,16 +73,26 @@ public sealed class ApiClientAgentService : IApiClientAgentService
     }
 
     public async Task<ApiClientMutationResult> CreateRequestAsync(
-        string collectionId,
+        string collectionIdOrName,
         string? folderPath,
         string name,
         ApiRequestMethod method,
         string url,
+        ApiRequestDetails? details = null,
         CancellationToken ct = default)
     {
-        var (collection, origin, linkedRootId) = await FindCollectionAsync(collectionId, ct);
+        var (collection, origin, linkedRootId) = await ResolveCollectionAsync(collectionIdOrName, ct);
         if (collection is null)
-            return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Collection '{collectionId}' not found." };
+        {
+            // A 32-hex value is a generated store ID — the model passed a stale or hallucinated
+            // ID, not a name, and minting a collection called "a1b2…" would be worse than failing.
+            if (LooksLikeGeneratedId(collectionIdOrName))
+                return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Collection '{collectionIdOrName}' not found." };
+
+            collection = await _localRepo.AddCollectionAsync(collectionIdOrName).ConfigureAwait(false);
+            origin = "local";
+            linkedRootId = null;
+        }
 
         var request = new HttpRequestEntry
         {
@@ -93,6 +103,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
+        ApplyDetails(request, details);
 
         var node = new ApiCollectionNode
         {
@@ -108,17 +119,14 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         }
         else
         {
-            var folder = FindFolder(collection.Nodes, folderPath);
-            if (folder is null)
-                return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Folder '{folderPath}' not found." };
-            folder.Children.Add(node);
+            EnsureFolderPath(collection.Nodes, folderPath).Children.Add(node);
         }
 
         await PersistAsync(collection, origin, linkedRootId, ct);
 
         await _events.PublishAsync(new ApiClientDataChanged
         {
-            CollectionId = collectionId,
+            CollectionId = collection.Id,
             RequestId = request.Id,
             ChangeType = "create"
         });
@@ -127,8 +135,64 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         {
             IsSuccess = true,
             RequestId = request.Id,
-            CollectionId = collectionId
+            CollectionId = collection.Id
         };
+    }
+
+    public async Task<ApiClientMutationResult> SetCollectionVariableAsync(
+        string collectionIdOrName,
+        string key,
+        string? value = null,
+        VariableGeneratorKind? generator = null,
+        bool enabled = true,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = "Variable key is required." };
+
+        var (collection, origin, linkedRootId) = await ResolveCollectionAsync(collectionIdOrName, ct);
+        if (collection is null)
+        {
+            if (LooksLikeGeneratedId(collectionIdOrName))
+                return new ApiClientMutationResult { IsSuccess = false, ErrorMessage = $"Collection '{collectionIdOrName}' not found." };
+
+            collection = await _localRepo.AddCollectionAsync(collectionIdOrName).ConfigureAwait(false);
+            origin = "local";
+            linkedRootId = null;
+        }
+
+        var variable = collection.Variables.FirstOrDefault(v =>
+            v.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
+        if (variable is null)
+        {
+            variable = new CollectionVariable { Key = key };
+            collection.Variables.Add(variable);
+        }
+
+        // A generator and a static value are mutually exclusive: the caller picks one
+        // authoritative source, otherwise a stale generator would keep winning at send time.
+        if (generator is { } kind)
+        {
+            variable.Generator = new VariableGeneratorDefinition { Kind = kind };
+            variable.Value = null;
+        }
+        else
+        {
+            variable.Generator = null;
+            variable.Value = value;
+        }
+        variable.IsEnabled = enabled;
+
+        await PersistAsync(collection, origin, linkedRootId, ct);
+
+        await _events.PublishAsync(new ApiClientDataChanged
+        {
+            CollectionId = collection.Id,
+            RequestId = null,
+            ChangeType = "update"
+        });
+
+        return new ApiClientMutationResult { IsSuccess = true, CollectionId = collection.Id };
     }
 
     public async Task<ApiClientMutationResult> UpdateRequestAsync(
@@ -136,6 +200,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         string? name = null,
         ApiRequestMethod? method = null,
         string? url = null,
+        ApiRequestDetails? details = null,
         CancellationToken ct = default)
     {
         var (collection, origin, linkedRootId) = await FindCollectionByRequestAsync(requestId, ct);
@@ -149,6 +214,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         if (name is not null) { node.Request.Name = name; node.Name = name; }
         if (method is not null) node.Request.Method = method.Value;
         if (url is not null) node.Request.Url = url;
+        ApplyDetails(node.Request, details);
         node.Request.UpdatedAt = DateTimeOffset.UtcNow;
 
         await PersistAsync(collection, origin, linkedRootId, ct);
@@ -186,6 +252,8 @@ public sealed class ApiClientAgentService : IApiClientAgentService
                 Mode = node.Request.Body.Mode,
                 RawContent = node.Request.Body.RawContent,
                 ContentType = node.Request.Body.ContentType,
+                FormData = node.Request.Body.FormData.Select(CopyFormField).ToList(),
+                FilePath = node.Request.Body.FilePath,
             },
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
@@ -376,11 +444,24 @@ public sealed class ApiClientAgentService : IApiClientAgentService
         return new ApiClientMutationResult { IsSuccess = true, CollectionId = collectionId };
     }
 
-    public async Task<IReadOnlyList<(string Id, string Name, string Origin, string? LinkedRootId)>> GetCollectionsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<ApiCollectionSummary>> GetCollectionsAsync(CancellationToken ct = default)
     {
-        var result = (await GetAllCollectionsAsync(ct))
-            .Select(c => (c.Collection.Id, c.Collection.Name, c.Origin, c.LinkedRootId))
-            .ToList();
+        var result = new List<ApiCollectionSummary>();
+        foreach (var (collection, origin, linkedRootId) in await GetAllCollectionsAsync(ct))
+        {
+            var folderPaths = new List<string>();
+            var requestCount = 0;
+            CollectStructure(collection.Nodes, "", folderPaths, ref requestCount);
+            result.Add(new ApiCollectionSummary
+            {
+                Id = collection.Id,
+                Name = collection.Name,
+                Origin = origin,
+                LinkedRootId = linkedRootId,
+                FolderPaths = folderPaths,
+                RequestCount = requestCount,
+            });
+        }
         return result;
     }
 
@@ -413,6 +494,148 @@ public sealed class ApiClientAgentService : IApiClientAgentService
                 return (collection, origin, linkedRootId);
         }
         return (null, "", null);
+    }
+
+    /// <summary>
+    /// Resolves a collection by ID first, then by exact name — proposals carry whichever the
+    /// model had in context, and the read tools surface names more often than IDs.
+    /// </summary>
+    private async Task<(ApiCollection? Collection, string Origin, string? LinkedRootId)> ResolveCollectionAsync(string collectionIdOrName, CancellationToken ct)
+    {
+        var all = await GetAllCollectionsAsync(ct);
+        foreach (var (collection, origin, linkedRootId) in all)
+        {
+            if (collection.Id == collectionIdOrName)
+                return (collection, origin, linkedRootId);
+        }
+        foreach (var (collection, origin, linkedRootId) in all)
+        {
+            if (string.Equals(collection.Name, collectionIdOrName, StringComparison.OrdinalIgnoreCase))
+                return (collection, origin, linkedRootId);
+        }
+        return (null, "", null);
+    }
+
+    private static bool LooksLikeGeneratedId(string value) =>
+        value.Length == 32 && value.All(Uri.IsHexDigit);
+
+    /// <summary>Applies the optional detail fields onto a request — non-null fields replace
+    /// existing values, with lists swapping wholesale rather than merging so "clear the headers"
+    /// is expressible as an empty list. Null fields are left untouched (create starts from
+    /// defaults anyway).</summary>
+    private static void ApplyDetails(HttpRequestEntry request, ApiRequestDetails? details)
+    {
+        if (details is null) return;
+
+        if (details.Headers is not null)
+            request.Headers = details.Headers.Select(CopyPair).ToList();
+        if (details.QueryParams is not null)
+            request.QueryParams = details.QueryParams.Select(CopyPair).ToList();
+        if (details.Body is not null)
+            request.Body = new RequestBody
+            {
+                Mode = details.Body.Mode,
+                RawContent = details.Body.RawContent,
+                ContentType = details.Body.ContentType,
+                FormData = details.Body.FormData.Select(CopyFormField).ToList(),
+                FilePath = details.Body.FilePath,
+            };
+        if (details.Auth is not null)
+            request.Auth = StripCredentialSecret(details.Auth);
+        if (details.CaptureRules is not null)
+            request.CaptureRules = details.CaptureRules
+                .Select(r => new CaptureRule
+                {
+                    Id = string.IsNullOrEmpty(r.Id) ? Guid.NewGuid().ToString("N") : r.Id,
+                    TargetVariable = r.TargetVariable,
+                    TargetScope = r.TargetScope,
+                    Source = r.Source,
+                    JsonPath = r.JsonPath,
+                    HeaderName = r.HeaderName,
+                    IsEnabled = r.IsEnabled,
+                })
+                .ToList();
+        if (details.GraphQlQuery is not null)
+            request.GraphQlQuery = details.GraphQlQuery;
+        if (details.GraphQlVariables is not null)
+            request.GraphQlVariables = details.GraphQlVariables;
+        if (details.GraphQlSelectedOperation is not null)
+            request.GraphQlSelectedOperation = details.GraphQlSelectedOperation;
+        if (details.WsSubProtocol is not null)
+            request.WsSubProtocol = details.WsSubProtocol;
+    }
+
+    private static KeyValuePair<string> CopyPair(KeyValuePair<string> p) =>
+        new() { Key = p.Key, Value = p.Value, IsEnabled = p.IsEnabled };
+
+    private static FormDataField CopyFormField(FormDataField f) =>
+        new() { Key = f.Key, Value = f.Value, IsEnabled = f.IsEnabled, IsFile = f.IsFile };
+
+    /// <summary>This repository persists via <c>collections.json</c> directly — the save endpoint's
+    /// secret-stripping never sees it — so a plaintext <see cref="AuthConfig.CredentialSecret"/>
+    /// must not survive onto the entity regardless of what the caller passed.</summary>
+    private static AuthConfig StripCredentialSecret(AuthConfig auth) => new()
+    {
+        Type = auth.Type,
+        CredentialKey = auth.CredentialKey,
+        CredentialSecret = null,
+        ApiKeyParamName = auth.ApiKeyParamName,
+        ApiKeyLocation = auth.ApiKeyLocation,
+        BasicUsername = auth.BasicUsername,
+        OAuth2ClientId = auth.OAuth2ClientId,
+        OAuth2GrantType = auth.OAuth2GrantType,
+        OAuth2TokenUrl = auth.OAuth2TokenUrl,
+        OAuth2AuthUrl = auth.OAuth2AuthUrl,
+        OAuth2Scopes = auth.OAuth2Scopes,
+        OAuth2TokenCredentialKey = auth.OAuth2TokenCredentialKey,
+    };
+
+    /// <summary>Returns the folder node for <paramref name="folderPath"/>, creating each
+    /// missing segment along the way (same '/'-separated shape <see cref="FindFolder"/> reads).</summary>
+    private static ApiCollectionNode EnsureFolderPath(List<ApiCollectionNode> nodes, string folderPath)
+    {
+        var parts = folderPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var current = nodes;
+        ApiCollectionNode? folder = null;
+
+        foreach (var part in parts)
+        {
+            folder = current.FirstOrDefault(n => n.Type == ApiCollectionNodeType.Folder && n.Name == part);
+            if (folder is null)
+            {
+                folder = new ApiCollectionNode
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Type = ApiCollectionNodeType.Folder,
+                    Name = part,
+                };
+                current.Add(folder);
+            }
+            current = folder.Children;
+        }
+
+        return folder!;
+    }
+
+    private static void CollectStructure(
+        List<ApiCollectionNode> nodes,
+        string currentPath,
+        List<string> folderPaths,
+        ref int requestCount)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Type == ApiCollectionNodeType.Request)
+            {
+                requestCount++;
+            }
+            else if (node.Type == ApiCollectionNodeType.Folder)
+            {
+                var childPath = string.IsNullOrEmpty(currentPath) ? node.Name : $"{currentPath}/{node.Name}";
+                folderPaths.Add(childPath);
+                CollectStructure(node.Children, childPath, folderPaths, ref requestCount);
+            }
+        }
     }
 
     private async Task<(ApiCollection? Collection, string Origin, string? LinkedRootId)> FindCollectionByRequestAsync(string requestId, CancellationToken ct)
@@ -536,6 +759,7 @@ public sealed class ApiClientAgentService : IApiClientAgentService
                 ? request.Body.RawContent[..200] + "…"
                 : request.Body.RawContent,
             AuthType = request.Auth?.Type.ToString() ?? collection.DefaultAuth?.Type.ToString(),
+            CaptureRules = request.CaptureRules.ToList(),
             UpdatedAt = request.UpdatedAt,
         };
     }

@@ -5,6 +5,7 @@ import { useStorageTestConnection } from "@/lib/hooks/useStorage";
 import type { StorageConfig } from "@/lib/types";
 import { DraftInput } from "./DraftInput";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { ConnectionTestResultLine } from "@/components/shared/ConnectionTestResultLine";
 import { ProfileListLayout } from "./ProfileListLayout";
 
 /** An account is worth confirming removal of once it has real configured data — an
@@ -265,14 +266,10 @@ function AccountRow({
                     {test.isFetching ? "Testing…" : "Test connection"}
                 </button>
                 {test.data && (
-                    <span
-                        className={`text-xs ${test.data.connected ? "text-success" : "text-destructive"}`}
-                        data-testid={`storage-test-result-${account.id}`}
-                    >
-                        {test.data.connected
-                            ? "Connected"
-                            : `Failed: ${test.data.error ?? "unknown error"}`}
-                    </span>
+                    <ConnectionTestResultLine
+                        result={test.data}
+                        testId={`storage-test-result-${account.id}`}
+                    />
                 )}
                 {test.isError && (
                     <span className="text-xs text-destructive">

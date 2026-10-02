@@ -49,11 +49,57 @@ public sealed class SearchApiRequestsTool : IAgentTool
             method = r.Method.ToString(),
             url = r.Url,
             collection = r.CollectionName,
+            collection_id = r.CollectionId,
             origin = r.CollectionOrigin,
             folder = r.FolderPath,
         });
 
         return JsonSerializer.Serialize(new { count = results.Count, requests });
+    }
+}
+
+/// <summary>
+/// Lists every collection with IDs and folder structure — the discovery call a model needs
+/// before proposing a create, since <c>collection_id</c> targets by ID or name.
+/// </summary>
+public sealed class ListApiCollectionsTool : IAgentTool
+{
+    private readonly IApiClientAgentService _apiClient;
+
+    public ListApiCollectionsTool(IApiClientAgentService apiClient) => _apiClient = apiClient;
+
+    public string Name => "list_api_collections";
+    public string Description => "List all API Client collections with their IDs, folder paths, and request counts. Call this before proposing a request create so the target collection and folder actually exist in the output.";
+
+    private static readonly JsonElement Schema = AgentToolSchema.Parse("""
+    {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+    }
+    """);
+
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
+
+    public JsonElement ParametersSchema => Schema;
+
+    public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
+    {
+        var collections = await _apiClient.GetCollectionsAsync(ct);
+
+        if (collections.Count == 0)
+            return """{"count":0,"collections":[],"message":"No collections exist yet. A create proposal may name one — it is created on confirm."}""";
+
+        var result = collections.Select(c => new
+        {
+            id = c.Id,
+            name = c.Name,
+            origin = c.Origin,
+            folders = c.FolderPaths,
+            request_count = c.RequestCount,
+        });
+
+        return JsonSerializer.Serialize(new { count = collections.Count, collections = result });
     }
 }
 
@@ -114,6 +160,15 @@ public sealed class GetApiRequestTool : IAgentTool
             body_content_type = snapshot.BodyContentType,
             body_preview = snapshot.BodyPreview,
             auth_type = snapshot.AuthType,
+            capture_rules = snapshot.CaptureRules.Select(r => new
+            {
+                target_variable = r.TargetVariable,
+                target_scope = r.TargetScope,
+                source = r.Source.ToString(),
+                json_path = r.JsonPath,
+                header_name = r.HeaderName,
+                enabled = r.IsEnabled,
+            }),
             updated_at = snapshot.UpdatedAt.ToString("yyyy-MM-dd HH:mm UTC"),
         };
 
@@ -137,7 +192,13 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
     }
 
     public string Name => "propose_api_request_change";
-    public string Description => "Propose a change to API requests (create, update, duplicate, or move). Returns a pending action for user confirmation. No changes are applied until confirmed.";
+    public string Description =>
+        "Propose a change to API Client requests (create, update, duplicate, or move). Returns a pending action for user confirmation — nothing is applied until confirmed. " +
+        "Create and update accept the full request surface, not just name+URL: headers and query_params ([{key,value,enabled}]); a body via body_mode + body/body_content_type/form_data/file_path; auth (bearerToken, apiKey, basic, oauth2, inherited, none); capture_rules that extract response values into variables for request chaining; and GraphQL documents via method GraphQl + graphql_query/variables/operation. " +
+        "Every string field may contain {{variable}} references, resolved at send time from collection/environment variables — use them for chaining: have one request's capture_rules write {{token}} from the login response body (e.g. source bodyJsonPath, json_path '$.access_token'), then reference {{token}} in the next request's headers or auth. " +
+        "When a flow needs a variable that does not exist yet (baseUrl, ids, secrets-as-variables), create it FIRST with propose_collection_variable_change — never tell the user to create variables manually; you have the tool. " +
+        "Secrets go in auth.credential_secret (stored in the OS credential store on confirm, never in the collection file) or auth.credential_key to reference an existing sw-secret:* key — credential_key also accepts a {{variable}} reference so a captured token can act as the bearer secret. " +
+        "For update, any field not supplied is left unchanged; a supplied list replaces the existing one entirely.";
     public ToolKind Kind => ToolKind.Mutate;
     public ToolRisk Risk => ToolRisk.Low;
 
@@ -156,11 +217,11 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
             },
             "collection_id": {
                 "type": "string",
-                "description": "ID of the target collection (for create)."
+                "description": "ID or exact name of the target collection (for create) — call list_api_collections to see what exists. If nothing matches, a new collection with this name is created when the action is confirmed."
             },
             "folder_path": {
                 "type": "string",
-                "description": "Folder path within the collection (for create, move)."
+                "description": "Folder path within the collection (for create, move). Missing segments are created on confirm for 'create'; 'move' requires an existing folder."
             },
             "name": {
                 "type": "string",
@@ -168,16 +229,132 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
             },
             "method": {
                 "type": "string",
-                "enum": ["Get", "Post", "Put", "Patch", "Delete", "Head", "Options"],
-                "description": "HTTP method (for create, update)."
+                "enum": ["Get", "Post", "Put", "Patch", "Delete", "Head", "Options", "GraphQl", "WebSocket"],
+                "description": "Request method (for create, update). GraphQl and WebSocket use their own payload fields instead of a body."
             },
             "url": {
                 "type": "string",
-                "description": "Request URL (for create, update)."
+                "description": "Request URL (for create, update). May contain {{variables}}."
             },
             "new_index": {
                 "type": "integer",
                 "description": "Target position for move (0-based)."
+            },
+            "headers": {
+                "type": "array",
+                "description": "HTTP headers (for create, update). Replaces the whole list on update.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string" },
+                        "value": { "type": "string", "description": "May contain {{variables}}." },
+                        "enabled": { "type": "boolean" }
+                    },
+                    "required": ["key"]
+                }
+            },
+            "query_params": {
+                "type": "array",
+                "description": "Query parameters (for create, update). Replaces the whole list on update.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string" },
+                        "value": { "type": "string", "description": "May contain {{variables}}." },
+                        "enabled": { "type": "boolean" }
+                    },
+                    "required": ["key"]
+                }
+            },
+            "body_mode": {
+                "type": "string",
+                "enum": ["none", "json", "xml", "text", "formData", "binary"],
+                "description": "Body mode (for create, update). Pairs with body / form_data / file_path."
+            },
+            "body": {
+                "type": "string",
+                "description": "Raw body content for json/xml/text modes. May contain {{variables}}."
+            },
+            "body_content_type": {
+                "type": "string",
+                "description": "Content-Type for the raw body; defaults per body_mode (application/json, application/xml, text/plain)."
+            },
+            "form_data": {
+                "type": "array",
+                "description": "Multipart form fields when body_mode is formData. May contain {{variables}} in values. A field with type 'file' sends a real file part — its value is a local file path ({{variables}} allowed), not literal text.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string" },
+                        "value": { "type": "string" },
+                        "type": { "type": "string", "enum": ["text", "file"], "description": "'file' = multipart file upload, value is the local file path." },
+                        "enabled": { "type": "boolean" }
+                    },
+                    "required": ["key"]
+                }
+            },
+            "file_path": {
+                "type": "string",
+                "description": "Local file path for binary uploads (body_mode = binary)."
+            },
+            "auth": {
+                "type": "object",
+                "description": "Auth config (for create, update). Omit to inherit from folder/collection. Never put a plaintext secret in credential_key — use credential_secret.",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": ["none", "inherited", "bearerToken", "apiKey", "basic", "oauth2"]
+                    },
+                    "credential_key": {
+                        "type": "string",
+                        "description": "Existing credential-store key (sw-secret:*) to reuse, or a {{variable}} reference resolving to the secret (e.g. a token captured by another request's capture_rules)."
+                    },
+                    "credential_secret": {
+                        "type": "string",
+                        "description": "Plaintext secret (token/password/api key/client secret). Stored in the OS credential store under a generated key on confirm — never written into the collection file."
+                    },
+                    "api_key_param_name": { "type": "string", "description": "Header or query-param name for apiKey auth." },
+                    "api_key_location": { "type": "string", "enum": ["header", "queryParam"] },
+                    "basic_username": { "type": "string" },
+                    "oauth2_client_id": { "type": "string" },
+                    "oauth2_grant_type": { "type": "string", "enum": ["clientCredentials", "authorizationCode"] },
+                    "oauth2_token_url": { "type": "string" },
+                    "oauth2_auth_url": { "type": "string", "description": "Authorization endpoint (authorizationCode grant only)." },
+                    "oauth2_scopes": { "type": "string", "description": "Space-separated scopes." }
+                },
+                "required": ["type"]
+            },
+            "capture_rules": {
+                "type": "array",
+                "description": "Post-response capture rules (for create, update) — the request-chaining mechanism. Each rule extracts a value from the response and stores it in a variable that later requests reference as {{variable}}.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "target_variable": { "type": "string", "description": "Variable key the captured value is stored under." },
+                        "target_scope": { "type": "string", "description": "'collection' (default) stores it as a collection variable; any other value is treated as an environment name." },
+                        "source": { "type": "string", "enum": ["bodyJsonPath", "responseHeader", "statusCode"], "description": "What to extract from. Default bodyJsonPath." },
+                        "json_path": { "type": "string", "description": "JSONPath into the response body, e.g. '$.access_token' (source = bodyJsonPath)." },
+                        "header_name": { "type": "string", "description": "Response header name (source = responseHeader)." },
+                        "enabled": { "type": "boolean" }
+                    },
+                    "required": ["target_variable"]
+                }
+            },
+            "graphql_query": {
+                "type": "string",
+                "description": "GraphQL query/mutation document (method = GraphQl)."
+            },
+            "graphql_variables": {
+                "type": "string",
+                "description": "GraphQL variables as a JSON string (method = GraphQl)."
+            },
+            "graphql_operation": {
+                "type": "string",
+                "description": "Operation name to run when the document defines several (method = GraphQl)."
+            },
+            "ws_sub_protocol": {
+                "type": "string",
+                "description": "WebSocket subprotocol sent in the upgrade header (method = WebSocket)."
             }
         },
         "required": ["operation"],
@@ -207,7 +384,7 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
         {
             case "create":
             {
-                if (!arguments.TryGetProperty("collection_id", out var collId))
+                if (!arguments.TryGetProperty("collection_id", out var collId) || collId.GetString() is not { Length: > 0 } collectionRef)
                     return """{"error":"Missing required parameter 'collection_id' for create operation."}""";
                 if (!arguments.TryGetProperty("name", out var nameProp) || nameProp.GetString() is not { } name)
                     return """{"error":"Missing required parameter 'name' for create operation."}""";
@@ -215,10 +392,31 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
                 var url = arguments.TryGetProperty("url", out var u) ? u.GetString() ?? "" : "";
                 var folderPath = arguments.TryGetProperty("folder_path", out var f) ? f.GetString() : null;
 
+                // Resolve the target now so the preview tells the user exactly what confirm will
+                // create — the collection itself and/or folder segments that don't exist yet.
+                var collections = await _apiClient.GetCollectionsAsync(ct);
+                var match = collections.FirstOrDefault(c =>
+                    c.Id == collectionRef ||
+                    c.Name.Equals(collectionRef, StringComparison.OrdinalIgnoreCase));
+
+                var willCreate = new List<string>();
+                if (match is null)
+                {
+                    willCreate.Add($"collection '{collectionRef}'");
+                }
+                else if (!string.IsNullOrEmpty(folderPath))
+                {
+                    var missing = MissingFolderSegments(match.FolderPaths, folderPath);
+                    if (missing.Count > 0)
+                        willCreate.Add($"folder{(missing.Count > 1 ? "s" : "")} '{string.Join("', '", missing)}'");
+                }
+
                 actionType = AgentActionType.CreateRequest;
-                target = $"Collection {collId}" + (folderPath is not null ? $"/{folderPath}" : "");
+                target = $"Collection {match?.Name ?? collectionRef}" + (folderPath is not null ? $"/{folderPath}" : "");
                 summary = $"Create request '{name}' ({method} {url})";
-                preview = $"Name: {name}\nMethod: {method}\nURL: {url}\nLocation: {target}";
+                preview = $"Name: {name}\nMethod: {method}\nURL: {url}\nLocation: {target}"
+                    + DetailLines(arguments)
+                    + (willCreate.Count > 0 ? $"\nWill be created: {string.Join("; ", willCreate)}" : "");
                 break;
             }
 
@@ -237,6 +435,9 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
                 if (arguments.TryGetProperty("name", out var n) && n.GetString() is { } newName) changes.Add($"name: {snapshot.Name} → {newName}");
                 if (arguments.TryGetProperty("method", out var m) && Enum.TryParse<ApiRequestMethod>(m.GetString(), out var newMethod)) changes.Add($"method: {snapshot.Method} → {newMethod}");
                 if (arguments.TryGetProperty("url", out var u) && u.GetString() is { } newUrl) changes.Add($"url: {snapshot.Url} → {newUrl}");
+                foreach (var (prop, label) in DetailLabels)
+                    if (arguments.TryGetProperty(prop, out _))
+                        changes.Add($"{label}: (replaced)");
 
                 summary = $"Update request '{snapshot.Name}': {string.Join(", ", changes)}";
                 preview = $"Changes:\n{string.Join("\n", changes)}";
@@ -305,6 +506,181 @@ public sealed class ProposeApiRequestChangeTool : IAgentTool
             summary,
             preview,
             risk = risk.ToString(),
+            expires_at = action.ExpiresAt.ToString("yyyy-MM-dd HH:mm UTC"),
+            message = "Action proposed. User must confirm before it is applied.",
+        });
+    }
+
+    /// <summary>Detail fields the confirmation card summarizes beyond name/method/url —
+    /// (payload property, human label) pairs shared by the create and update previews.</summary>
+    private static readonly (string Prop, string Label)[] DetailLabels =
+    [
+        ("headers", "headers"),
+        ("query_params", "query params"),
+        ("body_mode", "body"),
+        ("auth", "auth"),
+        ("capture_rules", "capture rules"),
+        ("graphql_query", "GraphQL document"),
+        ("ws_sub_protocol", "WebSocket subprotocol"),
+    ];
+
+    /// <summary>Builds the extra preview lines describing which detail fields a proposal carries,
+    /// so the confirm card shows e.g. "capture rules: 2" rather than looking like a bare URL
+    /// request. Never echoes secret values — auth is described by type only.</summary>
+    private static string DetailLines(JsonElement arguments)
+    {
+        var lines = new List<string>();
+        if (TryGetArray(arguments, "headers", out var headers)) lines.Add($"Headers: {headers.GetArrayLength()}");
+        if (TryGetArray(arguments, "query_params", out var qp)) lines.Add($"Query params: {qp.GetArrayLength()}");
+        if (arguments.TryGetProperty("body_mode", out var bm) && bm.GetString() is { } bodyMode) lines.Add($"Body: {bodyMode}");
+        if (arguments.TryGetProperty("auth", out var auth) && auth.TryGetProperty("type", out var at)) lines.Add($"Auth: {at.GetString()}");
+        if (TryGetArray(arguments, "capture_rules", out var captures))
+        {
+            var targets = captures.EnumerateArray()
+                .Select(r => r.TryGetProperty("target_variable", out var tv) ? tv.GetString() : null)
+                .Where(t => t is not null);
+            lines.Add($"Capture rules: {captures.GetArrayLength()}{(targets.Any() ? $" → {{{{{string.Join("}}, {{", targets)}}}}}" : "")}");
+        }
+        if (arguments.TryGetProperty("graphql_query", out _)) lines.Add("GraphQL document provided");
+        if (arguments.TryGetProperty("ws_sub_protocol", out var ws)) lines.Add($"WebSocket subprotocol: {ws.GetString()}");
+
+        return lines.Count == 0 ? "" : "\n" + string.Join("\n", lines);
+    }
+
+    private static bool TryGetArray(JsonElement arguments, string property, out JsonElement array)
+    {
+        array = default;
+        return arguments.TryGetProperty(property, out array) && array.ValueKind == JsonValueKind.Array;
+    }
+
+    /// <summary>Path prefixes of <paramref name="folderPath"/> with no existing folder, e.g. a path
+    /// "Signing/Onboarding" where only "Signing" exists reports ["Signing/Onboarding"] — the
+    /// preview can then name exactly what the confirm will create.</summary>
+    private static List<string> MissingFolderSegments(IReadOnlyList<string> existingPaths, string folderPath)
+    {
+        var missing = new List<string>();
+        var parts = folderPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var prefix = "";
+        foreach (var part in parts)
+        {
+            prefix = prefix.Length == 0 ? part : $"{prefix}/{part}";
+            if (!existingPaths.Contains(prefix, StringComparer.Ordinal))
+                missing.Add(prefix);
+        }
+        return missing;
+    }
+}
+
+/// <summary>
+/// Proposes a collection-variable change (set/update/disable). Without this the agent could
+/// reference {{variables}} but never create them — every chained flow stalled on the user
+/// hand-editing the collection (api-client-agent-variables). Pending-confirm like the other
+/// mutations.
+/// </summary>
+public sealed class ProposeCollectionVariableChangeTool : IAgentTool
+{
+    private readonly IApiClientAgentService _apiClient;
+    private readonly IAgentActionCoordinator _coordinator;
+
+    public ProposeCollectionVariableChangeTool(IApiClientAgentService apiClient, IAgentActionCoordinator coordinator)
+    {
+        _apiClient = apiClient;
+        _coordinator = coordinator;
+    }
+
+    public string Name => "propose_collection_variable_change";
+    public string Description =>
+        "Propose setting (or disabling) a collection variable on an API Client collection — returns a pending action for user confirmation. " +
+        "Use for static values (baseUrl, ids) AND generated ones: generator 'guid' mints a fresh GUID on every send — the right choice for per-run ids a later capture_rule then overwrites or references. " +
+        "Collection variables are always in scope for the collection's requests; environment variables are not covered by this tool. " +
+        "collection_id accepts the collection's ID or exact name — an unmatched name creates the collection on confirm. Disabling (enabled=false) keeps the variable for later.";
+    public ToolKind Kind => ToolKind.Mutate;
+    public ToolRisk Risk => ToolRisk.Low;
+
+    private static readonly JsonElement Schema = AgentToolSchema.Parse("""
+    {
+        "type": "object",
+        "properties": {
+            "collection_id": {
+                "type": "string",
+                "description": "ID or exact name of the target collection — call list_api_collections to see what exists. If nothing matches, a new collection with this name is created when the action is confirmed."
+            },
+            "key": {
+                "type": "string",
+                "description": "Variable key — the name requests reference as {{key}}."
+            },
+            "value": {
+                "type": "string",
+                "description": "Static value. Ignored when 'generator' is set — a generator and a static value are mutually exclusive."
+            },
+            "generator": {
+                "type": "string",
+                "enum": ["integer", "decimal", "boolean", "guid", "dateTime", "list", "faker"],
+                "description": "Generate the value at send time instead of storing a static one — e.g. 'guid' for per-run identifiers."
+            },
+            "enabled": {
+                "type": "boolean",
+                "description": "False disables the variable without deleting it."
+            }
+        },
+        "required": ["collection_id", "key"],
+        "additionalProperties": false
+    }
+    """);
+
+    public FeatureArea FeatureArea => FeatureArea.ApiClient;
+
+    public JsonElement ParametersSchema => Schema;
+
+    public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
+    {
+        if (!arguments.TryGetProperty("collection_id", out var collId) || collId.GetString() is not { Length: > 0 } collectionRef)
+            return """{"error":"Missing required parameter 'collection_id'."}""";
+        if (!arguments.TryGetProperty("key", out var keyProp) || keyProp.GetString() is not { Length: > 0 } key)
+            return """{"error":"Missing required parameter 'key'."}""";
+
+        var value = arguments.TryGetProperty("value", out var v) ? v.GetString() : null;
+        var generator = arguments.TryGetProperty("generator", out var g) ? g.GetString() : null;
+        var enabled = !arguments.TryGetProperty("enabled", out var en) || en.ValueKind != JsonValueKind.False;
+
+        if (value is null && generator is null && enabled)
+            return """{"error":"Provide 'value' or 'generator' — an enabled variable needs a source."}""";
+        if (value is not null && generator is not null)
+            return """{"error":"'value' and 'generator' are mutually exclusive — pick one."}""";
+        if (generator is not null && !Enum.TryParse<VariableGeneratorKind>(generator, ignoreCase: true, out _))
+            return $$"""{"error":"Unknown generator '{{generator}}'."}""";
+
+        var collections = await _apiClient.GetCollectionsAsync(ct);
+        var match = collections.FirstOrDefault(c =>
+            c.Id == collectionRef ||
+            c.Name.Equals(collectionRef, StringComparison.OrdinalIgnoreCase));
+
+        var actionId = Guid.NewGuid().ToString("N");
+        var sourceDesc = generator is not null ? $"generated ({generator})" : $"'{value ?? ""}'";
+        var action = new PendingAgentAction
+        {
+            Id = actionId,
+            Type = AgentActionType.SetCollectionVariable,
+            Summary = enabled
+                ? $"Set variable '{key}' = {sourceDesc} in '{match?.Name ?? collectionRef}'"
+                : $"Disable variable '{key}' in '{match?.Name ?? collectionRef}'",
+            Target = $"Collection {match?.Name ?? collectionRef}",
+            Risk = AgentActionRisk.Low,
+            Preview = $"Variable: {key}\nCollection: {match?.Name ?? collectionRef}\nSource: {(enabled ? sourceDesc : "(disabled)")}"
+                + (match is null ? $"\nWill be created: collection '{collectionRef}'" : ""),
+            ExpectedFingerprint = null,
+            Payload = arguments.Clone(),
+        };
+
+        _coordinator.RegisterAction(action);
+
+        return JsonSerializer.Serialize(new
+        {
+            action_id = actionId,
+            status = "pending_confirmation",
+            summary = action.Summary,
+            preview = action.Preview,
+            risk = action.Risk.ToString(),
             expires_at = action.ExpiresAt.ToString("yyyy-MM-dd HH:mm UTC"),
             message = "Action proposed. User must confirm before it is applied.",
         });

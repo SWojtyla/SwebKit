@@ -3,11 +3,12 @@ import { useAksHttpRoutes, useAksDeleteHttpRoute } from "@/lib/hooks";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import { useAksActions, useAksNav } from "./shared/aks-workspace-context";
 import type { ContextMenuItem } from "./ContextMenu";
-import type { HttpRouteInfo } from "@/lib/types";
+import type { AksQueryTarget, HttpRouteInfo } from "@/lib/types";
 
 interface HttpRoutesTabProps {
-    ns: string;
+    targets: AksQueryTarget[];
     isMulti?: boolean;
+    showContext?: boolean;
 }
 
 function httpRouteStatusRank(route: HttpRouteInfo): number {
@@ -96,11 +97,20 @@ const columns: Column<HttpRouteInfo>[] = [
     },
 ];
 
-export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
-    const { data: routes, isLoading, error } = useAksHttpRoutes(ns);
+export function HttpRoutesTab({
+    targets,
+    isMulti,
+    showContext,
+}: HttpRoutesTabProps) {
+    const {
+        data: routes,
+        isLoading,
+        error,
+        contextErrors,
+    } = useAksHttpRoutes(targets);
     const nav = useAksNav();
-  const actions = useAksActions();
-  const ws = useMemo(() => ({ ...nav, ...actions }), [nav, actions]);
+    const actions = useAksActions();
+    const ws = useMemo(() => ({ ...nav, ...actions }), [nav, actions]);
     const deleteHttpRoute = useAksDeleteHttpRoute();
 
     const buildMenu = useCallback(
@@ -121,13 +131,23 @@ export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
                     label: "View YAML",
                     icon: "{ }",
                     onClick: () =>
-                        ws.openYaml("httproute", route.name, route.namespace),
+                        ws.openYaml(
+                            "httproute",
+                            route.name,
+                            route.namespace,
+                            route.context,
+                        ),
                 },
                 {
                     label: "Edit YAML",
                     icon: "✎",
                     onClick: () =>
-                        ws.openYaml("httproute", route.name, route.namespace),
+                        ws.openYaml(
+                            "httproute",
+                            route.name,
+                            route.namespace,
+                            route.context,
+                        ),
                 },
                 {
                     label: "Open URL in browser",
@@ -151,12 +171,13 @@ export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
                     icon: "✕",
                     onClick: () => {
                         ws.requestConfirm({
-                            message: `Delete HTTPRoute "${route.name}"?`,
+                            message: `Delete HTTPRoute "${route.name}"${route.context ? ` in ${route.context}` : ""}?`,
                             resourceName: route.name,
                             onConfirm: () =>
                                 deleteHttpRoute.mutate({
                                     ns: route.namespace,
                                     name: route.name,
+                                    context: route.context,
                                 }),
                         });
                     },
@@ -179,6 +200,8 @@ export function HttpRoutesTab({ ns, isMulti }: HttpRoutesTabProps) {
             isLoading={isLoading}
             error={error}
             isMulti={isMulti}
+            showContext={showContext}
+            contextErrors={contextErrors}
             testIdPrefix="httproute"
             tableBodyTestId="httproutes-table-body"
             emptyMessage="No HTTP routes found"

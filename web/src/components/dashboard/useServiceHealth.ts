@@ -7,6 +7,7 @@ import {
     useDemoMode,
 } from "@/lib/hooks";
 import type {
+    ConnectionTestResult,
     RedisServerInfo,
     StorageContainerItem,
 } from "@/lib/types";
@@ -33,10 +34,8 @@ export interface ServiceHealth {
     entities: ServiceEntityHealth[];
 }
 
-interface ConnTest {
-    connected: boolean;
-    error?: string;
-}
+/// Test-connection payloads carry the classified error fields (`error`, `kind`,
+/// `detail`, `hint`) — surfaced per entity so an "unavailable" dot says *why*.
 
 function summarize(
     configured: boolean,
@@ -89,7 +88,7 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
         queries: sbNamespaces.map((ns) => ({
             queryKey: ["sb-test", ns.id],
             queryFn: ({ signal }: { signal: AbortSignal }) =>
-                apiFetch<ConnTest>(`/api/servicebus/${ns.id}/test`, {
+                apiFetch<ConnectionTestResult>(`/api/servicebus/${ns.id}/test`, {
                     signal,
                 }),
             staleTime: 30_000,
@@ -121,7 +120,7 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
         queries: sqlConnections.map((conn) => ({
             queryKey: ["sql", conn.id, "test"],
             queryFn: ({ signal }: { signal: AbortSignal }) =>
-                apiFetch<ConnTest>(`/api/sql/${conn.id}/test`, { signal }),
+                apiFetch<ConnectionTestResult>(`/api/sql/${conn.id}/test`, { signal }),
             retry: false,
         })),
     });
@@ -134,6 +133,11 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
                 connected: sbQueries[i].isPending
                     ? null
                     : (sbQueries[i].data?.connected ?? false),
+                detail:
+                    sbQueries[i].data?.connected === false
+                        ? (sbQueries[i].data.detail ??
+                          sbQueries[i].data.error)
+                        : undefined,
             }),
         );
         const redisEntities: ServiceEntityHealth[] = redisCaches.map(
@@ -147,7 +151,9 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
                         : info != null,
                     detail: info
                         ? `${(info.keyspaceHitRatio * 100).toFixed(1)}% hit`
-                        : undefined,
+                        : (redisQueries[i].error instanceof Error
+                              ? redisQueries[i].error.message
+                              : undefined),
                     hitRatio: info?.keyspaceHitRatio,
                 };
             },
@@ -161,7 +167,9 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
                     : storageQueries[i].data != null,
                 detail: storageQueries[i].data
                     ? `${storageQueries[i].data.length} containers`
-                    : undefined,
+                    : (storageQueries[i].error instanceof Error
+                          ? storageQueries[i].error.message
+                          : undefined),
             }),
         );
         const sqlEntities: ServiceEntityHealth[] = sqlConnections.map(
@@ -172,6 +180,11 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
                 connected: sqlQueries[i].isPending
                     ? null
                     : (sqlQueries[i].data?.connected ?? false),
+                detail:
+                    sqlQueries[i].data?.connected === false
+                        ? (sqlQueries[i].data.detail ??
+                          sqlQueries[i].data.error)
+                        : undefined,
             }),
         );
 
@@ -183,6 +196,10 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
             connected: aksHealth.isPending
                 ? null
                 : (aksHealth.data?.connected ?? false),
+            detail:
+                aksHealth.data?.connected === false
+                    ? (aksHealth.data.detail ?? aksHealth.data.error)
+                    : undefined,
         };
 
         return {
