@@ -170,7 +170,8 @@ public static class AksEndpoints
         catch (Exception ex)
         {
             logger.LogWarning(ex, "AKS connection test failed");
-            return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
+            var c = ConnectionTestError.Classify(ex);
+            return Results.Ok(new { connected = false, error = c.Summary, kind = c.Kind, detail = c.Detail, hint = c.Hint });
         }
     }
 
@@ -215,7 +216,8 @@ public static class AksEndpoints
         catch (Exception ex)
         {
             logger.LogWarning(ex, "AKS context switch connection test failed for {Context}", request.Context);
-            return Results.Ok(new { connected = false, context = request.Context, error = ConnectionTestError.Describe(ex) });
+            var c = ConnectionTestError.Classify(ex);
+            return Results.Ok(new { connected = false, error = c.Summary, kind = c.Kind, detail = c.Detail, hint = c.Hint });
         }
 
         if (!connected)

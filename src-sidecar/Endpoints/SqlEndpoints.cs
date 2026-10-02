@@ -58,7 +58,8 @@ public static class SqlEndpoints
         catch (Exception ex)
         {
             logger.LogWarning(ex, "SQL connection test failed for connection {ConnectionId}", connectionId);
-            return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
+            var c = ConnectionTestError.Classify(ex);
+            return Results.Ok(new { connected = false, error = c.Summary, kind = c.Kind, detail = c.Detail, hint = c.Hint });
         }
     }
 
@@ -91,7 +92,8 @@ public static class SqlEndpoints
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Ad-hoc SQL connection test failed for {Server}", req.Server);
-            return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
+            var c = ConnectionTestError.Classify(ex);
+            return Results.Ok(new { connected = false, error = c.Summary, kind = c.Kind, detail = c.Detail, hint = c.Hint });
         }
     }
 
@@ -127,7 +129,8 @@ public static class SqlEndpoints
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Ad-hoc SQL database enumeration failed for {Server}", req.Server);
-            return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
+            var c = ConnectionTestError.Classify(ex);
+            return Results.Ok(new { connected = false, error = c.Summary, kind = c.Kind, detail = c.Detail, hint = c.Hint });
         }
     }
 

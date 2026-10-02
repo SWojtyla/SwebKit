@@ -33,27 +33,56 @@ export async function initSidecarBaseUrl(): Promise<void> {
 }
 
 /**
- * Extracts a human-readable message from a failed API response body. ASP.NET error payloads vary
- * in shape: `{ error }` (custom BadRequest bodies), `{ detail }`/`{ title }` (ProblemDetails from
- * Results.Problem), or plain text — without this, callers surface the raw JSON blob to the user.
+ * A failed sidecar call. `message` stays the plain summary so every existing
+ * `err.message` render keeps working; `kind`/`detail`/`hint` carry the classified
+ * detail the server sends (`{ error, kind, detail, hint }`) so error surfaces can
+ * show *why* it failed — timeout vs auth vs unreachable — instead of a bare "error".
  */
-function extractErrorMessage(
+export class ApiError extends Error {
+    constructor(
+        message: string,
+        public readonly status: number,
+        public readonly kind?: string,
+        public readonly detail?: string,
+        public readonly hint?: string,
+    ) {
+        super(message);
+        this.name = "ApiError";
+    }
+}
+
+/** Maps a failed response body to an {@link ApiError}. ASP.NET error payloads vary
+ * in shape: `{ error }` (custom BadRequest bodies), `{ detail }`/`{ title }`
+ * (ProblemDetails from Results.Problem), or plain text — and the global handler's
+ * `{ error, kind, detail, hint }` fields are preserved when present. */
+function toApiError(
     status: number,
     statusText: string,
     body: string,
-): string {
+): ApiError {
     if (body) {
         try {
             const parsed = JSON.parse(body);
             const message = parsed?.error ?? parsed?.detail ?? parsed?.title;
             if (typeof message === "string" && message.trim()) {
-                return message;
+                return new ApiError(
+                    message,
+                    status,
+                    typeof parsed?.kind === "string" ? parsed.kind : undefined,
+                    typeof parsed?.detail === "string"
+                        ? parsed.detail
+                        : undefined,
+                    typeof parsed?.hint === "string" ? parsed.hint : undefined,
+                );
             }
         } catch {
             // Not JSON — fall through to the raw body below.
         }
     }
-    return body || statusText || `Request failed with status ${status}`;
+    return new ApiError(
+        body || statusText || `Request failed with status ${status}`,
+        status,
+    );
 }
 
 /**
@@ -79,7 +108,7 @@ export async function apiFetch<T>(
 
     if (!res.ok) {
         const body = await res.text().catch(() => "");
-        throw new Error(extractErrorMessage(res.status, res.statusText, body));
+        throw toApiError(res.status, res.statusText, body);
     }
 
     return res.json() as Promise<T>;
@@ -100,7 +129,7 @@ export async function apiSend<T>(
 
     if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new Error(extractErrorMessage(res.status, res.statusText, text));
+        throw toApiError(res.status, res.statusText, text);
     }
 
     const text = await res.text().catch(() => "");
@@ -182,7 +211,7 @@ export async function streamAgentChat(
 
     if (!res.ok || !res.body) {
         const text = await res.text().catch(() => "");
-        throw new Error(extractErrorMessage(res.status, res.statusText, text));
+        throw toApiError(res.status, res.statusText, text);
     }
 
     const reader = res.body.getReader();
@@ -246,6 +275,15 @@ export function apiUpload<T>(
         form.append("file", file, file.name);
         request.send(form);
     });
+}
+
+/** Composes the fullest readable error text for a toast/notification body:
+ * summary + classified detail + hint when the failure came back structured. */
+export function describeApiError(err: unknown): string {
+    if (err instanceof ApiError) {
+        return [err.message, err.detail, err.hint].filter(Boolean).join("\n");
+    }
+    return err instanceof Error ? err.message : String(err);
 }
 
 export { SIDECAR_BASE_URL };

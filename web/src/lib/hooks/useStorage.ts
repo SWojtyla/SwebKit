@@ -4,9 +4,10 @@ import {
     useQueryClient,
     keepPreviousData,
 } from "@tanstack/react-query";
-import { apiFetch, apiSend, apiUpload } from "../api";
+import { describeApiError, apiFetch, apiSend, apiUpload } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
 import type {
+    ConnectionTestResult,
     StorageContainerItem,
     StorageBlobPage,
     BlobProperties,
@@ -32,7 +33,7 @@ export function useStorageTestConnection(
     return useQuery({
         queryKey: ["storage", accountId, "test"],
         queryFn: ({ signal }) =>
-            apiFetch<{ connected: boolean; error?: string }>(
+            apiFetch<ConnectionTestResult>(
                 `/api/storage/${accountId}/test`,
                 { signal },
             ),
@@ -278,7 +279,7 @@ export function useUploadBlob(
             });
         },
         onError: (error) =>
-            notify("error", "Couldn't upload blob", String(error)),
+            notify("error", "Couldn't upload blob", describeApiError(error)),
     });
 }
 
@@ -310,7 +311,7 @@ export function useCopyBlob(accountId: string | null) {
             qc.invalidateQueries({ queryKey: ["storage", accountId] });
         },
         onError: (error) =>
-            notify("error", "Couldn't copy blob", String(error)),
+            notify("error", "Couldn't copy blob", describeApiError(error)),
     });
 }
 
@@ -349,7 +350,7 @@ export function useRestoreBlobVersion(
             });
         },
         onError: (error) =>
-            notify("error", "Couldn't restore blob version", String(error)),
+            notify("error", "Couldn't restore blob version", describeApiError(error)),
     });
 }
 
@@ -404,7 +405,7 @@ export function useSetBlobMetadata(
             });
         },
         onError: (error) =>
-            notify("error", "Couldn't save blob metadata", String(error)),
+            notify("error", "Couldn't save blob metadata", describeApiError(error)),
     });
 }
 
@@ -441,7 +442,7 @@ export function useUndeleteBlob(
             });
         },
         onError: (error) =>
-            notify("error", "Couldn't restore deleted blob", String(error)),
+            notify("error", "Couldn't restore deleted blob", describeApiError(error)),
     });
 }
 

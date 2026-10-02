@@ -39,7 +39,8 @@ public static class ServiceBusEndpoints
                 // The Service Bus connection string/Entra details can appear in the underlying SDK
                 // exception's message — never return ex.Message here.
                 logger.LogWarning(ex, "Service Bus connection test failed for namespace {NamespaceId}", nsId);
-                return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
+                var c = ConnectionTestError.Classify(ex);
+                return Results.Ok(new { connected = false, error = c.Summary, kind = c.Kind, detail = c.Detail, hint = c.Hint });
             }
         });
 

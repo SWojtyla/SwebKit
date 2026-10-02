@@ -96,3 +96,20 @@ export interface LoggingSettings {
 }
 
 // ── API response helpers ─────────────────────────────────────────────────────
+
+/** Result of a "test connection"/context-switch call — the classified error detail
+ * the sidecar emits (`{ error, kind, detail, hint }`), so the UI can show *why* a
+ * connection failed, not just that it did. */
+export interface ConnectionTestResult {
+    connected: boolean;
+    /** Short user-facing summary. */
+    error?: string;
+    /** Classified category: timeout | unreachable | auth | accessDenied | notFound | busy | clientError | serverError. */
+    kind?: string;
+    /** Technical detail — exception type + scrubbed message (secrets stripped server-side). */
+    detail?: string;
+    /** What to try next. */
+    hint?: string;
+    /** AKS context-switch responses echo the requested context. */
+    context?: string;
+}

@@ -33,7 +33,8 @@ public static class StorageEndpoints
                 // The storage account connection string/SAS details can appear in the underlying
                 // SDK exception's message — never return ex.Message here.
                 logger.LogWarning(ex, "Storage connection test failed for account {AccountId}", accountId);
-                return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
+                var c = ConnectionTestError.Classify(ex);
+                return Results.Ok(new { connected = false, error = c.Summary, kind = c.Kind, detail = c.Detail, hint = c.Hint });
             }
         });
 

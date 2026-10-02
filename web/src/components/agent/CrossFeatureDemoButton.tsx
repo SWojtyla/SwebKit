@@ -4,6 +4,7 @@ import { useDemoMode, useToggleDemoMode } from "@/lib/hooks";
 import { getCrossFeatureScenario } from "@/lib/demo-scenarios";
 import { useNotification } from "@/components/layout/notification-context";
 import { Rocket } from "lucide-react";
+import { describeApiError } from "@/lib/api";
 
 export function CrossFeatureDemoButton({ className }: { className?: string }) {
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ export function CrossFeatureDemoButton({ className }: { className?: string }) {
     if (!enabled) {
       toggleDemo.mutate(true, {
         onSuccess: () => runScenario(),
-        onError: (err: Error) => notify("error", "Demo mode failed", err.message),
+        onError: (err: Error) => notify("error", "Demo mode failed", describeApiError(err)),
       });
     } else {
       runScenario();

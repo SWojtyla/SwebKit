@@ -36,7 +36,8 @@ public static class RedisEndpoints
                 // their message — never return ex.Message here, the cache's connection string can
                 // carry a password.
                 logger.LogWarning(ex, "Redis connection test failed for cache {CacheId}", cacheId);
-                return Results.Ok(new { connected = false, error = ConnectionTestError.Describe(ex) });
+                var c = ConnectionTestError.Classify(ex);
+                return Results.Ok(new { connected = false, error = c.Summary, kind = c.Kind, detail = c.Detail, hint = c.Hint });
             }
         });
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
-import {
+import { describeApiError,
   apiFetch,
   apiSend,
   getRedisPubSubSnapshot,
@@ -10,6 +10,7 @@ import {
 } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
 import type {
+    ConnectionTestResult,
   RedisKeyScanResult,
   RedisKeyInfo,
   RedisHashField,
@@ -30,7 +31,7 @@ import type {
 export function useRedisTestConnection(cacheId: string | null, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["redis", cacheId, "test"],
-    queryFn: ({ signal }) => apiFetch<{ connected: boolean; error?: string }>(`/api/redis/${cacheId}/test`, { signal }),
+    queryFn: ({ signal }) => apiFetch<ConnectionTestResult>(`/api/redis/${cacheId}/test`, { signal }),
     enabled: !!cacheId && (options?.enabled ?? true),
   });
 }
@@ -192,7 +193,7 @@ export function useRedisDeleteKey(cacheId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
-    onError: (error) => notify("error", "Couldn't delete key", String(error)),
+    onError: (error) => notify("error", "Couldn't delete key", describeApiError(error)),
   });
 }
 
@@ -208,7 +209,7 @@ export function useRedisDeleteKeys(cacheId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
-    onError: (error) => notify("error", "Couldn't delete keys", String(error)),
+    onError: (error) => notify("error", "Couldn't delete keys", describeApiError(error)),
   });
 }
 
@@ -224,7 +225,7 @@ export function useRedisSetTtl(cacheId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
-    onError: (error) => notify("error", "Couldn't update TTL", String(error)),
+    onError: (error) => notify("error", "Couldn't update TTL", describeApiError(error)),
   });
 }
 
@@ -237,7 +238,7 @@ export function useRedisRenameKey(cacheId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
-    onError: (error) => notify("error", "Couldn't rename key", String(error)),
+    onError: (error) => notify("error", "Couldn't rename key", describeApiError(error)),
   });
 }
 
@@ -253,7 +254,7 @@ export function useRedisSetValue(cacheId: string | null) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
-    onError: (error) => notify("error", "Couldn't save value", String(error)),
+    onError: (error) => notify("error", "Couldn't save value", describeApiError(error)),
   });
 }
 
@@ -270,7 +271,7 @@ export function useRedisSetHashField(cacheId: string | null) {
       qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "hash"] });
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
-    onError: (error) => notify("error", "Couldn't save hash field", String(error)),
+    onError: (error) => notify("error", "Couldn't save hash field", describeApiError(error)),
   });
 }
 
@@ -286,7 +287,7 @@ export function useRedisDeleteHashField(cacheId: string | null) {
       qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "hash"] });
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
-    onError: (error) => notify("error", "Couldn't delete hash field", String(error)),
+    onError: (error) => notify("error", "Couldn't delete hash field", describeApiError(error)),
   });
 }
 
@@ -303,7 +304,7 @@ export function useRedisUpdateSortedSetScore(cacheId: string | null) {
       qc.invalidateQueries({ queryKey: ["redis", cacheId, "keys", vars.key, "zset"] });
       qc.invalidateQueries({ queryKey: ["redis", cacheId] });
     },
-    onError: (error) => notify("error", "Couldn't update sorted-set score", String(error)),
+    onError: (error) => notify("error", "Couldn't update sorted-set score", describeApiError(error)),
   });
 }
 
@@ -311,7 +312,7 @@ export function useRedisExportKeys(cacheId: string | null) {
   const { notify } = useNotification();
   return useMutation({
     mutationFn: (keys: string[]) => exportRedisKeys(cacheId!, keys),
-    onError: (error) => notify("error", "Couldn't export keys", String(error)),
+    onError: (error) => notify("error", "Couldn't export keys", describeApiError(error)),
   });
 }
 

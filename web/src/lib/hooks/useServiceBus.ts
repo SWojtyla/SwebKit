@@ -4,9 +4,10 @@ import {
     useQueryClient,
     type QueryClient,
 } from "@tanstack/react-query";
-import { apiFetch, apiSend } from "../api";
+import { describeApiError, apiFetch, apiSend } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
 import type {
+    ConnectionTestResult,
     SbEntityInfo,
     SbEntityStats,
     SbMessage,
@@ -54,7 +55,7 @@ export function useSbTestConnection(
     return useQuery({
         queryKey: ["sb-test", nsId],
         queryFn: ({ signal }) =>
-            apiFetch<{ connected: boolean; error?: string }>(
+            apiFetch<ConnectionTestResult>(
                 `/api/servicebus/${nsId}/test`,
                 { signal },
             ),
@@ -297,7 +298,7 @@ export function useSbSendMessage() {
             invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
         },
         onError: (error) =>
-            notify("error", "Couldn't send message", String(error)),
+            notify("error", "Couldn't send message", describeApiError(error)),
     });
 }
 
@@ -323,7 +324,7 @@ export function useSbScheduleMessage() {
             invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
         },
         onError: (error) =>
-            notify("error", "Couldn't schedule message", String(error)),
+            notify("error", "Couldn't schedule message", describeApiError(error)),
     });
 }
 
@@ -359,7 +360,7 @@ export function useSbCancelScheduled() {
             invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
         },
         onError: (error) =>
-            notify("error", "Couldn't cancel scheduled message", String(error)),
+            notify("error", "Couldn't cancel scheduled message", describeApiError(error)),
     });
 }
 
@@ -387,7 +388,7 @@ export function useSbSaveTemplate() {
             qc.invalidateQueries({ queryKey: ["sb-templates"] });
         },
         onError: (error) =>
-            notify("error", "Couldn't save template", String(error)),
+            notify("error", "Couldn't save template", describeApiError(error)),
     });
 }
 
@@ -401,7 +402,7 @@ export function useSbDeleteTemplate() {
             qc.invalidateQueries({ queryKey: ["sb-templates"] });
         },
         onError: (error) =>
-            notify("error", "Couldn't delete template", String(error)),
+            notify("error", "Couldn't delete template", describeApiError(error)),
     });
 }
 
@@ -423,7 +424,7 @@ export function useSbCompleteMessages() {
             invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
         },
         onError: (error) =>
-            notify("error", "Couldn't complete messages", String(error)),
+            notify("error", "Couldn't complete messages", describeApiError(error)),
     });
 }
 
@@ -445,7 +446,7 @@ export function useSbPurgeMessages() {
             invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
         },
         onError: (error) =>
-            notify("error", "Couldn't purge messages", String(error)),
+            notify("error", "Couldn't purge messages", describeApiError(error)),
     });
 }
 
@@ -498,7 +499,7 @@ export function useSbResubmitDlq() {
             invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
         },
         onError: (error) =>
-            notify("error", "Couldn't resubmit messages", String(error)),
+            notify("error", "Couldn't resubmit messages", describeApiError(error)),
     });
 }
 
@@ -620,7 +621,7 @@ export function useSbReachMessagePreview() {
                 vars.request,
             ),
         onError: (error) =>
-            notify("error", "Couldn't preview reach-message", String(error)),
+            notify("error", "Couldn't preview reach-message", describeApiError(error)),
     });
 }
 
@@ -646,7 +647,7 @@ export function useSbReachMessageStart() {
             invalidateServiceBusQueries(qc, vars.nsId, vars.entityPath);
         },
         onError: (error) =>
-            notify("error", "Couldn't start reach-message", String(error)),
+            notify("error", "Couldn't start reach-message", describeApiError(error)),
     });
 }
 
@@ -670,7 +671,7 @@ export function useSbCancelOperation() {
             invalidateServiceBusQueries(qc, vars.nsId, data.entityPath);
         },
         onError: (error) =>
-            notify("error", "Couldn't cancel operation", String(error)),
+            notify("error", "Couldn't cancel operation", describeApiError(error)),
     });
 }
 
@@ -698,7 +699,7 @@ export function useSbResumeOperation() {
             invalidateServiceBusQueries(qc, vars.nsId, data.entityPath);
         },
         onError: (error) =>
-            notify("error", "Couldn't resume operation", String(error)),
+            notify("error", "Couldn't resume operation", describeApiError(error)),
     });
 }
 
@@ -718,7 +719,7 @@ export function useSbDismissOperation() {
             });
         },
         onError: (error) =>
-            notify("error", "Couldn't dismiss operation", String(error)),
+            notify("error", "Couldn't dismiss operation", describeApiError(error)),
     });
 }
 
@@ -750,7 +751,7 @@ export function useSbRequeueDlqByFilter() {
             );
         },
         onError: (error) =>
-            notify("error", "Couldn't resubmit DLQ group", String(error)),
+            notify("error", "Couldn't resubmit DLQ group", describeApiError(error)),
     });
 }
 
@@ -808,7 +809,7 @@ export function useSbReplayToPreview() {
                 vars.request,
             ),
         onError: (error) =>
-            notify("error", "Couldn't preview replay", String(error)),
+            notify("error", "Couldn't preview replay", describeApiError(error)),
     });
 }
 
@@ -844,6 +845,6 @@ export function useSbReplayToStart() {
             );
         },
         onError: (error) =>
-            notify("error", "Couldn't start replay", String(error)),
+            notify("error", "Couldn't start replay", describeApiError(error)),
     });
 }

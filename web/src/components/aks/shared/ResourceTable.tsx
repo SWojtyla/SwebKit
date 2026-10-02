@@ -14,6 +14,7 @@ import {
     ArrowUpDown,
     Search,
 } from "lucide-react";
+import { ApiError } from "@/lib/api/transport";
 import { SkeletonTableRows } from "@/components/shared/Skeleton";
 import { useGridKeyboardNav } from "@/lib/hooks/useGridKeyboardNav";
 import { extractSortText } from "@/lib/sort-text";
@@ -325,21 +326,49 @@ function ResourceTableInner<
                     className="mb-2 flex flex-col gap-1"
                     data-testid={`${testIdPrefix}s-context-errors`}
                 >
-                    {contextErrors.map((e) => (
-                        <div
-                            key={e.context}
-                            className="flex items-center gap-2 rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive"
-                            data-testid={`${testIdPrefix}s-context-error-${e.context}`}
-                        >
-                            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                            <span>
-                                {e.context}:{" "}
-                                {e.error instanceof Error
-                                    ? e.error.message
-                                    : String(e.error)}
-                            </span>
-                        </div>
-                    ))}
+                    {contextErrors.map((e) => {
+                        const apiErr =
+                            e.error instanceof ApiError ? e.error : null;
+                        return (
+                            <div
+                                key={e.context}
+                                className="rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive"
+                                data-testid={`${testIdPrefix}s-context-error-${e.context}`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                    {apiErr?.kind && (
+                                        <span className="shrink-0 rounded border border-destructive/40 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide">
+                                            {apiErr.kind}
+                                        </span>
+                                    )}
+                                    <span>
+                                        {e.context}:{" "}
+                                        {e.error instanceof Error
+                                            ? e.error.message
+                                            : String(e.error)}
+                                    </span>
+                                </div>
+                                {(apiErr?.detail || apiErr?.hint) && (
+                                    <details className="mt-1 pl-5 text-muted-foreground">
+                                        <summary className="inline cursor-pointer hover:text-foreground">
+                                            details
+                                        </summary>
+                                        {apiErr.detail && (
+                                            <pre className="mt-1 whitespace-pre-wrap break-all font-mono">
+                                                {apiErr.detail}
+                                            </pre>
+                                        )}
+                                        {apiErr.hint && (
+                                            <p className="mt-0.5">
+                                                Hint: {apiErr.hint}
+                                            </p>
+                                        )}
+                                    </details>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             )}
             {visibleRows.length === 0 ? (

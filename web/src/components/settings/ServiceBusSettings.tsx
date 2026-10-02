@@ -5,6 +5,7 @@ import type { ServiceBusNamespace } from "@/lib/types";
 import { DraftInput } from "./DraftInput";
 import { normalizeServiceBusNamespace } from "@/lib/azure-hostname";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { ConnectionTestResultLine } from "@/components/shared/ConnectionTestResultLine";
 import { ProfileListLayout } from "./ProfileListLayout";
 
 /** A namespace is worth confirming removal of once it has real configured data — an
@@ -278,14 +279,10 @@ function NamespaceRow({
                     {test.isFetching ? "Testing…" : "Test connection"}
                 </button>
                 {test.data && (
-                    <span
-                        className={`text-xs ${test.data.connected ? "text-success" : "text-destructive"}`}
-                        data-testid={`sb-test-result-${ns.id}`}
-                    >
-                        {test.data.connected
-                            ? "Connected"
-                            : `Failed: ${test.data.error ?? "unknown error"}`}
-                    </span>
+                    <ConnectionTestResultLine
+                        result={test.data}
+                        testId={`sb-test-result-${ns.id}`}
+                    />
                 )}
                 {test.isError && (
                     <span className="text-xs text-destructive">

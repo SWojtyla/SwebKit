@@ -54,6 +54,81 @@ public class ConnectionTestErrorTests
     }
 }
 
+public class ClassifiedErrorTests
+{
+    [Fact]
+    public void Classify_SocketException_KindUnreachable_WithTypeAndMessageInDetail()
+    {
+        var c = ConnectionTestError.Classify(new System.Net.Sockets.SocketException(10061));
+
+        Assert.Equal("unreachable", c.Kind);
+        Assert.Contains("SocketException", c.Detail);
+        Assert.NotNull(c.Hint);
+    }
+
+    [Fact]
+    public void Classify_Timeout_KindTimeout()
+    {
+        var c = ConnectionTestError.Classify(new TimeoutException("deadline exceeded"));
+
+        Assert.Equal("timeout", c.Kind);
+        Assert.Contains("TimeoutException", c.Detail);
+    }
+
+    [Fact]
+    public void Classify_ServiceBusNotFound_KindNotFound()
+    {
+        var ex = new global::Azure.Messaging.ServiceBus.ServiceBusException(
+            "entity missing",
+            global::Azure.Messaging.ServiceBus.ServiceBusFailureReason.MessagingEntityNotFound);
+
+        var c = ConnectionTestError.Classify(ex);
+
+        Assert.Equal("notFound", c.Kind);
+        Assert.Contains("ServiceBusException", c.Detail);
+    }
+
+    [Fact]
+    public void Classify_WrappedAuthFailure_KindAuth()
+    {
+        var inner = new global::Azure.Identity.AuthenticationFailedException("no token");
+        var ex = new global::Azure.Messaging.ServiceBus.ServiceBusException(
+            "send failed",
+            global::Azure.Messaging.ServiceBus.ServiceBusFailureReason.GeneralError,
+            innerException: inner);
+
+        Assert.Equal("auth", ConnectionTestError.Classify(ex).Kind);
+    }
+
+    [Fact]
+    public void Classify_Detail_IncludesInnerExceptionOneLevelDeep()
+    {
+        var ex = new InvalidOperationException("outer", new InvalidOperationException("inner cause"));
+
+        var c = ConnectionTestError.Classify(ex);
+
+        Assert.Contains("inner cause", c.Detail);
+    }
+
+    [Theory]
+    [InlineData("Endpoint=sb://ns.servicebus.windows.net/;SharedAccessKey=abc123", "Endpoint=***;SharedAccessKey=***")]
+    [InlineData("host.redis.cache.windows.net:6380,password=hunter2,ssl=True", "host.redis.cache.windows.net:6380,password=***,ssl=True")]
+    // Host/server names are diagnostic, not secret — only credential-bearing keys scrub.
+    [InlineData("Server=db;Password=p@ss;User Id=u", "Server=db;Password=***;User Id=u")]
+    public void Scrub_StripsConnectionStringSegments(string raw, string expected)
+    {
+        Assert.Equal(expected, ConnectionTestError.Scrub(raw));
+    }
+
+    [Fact]
+    public void Scrub_LeavesOrdinaryMessagesUntouched()
+    {
+        const string msg = "pod api-xyz in namespace ecommerce has 3 restarts";
+
+        Assert.Equal(msg, ConnectionTestError.Scrub(msg));
+    }
+}
+
 public class ServiceBusEndpointsPeekTests
 {
     [Theory]
@@ -71,17 +146,17 @@ public class ServiceBusEndpointsPeekTests
     }
 }
 
-/// <summary>Simulates a real client failure whose exception message would otherwise leak connection detail.</summary>
+/// <summary>Simulates a real client failure whose exception message embeds a secret-shaped segment.</summary>
 internal sealed class ThrowingTestConnectionAksClient : DemoAksClient
 {
     public override Task<bool> TestConnectionAsync(CancellationToken ct = default) =>
-        throw new InvalidOperationException("kubeconfig at C:\\Users\\me\\.kube\\config, context prod-secrets");
+        throw new InvalidOperationException("kubeconfig at C:\\Users\\me\\.kube\\config missing; Endpoint=https://x;SharedAccessKey=SECRET123");
 }
 
 public class AksTestConnectionEndpointTests
 {
     [Fact]
-    public async Task TestConnectionAsync_ClientThrows_NeverReturnsRawExceptionMessage()
+    public async Task TestConnectionAsync_ClientThrows_ReturnsScrubbedDetail_NeverTheSecret()
     {
         var profile = new ProfileRepository();
         var demo = new DemoModeService();
@@ -92,8 +167,11 @@ public class AksTestConnectionEndpointTests
 
         var ok = Assert.IsAssignableFrom<IValueHttpResult>(result);
         var json = System.Text.Json.JsonSerializer.Serialize(ok.Value);
-        Assert.DoesNotContain("kubeconfig", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("prod-secrets", json);
+        Assert.DoesNotContain("SECRET123", json);
+        Assert.Contains("SharedAccessKey=***", json);
+        // The detail field is where the technical context lives — exception type plus the
+        // scrubbed message, so the user sees *what* failed, not just that it did.
+        Assert.Contains("InvalidOperationException", json);
         Assert.Contains("Connection failed", json);
     }
 }

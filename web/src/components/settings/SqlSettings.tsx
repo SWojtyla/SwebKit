@@ -11,6 +11,7 @@ import type { SqlConnectionEntry, SqlDatabaseInfo } from "@/lib/types";
 import { parseDeclaredObjectsText } from "@/lib/sql-declared";
 import { DraftInput } from "./DraftInput";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { ConnectionTestResultLine } from "@/components/shared/ConnectionTestResultLine";
 import { ProfileListLayout } from "./ProfileListLayout";
 
 /** A connection is worth confirming removal of once it has a real server — an untouched
@@ -472,14 +473,10 @@ function ConnectionRow({
                     {browse.isPending ? "Browsing…" : "Browse databases"}
                 </button>
                 {test.data && (
-                    <span
-                        className={`text-xs ${test.data.connected ? "text-success" : "text-destructive"}`}
-                        data-testid={`sql-test-result-${connection.id}`}
-                    >
-                        {test.data.connected
-                            ? "Connected"
-                            : `Failed: ${test.data.error ?? "unknown error"}`}
-                    </span>
+                    <ConnectionTestResultLine
+                        result={test.data}
+                        testId={`sql-test-result-${connection.id}`}
+                    />
                 )}
                 {test.isError && (
                     <span className="text-xs text-destructive">

@@ -44,6 +44,7 @@ import {
     type MoveCollectionTarget,
 } from "@/lib/collection-tree-utils";
 import { pickNeighborTabId } from "@/lib/request-tab-utils";
+import { describeApiError } from "@/lib/api";
 import type {
     ApiCollection,
     ApiCollectionNode,
@@ -848,7 +849,7 @@ export function ApiClientPageProvider({
             }
             updateCollectionsMutate((prev) => moveNode(prev, nodeId, target), {
                 onSuccess: () => notify("success", "Moved", "Request moved."),
-                onError: (err) => notify("error", "Move failed", err.message),
+                onError: (err) => notify("error", "Move failed", describeApiError(err)),
             });
         },
         [selectedNodeId, updateCollectionsMutate, notify],
@@ -862,7 +863,7 @@ export function ApiClientPageProvider({
                     onSuccess: () =>
                         notify("success", "Moved", "Collection moved."),
                     onError: (err) =>
-                        notify("error", "Move failed", err.message),
+                        notify("error", "Move failed", describeApiError(err)),
                 },
             );
         },

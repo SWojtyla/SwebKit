@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiSend, exportSettings, importSettings, exportTeamPack, importTeamPack } from "../api";
+import { describeApiError, apiFetch, apiSend, exportSettings, importSettings, exportTeamPack, importTeamPack } from "../api";
 import type { TeamPackImportResult } from "../api";
 import { useNotification } from "@/components/layout/notification-context";
 import type {
@@ -56,7 +56,7 @@ export function useUpdateProfile() {
     // resync rather than letting the UI quietly disagree with disk.
     onError: (error) => {
       qc.invalidateQueries({ queryKey: ["profile"] });
-      notify("error", "Couldn't save setting", String(error));
+      notify("error", "Couldn't save setting", describeApiError(error));
     },
   });
 }
@@ -91,7 +91,7 @@ export function useTogglePinnedResource() {
     onSuccess: (data) => qc.setQueryData(["profile"], data),
     onError: (error) => {
       qc.invalidateQueries({ queryKey: ["profile"] });
-      notify("error", "Couldn't update pinned resources", String(error));
+      notify("error", "Couldn't update pinned resources", describeApiError(error));
     },
   });
 }
@@ -129,7 +129,7 @@ export function useUpdateUserSettings() {
     onSuccess: (data) => qc.setQueryData(["user-settings"], data),
     onError: (error) => {
       qc.invalidateQueries({ queryKey: ["user-settings"] });
-      notify("error", "Couldn't save setting", String(error));
+      notify("error", "Couldn't save setting", describeApiError(error));
     },
   });
 }
@@ -138,7 +138,7 @@ export function useExportSettings() {
   const { notify } = useNotification();
   return useMutation({
     mutationFn: exportSettings,
-    onError: (error) => notify("error", "Couldn't export settings", String(error)),
+    onError: (error) => notify("error", "Couldn't export settings", describeApiError(error)),
   });
 }
 
@@ -152,7 +152,7 @@ export function useImportSettings() {
       qc.invalidateQueries({ queryKey: ["user-settings"] });
       qc.invalidateQueries({ queryKey: ["config"] });
     },
-    onError: (error) => notify("error", "Couldn't import settings", String(error)),
+    onError: (error) => notify("error", "Couldn't import settings", describeApiError(error)),
   });
 }
 
@@ -162,7 +162,7 @@ export function useExportTeamPack() {
   const { notify } = useNotification();
   return useMutation({
     mutationFn: exportTeamPack,
-    onError: (error) => notify("error", "Couldn't export team pack", String(error)),
+    onError: (error) => notify("error", "Couldn't export team pack", describeApiError(error)),
   });
 }
 
@@ -185,7 +185,7 @@ export function useImportTeamPack() {
       qc.invalidateQueries({ queryKey: ["sql", "queries"] });
       qc.invalidateQueries({ queryKey: ["monitoring", "rules"] });
     },
-    onError: (error) => notify("error", "Couldn't import team pack", String(error)),
+    onError: (error) => notify("error", "Couldn't import team pack", describeApiError(error)),
   });
 }
 
@@ -208,7 +208,7 @@ export function useUpdateEnvironments() {
       uiState: import("../types").ApiClientUiState;
     }) => apiSend("/api/config/environments", "PUT", store),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["environments"] }),
-    onError: (error) => notify("error", "Couldn't save environments", String(error)),
+    onError: (error) => notify("error", "Couldn't save environments", describeApiError(error)),
   });
 }
 
@@ -242,7 +242,7 @@ export function useToggleDemoMode() {
     },
     onError: (error) => {
       qc.invalidateQueries({ queryKey: ["demo-mode"] });
-      notify("error", "Couldn't toggle demo mode", String(error));
+      notify("error", "Couldn't toggle demo mode", describeApiError(error));
     },
   });
 }

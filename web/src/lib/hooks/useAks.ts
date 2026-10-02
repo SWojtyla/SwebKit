@@ -23,7 +23,7 @@ import {
 import { useNotifyMutation } from "../useNotifyMutation";
 import { invalidateAksQueries } from "../aks-query-keys";
 import { useProfile } from "./useProfile";
-import type { ProfileData } from "../types";
+import type { ProfileData, ConnectionTestResult } from "../types";
 import type {
     AksQueryTarget,
     AksScopedRow,
@@ -199,7 +199,7 @@ export function useAksTestConnection(options?: { enabled?: boolean }) {
     return useQuery({
         queryKey: ["aks-test"],
         queryFn: ({ signal }) =>
-            apiFetch<{ connected: boolean; error?: string }>("/api/aks/test", {
+            apiFetch<ConnectionTestResult>("/api/aks/test", {
                 signal,
             }),
         enabled: options?.enabled ?? true,
@@ -210,7 +210,7 @@ export function useAksSetContext() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (vars: { context: string; defaultNamespace?: string }) =>
-            apiSend<{ connected: boolean; error?: string }>(
+            apiSend<ConnectionTestResult>(
                 "/api/aks/context",
                 "POST",
                 vars,

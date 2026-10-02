@@ -10,6 +10,41 @@ test.describe("Service Bus", () => {
         await setDemoMode(page, false);
     });
 
+    test("a failed entity list shows the classified kind and expandable detail", async ({
+        page,
+    }) => {
+        await page.route("**/api/servicebus/*/queues*", async (route) => {
+            await route.fulfill({
+                status: 502,
+                json: {
+                    error: "Service Bus request failed",
+                    kind: "unreachable",
+                    detail: "ServiceBusException: put_token timed out (ServiceCommunicationProblem)",
+                    hint: "Check the connection string and that the namespace endpoint is reachable",
+                },
+            });
+        });
+
+        await page.goto("/service-bus");
+        await page
+            .getByTestId("sb-namespace-select")
+            .selectOption({ label: "orders-dev" });
+
+        const errorRow = page.getByTestId("query-error").first();
+        await expect(errorRow).toContainText("Service Bus request failed");
+        await expect(errorRow.getByTestId("query-error-kind")).toHaveText(
+            "unreachable",
+        );
+
+        // The classified detail is tucked behind an expandable so the row stays tidy.
+        await errorRow
+            .getByTestId("query-error-details")
+            .locator("summary")
+            .click();
+        await expect(errorRow).toContainText("put_token timed out");
+        await expect(errorRow).toContainText("Check the connection string");
+    });
+
     test("selects demo namespace, queue and displays active messages", async ({
         page,
     }) => {

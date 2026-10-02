@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
+import { describeApiError,
     fetchAccessReport,
     fetchAccessWebhook,
     refreshAccessEntry,
@@ -42,7 +42,7 @@ export function useAccessReportRefresh() {
         mutationFn: () => fetchAccessReport(true),
         onSuccess: (report) => qc.setQueryData(["access", "report"], report),
         onError: (error) =>
-            notify("error", "Couldn't refresh access report", String(error)),
+            notify("error", "Couldn't refresh access report", describeApiError(error)),
     });
 }
 
@@ -69,7 +69,7 @@ export function useAccessEntryRefresh() {
             );
         },
         onError: (error) =>
-            notify("error", "Couldn't refresh entry", String(error)),
+            notify("error", "Couldn't refresh entry", describeApiError(error)),
     });
 }
 
@@ -79,7 +79,7 @@ export function useAccessRequestArtifact() {
     return useMutation<AccessRequestArtifact, Error, AccessRequestArtifactInput>({
         mutationFn: requestAccessArtifact,
         onError: (error) =>
-            notify("error", "Couldn't build access request", String(error)),
+            notify("error", "Couldn't build access request", describeApiError(error)),
     });
 }
 
@@ -104,7 +104,7 @@ export function useSaveAccessWebhook() {
         mutationFn: saveAccessWebhook,
         onSuccess: (view) => qc.setQueryData(["access", "webhook"], view),
         onError: (error) =>
-            notify("error", "Couldn't save webhook settings", String(error)),
+            notify("error", "Couldn't save webhook settings", describeApiError(error)),
     });
 }
 
@@ -115,6 +115,6 @@ export function useSendAccessRequest() {
     return useMutation<AccessRequestSendResult, Error, AccessRequestSendInput>({
         mutationFn: sendAccessRequest,
         onError: (error) =>
-            notify("error", "Couldn't send access request", String(error)),
+            notify("error", "Couldn't send access request", describeApiError(error)),
     });
 }

@@ -8,6 +8,7 @@ import { normalizeRedisCacheHost } from "@/lib/azure-hostname";
 import type { RedisCacheEntry } from "@/lib/types";
 import { DraftInput } from "./DraftInput";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
+import { ConnectionTestResultLine } from "@/components/shared/ConnectionTestResultLine";
 import { ProfileListLayout } from "./ProfileListLayout";
 
 /** A cache is worth confirming removal of once it has real configured data — an untouched
@@ -378,14 +379,10 @@ function CacheRow({
                     {test.isFetching ? "Testing…" : "Test connection"}
                 </button>
                 {test.data && (
-                    <span
-                        className={`text-xs ${test.data.connected ? "text-success" : "text-destructive"}`}
-                        data-testid={`redis-test-result-${cache.id}`}
-                    >
-                        {test.data.connected
-                            ? "Connected"
-                            : `Failed: ${test.data.error ?? "unknown error"}`}
-                    </span>
+                    <ConnectionTestResultLine
+                        result={test.data}
+                        testId={`redis-test-result-${cache.id}`}
+                    />
                 )}
                 {test.isError && (
                     <span className="text-xs text-destructive">
