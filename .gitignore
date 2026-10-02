@@ -42,6 +42,9 @@ artifacts/coverage*/
 scripts/.test-appdata/
 scripts/logs/
 
+# Throwaway appdata roots created by e2e runs
+src-sidecar/.e2e-appdata*/
+
 # Playwright
 **/test-results/
 **/playwright-report/
