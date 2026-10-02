@@ -39,7 +39,7 @@ function Stop-Tree {
 $stoppedAny = $false
 
 # run-dev records the ports it actually bound (possibly relocated off the
-# defaults when 5199/1420 were taken) in dev-ports.json — prefer those for the
+# defaults when 5199/1420 were taken) in dev-ports.json - prefer those for the
 # port fallback, keeping the defaults as a final guess.
 $savedPorts = @{ sidecar = 5199; vite = 1420 }
 $portsFile = Join-Path $logDir 'dev-ports.json'
