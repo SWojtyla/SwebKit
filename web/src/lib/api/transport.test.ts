@@ -7,20 +7,21 @@ describe("apiFetch error mapping", () => {
     it("throws an ApiError carrying kind/detail/hint from the structured payload", async () => {
         vi.stubGlobal(
             "fetch",
-            vi.fn(async () =>
-                new Response(
-                    JSON.stringify({
-                        error: "Service Bus request failed",
-                        kind: "unreachable",
-                        detail: "ServiceBusException: put_token failed",
-                        hint: "Check the connection string",
-                    }),
-                    { status: 502 },
-                ),
+            vi.fn(
+                async () =>
+                    new Response(
+                        JSON.stringify({
+                            error: "Service Bus request failed",
+                            kind: "unreachable",
+                            detail: "ServiceBusException: put_token failed",
+                            hint: "Check the connection string",
+                        }),
+                        { status: 502 },
+                    ),
             ),
         );
 
-        const err = await apiFetch("/x").catch((e) => e);
+        const err = (await apiFetch("/x").catch((e) => e)) as ApiError;
 
         expect(err).toBeInstanceOf(ApiError);
         expect(err.message).toBe("Service Bus request failed");
@@ -36,7 +37,7 @@ describe("apiFetch error mapping", () => {
             vi.fn(async () => new Response("boom", { status: 500 })),
         );
 
-        const err = await apiFetch("/x").catch((e) => e);
+        const err = (await apiFetch("/x").catch((e) => e)) as ApiError;
 
         expect(err).toBeInstanceOf(ApiError);
         expect(err.message).toBe("boom");
@@ -46,15 +47,16 @@ describe("apiFetch error mapping", () => {
     it("reads ProblemDetails detail/title bodies", async () => {
         vi.stubGlobal(
             "fetch",
-            vi.fn(async () =>
-                new Response(
-                    JSON.stringify({ title: "Bad things happened" }),
-                    { status: 400 },
-                ),
+            vi.fn(
+                async () =>
+                    new Response(
+                        JSON.stringify({ title: "Bad things happened" }),
+                        { status: 400 },
+                    ),
             ),
         );
 
-        const err = await apiFetch("/x").catch((e) => e);
+        const err = (await apiFetch("/x").catch((e) => e)) as ApiError;
 
         expect(err.message).toBe("Bad things happened");
     });
@@ -62,7 +64,13 @@ describe("apiFetch error mapping", () => {
 
 describe("describeApiError", () => {
     it("joins message, detail and hint for toasts", () => {
-        const err = new ApiError("Request failed", 502, "unreachable", "SocketException: refused", "Check VPN");
+        const err = new ApiError(
+            "Request failed",
+            502,
+            "unreachable",
+            "SocketException: refused",
+            "Check VPN",
+        );
 
         expect(describeApiError(err)).toBe(
             "Request failed\nSocketException: refused\nCheck VPN",
