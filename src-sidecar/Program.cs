@@ -193,15 +193,22 @@ builder.Services.AddHttpClient<AgentCapabilityTester>();
 builder.Services.AddSingleton<IObservabilityProviderFactory, ObservabilityProviderFactory>();
 builder.Services.AddSingleton<AppInsightsDiscoveryService>();
 builder.Services.AddSingleton<IObservabilityResourceDiscovery, SwebKit.Sidecar.Services.ObservabilityResourceDiscoverySelector>();
+// Log Analytics workspaces (WAF, App Gateway, diagnostic settings) — demo-aware selector,
+// same pattern as App Insights discovery.
+builder.Services.AddSingleton<AzureLogAnalyticsWorkspaceService>();
+builder.Services.AddSingleton<ILogAnalyticsWorkspaceService, SwebKit.Sidecar.Services.LogAnalyticsWorkspaceSelector>();
 // SQL server discovery via ARM — demo-aware selector, same pattern as observability.
 builder.Services.AddSingleton<SqlServerDiscoveryService>();
 builder.Services.AddSingleton<ISqlResourceDiscovery, SwebKit.Sidecar.Services.SqlResourceDiscoverySelector>();
 builder.Services.AddSingleton<IAgentTool, GetMetricsTool>();
 builder.Services.AddSingleton<IAgentTool, QueryLogsTool>();
+builder.Services.AddSingleton<IAgentTool, ListObservabilityResourcesTool>();
+builder.Services.AddSingleton<IAgentTool, QueryWorkspaceLogsTool>();
 
 // Agent tools — Kubernetes, Service Bus, Redis, Storage, and (now that Module 3's confirm-flow
 // exists below) API Client.
 builder.Services.AddSingleton<DemoAksClient>();
+builder.Services.AddSingleton<IAgentTool, ListAksContextsTool>();
 builder.Services.AddSingleton<IAgentTool, GetPodStatusTool>();
 builder.Services.AddSingleton<IAgentTool, ListNamespacesTool>();
 builder.Services.AddSingleton<IAgentTool, ListPodsTool>();

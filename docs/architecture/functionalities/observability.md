@@ -6,7 +6,15 @@ Observability is a live shared-library and sidecar capability used by the agent,
 
 The current stack supports:
 
-- discovering Application Insights resources available to the active Azure identity;
+- discovering Application Insights resources available to the active Azure identity — surfaced
+  to the agent as `list_observability_resources`, whose names/resource ids feed the `resource`
+  parameter of `query_logs`/`get_metrics` (absent it, they use the configured
+  `ObservabilityConfig.SelectedResourceId`);
+- discovering and querying Log Analytics workspaces (WAF, Application Gateway,
+  diagnostic-setting logs) through `ILogAnalyticsWorkspaceService` and the agent's
+  `query_workspace_logs` tool — `AzureLogAnalyticsWorkspaceService` enumerates workspaces via
+  ARM generic resources and runs KQL via `LogsQueryClient.QueryWorkspaceAsync` keyed on the
+  workspace `customerId`;
 - selecting real or demo discovery/providers based on demo mode;
 - querying logs/KQL through the agent's `QueryLogsTool`;
 - retrieving metrics through `GetMetricsTool`;
@@ -45,11 +53,23 @@ GET /api/observability/resources?refresh=true
 Agent model requests query_logs or get_metrics
   → AgentToolCallOrchestrator applies mode/scope/tool gates
   → QueryLogsTool or GetMetricsTool
+  → resource arg? → ObservabilityResourceResolver (name/substring → discovery match)
   → IObservabilityProviderFactory.Create(resourceId, useDemoData)
       → AzureAppInsightsProvider or DemoObservabilityProvider
   → LogsQueryClient / Azure Monitor
   → bounded domain result serialized back to the model
+
+Agent model requests query_workspace_logs
+  → QueryWorkspaceLogsTool
+  → workspace arg? → ILogAnalyticsWorkspaceService.FindWorkspacesAsync (name/id → workspace)
+  → RunWorkspaceQueryAsync(customerId, kql, range, maxRows)
+  → LogsQueryClient.QueryWorkspaceAsync (real) or DemoLogAnalyticsWorkspaceService (demo)
 ```
+
+`query_workspace_logs` doubles as workspace discovery: called without `workspace` it returns
+the discoverable list instead of querying, so discovery and query share one tool surface.
+`LogAnalyticsWorkspaceSelector` in the sidecar picks demo vs. real on `UseDemoData`, same as
+the App Insights selectors.
 
 `AzureAppInsightsProvider.RunQueryAsync` delegates tabular materialization to `LogQueryResultProjector`. The projector reads at most `maxRows + 1`: `maxRows` become output, and the extra row only determines whether the result is truncated. User KQL is not rewritten with an injected `take` clause.
 
@@ -66,9 +86,14 @@ Agent model requests query_logs or get_metrics
 - `src/SwebKit.Observability/GuidedKqlCompiler.cs`
 - `src/SwebKit.Observability/LogQueryResultProjector.cs`
 - `src/SwebKit.Observability/KqlPresets.cs`
+- `src/SwebKit.Observability/AzureLogAnalyticsWorkspaceService.cs`
 - `src/SwebKit.Agents/Tools/QueryLogsTool.cs`
 - `src/SwebKit.Agents/Tools/GetMetricsTool.cs`
+- `src/SwebKit.Agents/Tools/ListObservabilityResourcesTool.cs`
+- `src/SwebKit.Agents/Tools/QueryWorkspaceLogsTool.cs`
+- `src/SwebKit.Agents/Tools/ObservabilityResourceResolver.cs`
 - `src-sidecar/Services/ObservabilityResourceDiscoverySelector.cs`
+- `src-sidecar/Services/LogAnalyticsWorkspaceSelector.cs`
 - `src-sidecar/Endpoints/ObservabilityEndpoints.cs`
 - `src-sidecar/Program.cs` — DI registration
 
@@ -85,6 +110,7 @@ Agent model requests query_logs or get_metrics
 - `tests/SwebKit.Core.Tests/LogQueryResultProjectorTests.cs`
 - `tests/SwebKit.Core.Tests/DemoObservabilityProviderTests.cs`
 - `tests/SwebKit.Agents.Tests/ObservabilityToolsTests.cs`
+- `tests/SwebKit.Agents.Tests/AgentDiscoveryToolsTests.cs`
 - `tests/SwebKit.Sidecar.Tests/ObservabilityEndpointsTests.cs`
 
 Verify the exact test filenames before adding new commands; the live solution-wide baseline is `dotnet test`.

@@ -55,7 +55,7 @@ Read tools execute directly. Mutating tools are named/provided as `propose_*` op
 
 Authorization failures crossing `AgentToolRegistry.ExecuteAsync` are classified by `AccessAdvisor` (`SwebKit.Core/Security`) — a duck-typed recognizer for Azure SDK 401/403, Service Bus AMQP `Unauthorized`, k8s 403, `SqlException` 229/230/297, and Redis NOAUTH/NOPERM — and returned to the model as a structured `{"status":"access_denied", capability, featureArea, requiredAccess, guidance, detail}` rather than a flattened `{"error": …}`. `requiredAccess` names the least-privilege fix per feature area (e.g. `Azure Service Bus Data Receiver`, `Storage Blob Data Reader`, `Monitoring Reader`, `VIEW DEFINITION`/`db_datareader`). The system prompt instructs the model not to retry denied calls and to close investigations with an "Access gaps" section — in locked-down environments this is the difference between a raw 403 and an actionable access request.
 
-Current tool families cover AKS, Service Bus, Redis, SQL, Storage, API Client, Monitoring, Application Insights, workspace investigation, and current screen state.
+Current tool families cover AKS, Service Bus, Redis, SQL, Storage, API Client, Monitoring, Application Insights, Log Analytics workspaces, workspace investigation, and current screen state. Discovery tools (`list_observability_resources`, `list_aks_contexts`, `query_workspace_logs` with no `workspace`) let the model enumerate targetable resources before it declares one unreachable — `query_logs`/`get_metrics` accept a `resource` selector and AKS tools a `context` selector for non-default targets.
 
 ## Context
 

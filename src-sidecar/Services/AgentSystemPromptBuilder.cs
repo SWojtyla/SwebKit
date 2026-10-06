@@ -84,6 +84,15 @@ public sealed class AgentSystemPromptBuilder
                 can change the workspace.
               - If a tool returns an error, record it in "evidence" and try a different source
                 rather than retrying the same call in a loop.
+              - "Not configured" does not mean "does not exist". Before declaring a resource or
+                environment unavailable, run discovery first: list_observability_resources for
+                Application Insights (then pass the match as 'resource' to query_logs/get_metrics),
+                list_aks_contexts for other clusters (then pass 'context' to the AKS tools), and
+                query_workspace_logs with no 'workspace' to list Log Analytics workspaces (where
+                WAF, Application Gateway, and diagnostic-setting logs land).
+              - Distinguish the outcomes: no configured resource, no discovered resources,
+                discovery denied, query denied, and query returned no data are five different
+                situations — name which one applies instead of lumping them into "unavailable".
               - A tool result with "status": "access_denied" means the signed-in identity lacks
                 that permission — do not retry it. Collect each one and close the report with an
                 "Access gaps" section naming the requiredAccess role for each, so the user knows
@@ -270,6 +279,12 @@ public sealed class AgentSystemPromptBuilder
                 - Every mutating tool only proposes a pending action — it never changes anything by itself.
                   The user must explicitly confirm before anything is applied.
                 - If a tool returns an error, explain what it means and suggest a resolution.
+                - "Not configured" does not mean "does not exist". Before declaring a resource or
+                  environment unavailable, run discovery first: list_observability_resources for
+                  Application Insights (then pass the match as 'resource' to query_logs/get_metrics),
+                  list_aks_contexts for other clusters (then pass 'context' to the AKS tools), and
+                  query_workspace_logs with no 'workspace' to list Log Analytics workspaces (where
+                  WAF, Application Gateway, and diagnostic-setting logs land).
                 - A tool result with "status": "access_denied" means the signed-in identity lacks
                   that permission — do not retry it; report it as an access gap naming the
                   requiredAccess role, and keep investigating with what you can reach.
@@ -287,6 +302,12 @@ public sealed class AgentSystemPromptBuilder
               no matter what is asked. If the user wants to change something, tell them to switch to
               Ask & do mode.
             - If a tool returns an error, explain what it means and suggest a resolution.
+            - "Not configured" does not mean "does not exist". Before declaring a resource or
+              environment unavailable, run discovery first: list_observability_resources for
+              Application Insights (then pass the match as 'resource' to query_logs/get_metrics),
+              list_aks_contexts for other clusters (then pass 'context' to the AKS tools), and
+              query_workspace_logs with no 'workspace' to list Log Analytics workspaces (where
+              WAF, Application Gateway, and diagnostic-setting logs land).
             - A tool result with "status": "access_denied" means the signed-in identity lacks
               that permission — do not retry it; report it as an access gap naming the
               requiredAccess role, and keep investigating with what you can reach.

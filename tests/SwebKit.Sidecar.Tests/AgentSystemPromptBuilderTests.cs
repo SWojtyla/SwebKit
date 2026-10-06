@@ -384,4 +384,26 @@ public class AgentSystemPromptBuilderTests
         Assert.Contains("## Response format", prompt);
         Assert.Contains("## Tool policy (Ask mode)", prompt);
     }
+
+    // ── Discovery-before-dead-end guidance (agent-resource-discovery) ──
+
+    [Fact]
+    public void Build_ToolPolicies_InstructDiscoveryBeforeDeclaringUnavailable()
+    {
+        var builder = CreateBuilder();
+        var prompts = new[]
+        {
+            builder.Build(context: null, "ask", "feature", hasToolCalling: true),
+            builder.Build(context: null, "ask_and_do", "feature", hasToolCalling: true),
+            builder.Build(context: null, "ask", "feature", hasToolCalling: true, forBackgroundInvestigation: true),
+        };
+
+        foreach (var prompt in prompts)
+        {
+            Assert.Contains("\"Not configured\" does not mean \"does not exist\"", prompt);
+            Assert.Contains("list_observability_resources", prompt);
+            Assert.Contains("list_aks_contexts", prompt);
+            Assert.Contains("query_workspace_logs", prompt);
+        }
+    }
 }
