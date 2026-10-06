@@ -193,7 +193,10 @@ public partial class KubernetesAksClient
     {
         return await WithAuthRetryAsync(async () =>
         {
-            var pod = await _client.CoreV1.ReadNamespacedPodAsync(podName, ns, cancellationToken: ct).ConfigureAwait(false);
+            // FindPodAsync (list + field selector) rather than ReadNamespacedPodAsync: a named
+            // 'pods get' 403s for roles that hold pods list + pods/log but not pods get.
+            var pod = await FindPodAsync(ns, podName, ct).ConfigureAwait(false)
+                ?? throw new InvalidOperationException($"Pod '{podName}' was not found in namespace '{ns}'.");
             var containers = pod.Spec?.Containers ?? [];
 
             // Resolve the referenced ConfigMaps concurrently. The comment here used to say "batch" while

@@ -133,4 +133,16 @@ services.AddHttpClient("MyClient")
 
 ---
 
+---
+
+## CS-13 — `ReadNamespacedPodAsync` needs `pods get`, a stronger RBAC grant than the app requires
+
+**Symptom:** Multi-pod log correlation shows `pods "x" is forbidden: User "..." cannot get resource "pods"` per pod, while single-pod logs, pod lists, and pod tables all work.
+
+**Cause:** RBAC `get`, `list`, and `watch` are separate verbs, and `pods/log` is a separate subresource. A role granting `pods list` + `pods/log get` (but not `pods get`) lets the user browse pods and stream logs, yet `StreamPodLogsAsync`'s container resolution — `ReadNamespacedPodAsync` to pick the first container when the request left `container` empty — 403'd. The multi-pod view is the caller that always omits `container`; the single-pod view passes `containers[0]` from the already-listed `PodInfo`, so it never hit the `get`.
+
+**Fix:** Resolve single resources through a field-selector list (`ListNamespacedPodAsync(ns, fieldSelector: "metadata.name={name}")`), not a named `get`, whenever a weaker-verb equivalent exists — see `KubernetesAksClient.FindPodAsync`. The same applies to every workload-kind read (`deployments get` etc.) a narrowly-scoped role may deny. When degrading is better than failing (container resolution for logs), catch the lookup failure and proceed unqualified — the log API accepts no-container requests on single-container pods and returns its own explicit "choose a container" error otherwise. Keep rethrowing `OperationCanceledException` ahead of the catch-all (CS-2).
+
+---
+
 _See also: [azure-sdk.md](azure-sdk.md)_
