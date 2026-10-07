@@ -20,7 +20,7 @@ public sealed class GetPodStatusTool : IAccessAwareTool
 
     public string Name => "get_pod_status";
 
-    public string Description => "Returns the current status of a Kubernetes pod including phase, restart count, container states, and recent events.";
+    public string Description => "Returns the current status of a Kubernetes pod including phase, restart count, container states, and recent events. A get on a named pod does NOT require pods list rights — call it directly when the pod name is known, even if list_pods was denied.";
 
     public FeatureArea FeatureArea => FeatureArea.Aks;
 
