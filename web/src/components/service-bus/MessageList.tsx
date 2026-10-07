@@ -224,7 +224,8 @@ export function MessageList({
     const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null);
 
     const handleBulkComplete = useCallback(() => {
-        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0) return;
+        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0)
+            return;
         const seqNumbers = messages
             .filter((m) => selectedMsgs.has(sbMessageKey(m)))
             .map((m) => m.sequenceNumber)
@@ -234,7 +235,8 @@ export function MessageList({
     }, [nsId, entity, sessionEntity, selectedMsgs, messages]);
 
     const handleBulkResubmit = useCallback(() => {
-        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0) return;
+        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0)
+            return;
         const seqNumbers = messages
             .filter((m) => selectedMsgs.has(sbMessageKey(m)))
             .map((m) => m.sequenceNumber)
@@ -248,7 +250,8 @@ export function MessageList({
     // the entity's DLQ with a recorded reason — not a copy-and-delete. Only
     // meaningful on the active view.
     const handleBulkDeadLetter = useCallback(() => {
-        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0) return;
+        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0)
+            return;
         const seqNumbers = messages
             .filter((m) => selectedMsgs.has(sbMessageKey(m)))
             .map((m) => m.sequenceNumber)
@@ -264,7 +267,8 @@ export function MessageList({
     // confirm text and sequence numbers stay stable even if the list refreshes
     // before confirm.
     const handleBulkResend = useCallback(() => {
-        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0) return;
+        if (!nsId || !entity || sessionEntity || selectedMsgs.size === 0)
+            return;
         const selected = messages.filter((m) =>
             selectedMsgs.has(sbMessageKey(m)),
         );
@@ -554,7 +558,7 @@ export function MessageList({
     if (!entity) {
         return (
             <div
-                className="flex h-full items-center justify-center text-sm text-muted-foreground"
+                className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground"
                 data-testid="message-list-empty"
             >
                 Select an entity
@@ -565,7 +569,7 @@ export function MessageList({
     if (isLoading) {
         return (
             <div
-                className="p-4 text-sm text-muted-foreground"
+                className="min-h-0 flex-1 p-4 text-sm text-muted-foreground"
                 data-testid="message-list-loading"
             >
                 Loading messages...
@@ -579,7 +583,7 @@ export function MessageList({
     if (isError) {
         return (
             <div
-                className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center"
+                className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4 text-center"
                 data-testid="message-list-error"
             >
                 <AlertCircle className="h-6 w-6 shrink-0 text-destructive" />
@@ -603,7 +607,7 @@ export function MessageList({
     return (
         <div
             ref={panelRef}
-            className="flex h-full flex-col"
+            className="flex min-h-0 flex-1 flex-col"
             data-testid="message-list-container"
         >
             <MessageListToolbar

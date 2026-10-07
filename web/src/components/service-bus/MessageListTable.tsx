@@ -29,7 +29,7 @@ export function MessageTableEmpty({
 }) {
     return (
         <div
-            className="flex h-full items-center justify-center text-sm text-muted-foreground"
+            className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground"
             data-testid={
                 sourceEmpty
                     ? "message-list-no-messages"
@@ -60,10 +60,7 @@ export function MessageTableHeader({
             style={{ gridTemplateColumns: grid.gridTemplateColumns }}
             role="row"
         >
-            <div
-                className="flex items-center px-2 py-1.5"
-                role="columnheader"
-            >
+            <div className="flex items-center px-2 py-1.5" role="columnheader">
                 <input
                     type="checkbox"
                     checked={allSelected}

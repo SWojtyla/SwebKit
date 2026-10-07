@@ -7,6 +7,8 @@ import {
     Columns,
     Download,
     Bookmark,
+    ListOrdered,
+    Timer,
 } from "lucide-react";
 import { AdvancedFilterPanel } from "./AdvancedFilterPanel";
 import type { AdvancedFilterRule } from "./filterTypes";
@@ -40,7 +42,9 @@ export interface FilterToolbarProps {
     onSaveFilter: () => void;
     // Preferences
     prefs: SbListPreferences;
-    onPrefsChange: (updater: (p: SbListPreferences) => SbListPreferences) => void;
+    onPrefsChange: (
+        updater: (p: SbListPreferences) => SbListPreferences,
+    ) => void;
     nsbMode: boolean;
     // Filter toggles
     filtersEnabled: boolean;
@@ -134,9 +138,7 @@ export function MessageListToolbar(p: FilterToolbarProps) {
                                     type="text"
                                     value={p.saveFilterName}
                                     onChange={(e) =>
-                                        p.onSaveFilterNameChange(
-                                            e.target.value,
-                                        )
+                                        p.onSaveFilterNameChange(e.target.value)
                                     }
                                     onKeyDown={(e) =>
                                         e.key === "Enter" && p.onSaveFilter()
@@ -183,45 +185,59 @@ export function MessageListToolbar(p: FilterToolbarProps) {
                 )}
             </div>
 
-            {/* Peek count selector */}
-            <select
-                data-testid="peek-count-select"
-                value={p.prefs.peekCount}
-                onChange={(e) =>
-                    p.onPrefsChange((prev) => ({
-                        ...prev,
-                        peekCount: Number(e.target.value),
-                    }))
-                }
-                className="rounded-md border bg-card px-1.5 py-1.5 text-xs"
-                title="Peek count"
+            {/* Peek count selector — icon + label make it clear this number is
+                how many messages each peek loads, not a filter value. */}
+            <label
+                className="flex items-center gap-1 rounded-md border bg-card px-1.5 py-1 text-xs"
+                title="Messages per peek — how many are fetched per load"
             >
-                {PEEK_COUNT_OPTIONS.map((c) => (
-                    <option key={c} value={c}>
-                        {c}
-                    </option>
-                ))}
-            </select>
+                <ListOrdered className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="sr-only">Messages per peek</span>
+                <select
+                    data-testid="peek-count-select"
+                    value={p.prefs.peekCount}
+                    onChange={(e) =>
+                        p.onPrefsChange((prev) => ({
+                            ...prev,
+                            peekCount: Number(e.target.value),
+                        }))
+                    }
+                    className="bg-transparent py-0.5 text-xs outline-none"
+                >
+                    {PEEK_COUNT_OPTIONS.map((c) => (
+                        <option key={c} value={c}>
+                            {c}
+                        </option>
+                    ))}
+                </select>
+            </label>
 
-            {/* Auto-refresh selector */}
-            <select
-                data-testid="auto-refresh-select"
-                value={p.prefs.autoRefreshInterval}
-                onChange={(e) =>
-                    p.onPrefsChange((prev) => ({
-                        ...prev,
-                        autoRefreshInterval: Number(e.target.value),
-                    }))
-                }
-                className="rounded-md border bg-card px-1.5 py-1.5 text-xs"
-                title="Auto-refresh"
+            {/* Auto-refresh interval — the bare "10s" read as a column filter;
+                the timer icon makes it an interval control. */}
+            <label
+                className="flex items-center gap-1 rounded-md border bg-card px-1.5 py-1 text-xs"
+                title="Auto-refresh interval — how often the list re-peeks"
             >
-                {AUTO_REFRESH_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                    </option>
-                ))}
-            </select>
+                <Timer className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="sr-only">Auto-refresh interval</span>
+                <select
+                    data-testid="auto-refresh-select"
+                    value={p.prefs.autoRefreshInterval}
+                    onChange={(e) =>
+                        p.onPrefsChange((prev) => ({
+                            ...prev,
+                            autoRefreshInterval: Number(e.target.value),
+                        }))
+                    }
+                    className="bg-transparent py-0.5 text-xs outline-none"
+                >
+                    {AUTO_REFRESH_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                            {opt.value === 0 ? "Off" : `every ${opt.label}`}
+                        </option>
+                    ))}
+                </select>
+            </label>
 
             {/* Row density selector */}
             <select
@@ -285,9 +301,7 @@ export function MessageListToolbar(p: FilterToolbarProps) {
                     className="flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent"
                 >
                     <X className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">
-                        Clear all filters
-                    </span>
+                    <span className="hidden sm:inline">Clear all filters</span>
                 </button>
             )}
             {p.advancedEnabled && (
@@ -325,7 +339,10 @@ export function MessageListToolbar(p: FilterToolbarProps) {
             <button
                 data-testid="toggle-nsb-mode"
                 onClick={() =>
-                    p.onPrefsChange((prev) => ({ ...prev, nsbMode: !p.nsbMode }))
+                    p.onPrefsChange((prev) => ({
+                        ...prev,
+                        nsbMode: !p.nsbMode,
+                    }))
                 }
                 title="Toggle NServiceBus view — shows endpoint, message type, conversation ID"
                 className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs ${
@@ -342,7 +359,9 @@ export function MessageListToolbar(p: FilterToolbarProps) {
 
 export interface ColumnTogglePanelProps {
     prefs: SbListPreferences;
-    onPrefsChange: (updater: (p: SbListPreferences) => SbListPreferences) => void;
+    onPrefsChange: (
+        updater: (p: SbListPreferences) => SbListPreferences,
+    ) => void;
     visibleColumns: Set<string>;
     suggestedColumns: string[];
     customColumnInput: string;
@@ -390,9 +409,7 @@ export function ColumnTogglePanel(p: ColumnTogglePanelProps) {
                             >
                                 {col}
                                 <button
-                                    onClick={() =>
-                                        p.onRemoveCustomColumn(col)
-                                    }
+                                    onClick={() => p.onRemoveCustomColumn(col)}
                                     className="text-muted-foreground hover:text-foreground"
                                 >
                                     <X className="h-3 w-3" />
@@ -507,7 +524,9 @@ export function SessionChipBar({
             data-testid="session-chip-bar"
         >
             <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="mr-1 text-xs text-muted-foreground">Sessions:</span>
+            <span className="mr-1 text-xs text-muted-foreground">
+                Sessions:
+            </span>
             {sessions.map((session) => {
                 const active = pinnedSessionId === session.sessionId;
                 return (
