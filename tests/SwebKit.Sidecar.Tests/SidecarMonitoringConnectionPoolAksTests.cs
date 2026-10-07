@@ -168,6 +168,43 @@ public class SidecarMonitoringConnectionPoolAksTests
     }
 
     [Fact]
+    public void ResolveAksContext_ReturnsConfiguredContext_WhenEmptyOrNull()
+    {
+        var (pool, profile, _, _) = Build();
+        profile.Config.AksConfig = new AksConfig { KubeconfigContext = "ctx-default", KubeconfigPath = "/tmp/kubeconfig" };
+
+        Assert.Equal("ctx-default", pool.ResolveAksContext(null));
+        Assert.Equal("ctx-default", pool.ResolveAksContext(""));
+    }
+
+    [Fact]
+    public void ResolveAksContext_ReturnsExplicitContext_Untouched()
+    {
+        var (pool, profile, _, _) = Build();
+        profile.Config.AksConfig = new AksConfig { KubeconfigContext = "ctx-default", KubeconfigPath = "/tmp/kubeconfig" };
+
+        Assert.Equal("ctx-other", pool.ResolveAksContext("ctx-other"));
+    }
+
+    [Fact]
+    public void ResolveAksContext_ReturnsNull_WhenNothingConfigured()
+    {
+        var (pool, _, _, _) = Build();
+
+        Assert.Null(pool.ResolveAksContext(null));
+    }
+
+    [Fact]
+    public void ResolveAksContext_ReturnsDemoCurrentContext_InDemoMode()
+    {
+        var (pool, _, demo, _) = Build();
+        demo.IsDemoMode = true;
+
+        // DemoAksClient.GetContextsAsync marks aks-ecommerce-dev as IsCurrent.
+        Assert.Equal("aks-ecommerce-dev", pool.ResolveAksContext(null));
+    }
+
+    [Fact]
     public void EvictAksClients_DropsCachedClients_ButLeavesThePoolUsable()
     {
         var (pool, profile, _, factory) = Build();
