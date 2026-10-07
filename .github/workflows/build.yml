@@ -222,6 +222,13 @@ jobs:
         working-directory: web
         run: npx playwright install --with-deps chromium
 
+      # systemd-oomd on recent ubuntu-latest images SIGKILLs test processes on
+      # memory *pressure* spikes (vite startup compiles at ~200% CPU) with plenty
+      # of RAM still free — exit 137, no kernel OOM in dmesg. Stop it for this
+      # job so the suite isn't killed before it can start.
+      - name: Disable systemd-oomd
+        run: sudo systemctl disable --now systemd-oomd || true
+
       # Build once, in isolation: `dotnet run` in globalSetup would otherwise do
       # this restore+compile inside the test step while node/vite are already
       # running. -nr:false + UseSharedCompilation=false keep MSBuild/Roslyn
@@ -245,6 +252,8 @@ jobs:
             free -h
             ps aux --sort=-%mem | head -15
             sudo dmesg | tail -30
+            sudo journalctl -u systemd-oomd --since "-10 min" --no-pager | tail -30
+            sudo journalctl --since "-2 min" --no-pager | grep -iE "oom|kill" | tail -20
             exit $code
           }
 
