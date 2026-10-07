@@ -47,8 +47,24 @@ public partial class KubernetesAksClient
         var resolvedContainer = container;
         if (string.IsNullOrEmpty(resolvedContainer))
         {
-            var pod = await _client.CoreV1.ReadNamespacedPodAsync(podName, ns, cancellationToken: ct).ConfigureAwait(false);
-            resolvedContainer = ResolveContainer(container, (pod.Spec?.Containers ?? []).Select(c => c.Name));
+            V1Pod? pod = null;
+            try
+            {
+                pod = await FindPodAsync(ns, podName, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Even the list can be denied (pods/log-only RBAC). Degrade to an unqualified
+                // log request: the API accepts it on single-container pods and answers
+                // multi-container ones with its own "choose a container" error — both strictly
+                // better than failing here.
+                _logger.LogWarning(ex, "Container resolution for '{Namespace}/{PodName}' failed; requesting logs unqualified", ns, podName);
+            }
+            resolvedContainer = ResolveContainer(null, (pod?.Spec?.Containers ?? []).Select(c => c.Name));
         }
 
         var stream = await _client.CoreV1.ReadNamespacedPodLogAsync(

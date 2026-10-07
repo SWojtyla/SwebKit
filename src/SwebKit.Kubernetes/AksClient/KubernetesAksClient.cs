@@ -443,6 +443,22 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
         }).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Fetches a single pod through <c>pods list</c> filtered on <c>metadata.name</c> rather
+    /// than <c>pods get</c>: <c>list</c> is a separate (and for this app's callers, already
+    /// held) RBAC grant, while the named read breaks users whose role allows
+    /// <c>pods/log</c> + <c>pods list</c> but not <c>pods get</c> — the multi-pod log view
+    /// 403'd on exactly that. Returns <see langword="null"/> when the pod does not exist;
+    /// list failures (including a denied <c>list</c>) propagate for the caller to handle.
+    /// </summary>
+    private async Task<V1Pod?> FindPodAsync(string ns, string podName, CancellationToken ct)
+    {
+        var pods = await _client.CoreV1
+            .ListNamespacedPodAsync(ns, fieldSelector: $"metadata.name={podName}", cancellationToken: ct)
+            .ConfigureAwait(false);
+        return pods.Items.FirstOrDefault();
+    }
+
     /// <summary>The pod's managing controller from <c>ownerReferences</c> — controller=true
     /// first, then any named owner (same precedence as <c>GetJobSource</c>). A CronJob's pod
     /// reports owner Kind=Job; that is enough to tell scheduled cleanup from a real
@@ -661,7 +677,8 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
 
             case "pod":
                 {
-                    var pod = await _client.CoreV1.ReadNamespacedPodAsync(workloadName, ns, cancellationToken: ct).ConfigureAwait(false);
+                    var pod = await FindPodAsync(ns, workloadName, ct).ConfigureAwait(false)
+                        ?? throw new InvalidOperationException($"Pod '{workloadName}' was not found in namespace '{ns}'.");
                     return (
                         [pod],
                         pod.Metadata?.Labels is not null
@@ -937,7 +954,8 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
             object resource = kind.ToLowerInvariant() switch
             {
                 "deployment" => await _client.AppsV1.ReadNamespacedDeploymentAsync(name, ns, cancellationToken: ct).ConfigureAwait(false),
-                "pod" => await _client.CoreV1.ReadNamespacedPodAsync(name, ns, cancellationToken: ct).ConfigureAwait(false),
+                "pod" => (await FindPodAsync(ns, name, ct).ConfigureAwait(false))
+                    ?? throw new InvalidOperationException($"Pod '{name}' was not found in namespace '{ns}'."),
                 "ingress" => await _client.NetworkingV1.ReadNamespacedIngressAsync(name, ns, cancellationToken: ct).ConfigureAwait(false),
                 "service" => await _client.CoreV1.ReadNamespacedServiceAsync(name, ns, cancellationToken: ct).ConfigureAwait(false),
                 "statefulset" => await _client.AppsV1.ReadNamespacedStatefulSetAsync(name, ns, cancellationToken: ct).ConfigureAwait(false),
