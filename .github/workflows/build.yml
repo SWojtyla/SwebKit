@@ -242,11 +242,15 @@ jobs:
       - name: Upload Playwright report
         # playwright.config.ts uses the "list" reporter (no HTML report file) by
         # design for fast local runs; this only picks one up if a future change
-        # adds a file-based reporter. Never fail the job over a missing report.
+        # adds a file-based reporter. test-results/ holds per-failure screenshots,
+        # videos and traces — without it CI failures are undebuggable. Never fail
+        # the job over a missing directory.
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: web/playwright-report/
+          path: |
+            web/playwright-report/
+            web/test-results/
           retention-days: 14
           if-no-files-found: ignore
