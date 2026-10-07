@@ -222,13 +222,6 @@ jobs:
         working-directory: web
         run: npx playwright install --with-deps chromium
 
-      # systemd-oomd on recent ubuntu-latest images SIGKILLs test processes on
-      # memory *pressure* spikes (vite startup compiles at ~200% CPU) with plenty
-      # of RAM still free — exit 137, no kernel OOM in dmesg. Stop it for this
-      # job so the suite isn't killed before it can start.
-      - name: Disable systemd-oomd
-        run: sudo systemctl disable --now systemd-oomd || true
-
       # Build once, in isolation: `dotnet run` in globalSetup would otherwise do
       # this restore+compile inside the test step while node/vite are already
       # running. -nr:false + UseSharedCompilation=false keep MSBuild/Roslyn
@@ -244,26 +237,7 @@ jobs:
         working-directory: web
         env:
           PLAYWRIGHT_SIDECAR_DLL: src-sidecar/bin/Debug/net10.0/SwebKit.Sidecar.dll
-        run: |
-          set -x
-          node --version
-          npx playwright --version
-          npx playwright test --list > /tmp/pw-list.txt 2>&1; echo "pw-list exit: $?"; tail -5 /tmp/pw-list.txt
-          dotnet ../src-sidecar/bin/Debug/net10.0/SwebKit.Sidecar.dll --urls http://127.0.0.1:5198 &
-          SIDECAR_PID=$!
-          sleep 8
-          curl -sf http://127.0.0.1:5198/health && echo "sidecar healthy"
-          kill $SIDECAR_PID 2>/dev/null; wait $SIDECAR_PID 2>/dev/null
-          echo "probes done — starting suite"
-          npx playwright test || {
-            code=$?
-            echo "=== playwright exited with $code — memory/process diagnostics ==="
-            free -h
-            ps aux --sort=-%mem | head -15
-            sudo dmesg | tail -30
-            sudo journalctl --since "-2 min" --no-pager | grep -iE "oom|kill" | tail -20
-            exit $code
-          }
+        run: npx playwright test
 
       - name: Upload Playwright report
         # playwright.config.ts uses the "list" reporter (no HTML report file) by

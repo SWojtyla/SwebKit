@@ -44,7 +44,7 @@ const sidecarDll = process.env.PLAYWRIGHT_SIDECAR_DLL
  * Best-effort kill of a process listening on a local TCP port. On Windows this
  * uses `Get-NetTCPConnection`; on Unix it uses `lsof`. Errors are ignored.
  */
-function killProcessOnPort(port: string) {
+export function killProcessOnPort(port: string) {
     // Numeric-only guard plus argv-style spawns (no shell): the port is a
     // process.env value, so it must never be interpolated into a command line.
     if (!/^\d+$/.test(port)) return;
@@ -64,10 +64,19 @@ function killProcessOnPort(port: string) {
                 { stdio: "ignore", timeout: 10000 },
             );
         } else {
-            const pids = spawnSync("lsof", [`-ti:${port}`], {
-                stdio: ["ignore", "pipe", "ignore"],
-                timeout: 10000,
-            })
+            // -sTCP:LISTEN is load-bearing: plain `-i:<port>` also matches
+            // outbound and TIME_WAIT sockets — Playwright's own webServer
+            // readiness probe connects to the vite port, so the unfiltered
+            // query returned the test process's own pid and `kill -9`
+            // SIGKILLed it mid-run (silent exit 137).
+            const pids = spawnSync(
+                "lsof",
+                ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"],
+                {
+                    stdio: ["ignore", "pipe", "ignore"],
+                    timeout: 10000,
+                },
+            )
                 .stdout?.toString()
                 .split("\n")
                 .map((p) => p.trim())
@@ -91,9 +100,9 @@ function killProcessOnPort(port: string) {
  */
 export async function resetE2EAppData() {
     killProcessOnPort(sidecarPort);
-    // Playwright's webServer teardown can orphan vite on [::1]:<vitePort> —
-    // clear it here too so the next run's port check doesn't see the zombie.
-    killProcessOnPort(vitePort);
+    // Stale vite listeners are cleared in playwright.config.ts instead: the
+    // webServer plugin spawns the fresh vite BEFORE globalSetup runs, so killing
+    // a vitePort listener here would take out this run's own dev server.
 
     for (let i = 0; i < 30; i++) {
         try {
