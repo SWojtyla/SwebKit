@@ -1,11 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { killProcessOnPort, sidecarPort, vitePort } from "./e2e/test-config";
-
-// Clear a stale vite from a previous run before anything else: the webServer
-// plugin spawns the fresh dev server before globalSetup runs, so this is the
-// last point where killing a listener on vitePort is guaranteed to only ever
-// hit a leftover zombie, never the server this run is about to start.
-killProcessOnPort(vitePort);
+import { sidecarPort, vitePort } from "./e2e/test-config";
 
 /**
  * Playwright E2E configuration for SwebKit.
