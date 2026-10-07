@@ -245,14 +245,22 @@ jobs:
         env:
           PLAYWRIGHT_SIDECAR_DLL: src-sidecar/bin/Debug/net10.0/SwebKit.Sidecar.dll
         run: |
-          free -h
+          set -x
+          node --version
+          npx playwright --version
+          npx playwright test --list > /tmp/pw-list.txt 2>&1; echo "pw-list exit: $?"; tail -5 /tmp/pw-list.txt
+          dotnet ../src-sidecar/bin/Debug/net10.0/SwebKit.Sidecar.dll --urls http://127.0.0.1:5198 &
+          SIDECAR_PID=$!
+          sleep 8
+          curl -sf http://127.0.0.1:5198/health && echo "sidecar healthy"
+          kill $SIDECAR_PID 2>/dev/null; wait $SIDECAR_PID 2>/dev/null
+          echo "probes done — starting suite"
           npx playwright test || {
             code=$?
             echo "=== playwright exited with $code — memory/process diagnostics ==="
             free -h
             ps aux --sort=-%mem | head -15
             sudo dmesg | tail -30
-            sudo journalctl -u systemd-oomd --since "-10 min" --no-pager | tail -30
             sudo journalctl --since "-2 min" --no-pager | grep -iE "oom|kill" | tail -20
             exit $code
           }
