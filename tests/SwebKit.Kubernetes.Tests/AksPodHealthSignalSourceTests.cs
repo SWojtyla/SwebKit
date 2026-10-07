@@ -14,11 +14,16 @@ internal sealed class RecordingAksClient : IAksClient
 
     public string? LastNamespace { get; private set; }
 
+    /// <summary>When set, <see cref="GetPodsAsync"/> throws this — drives the Error path.</summary>
+    public Exception? GetPodsError { get; set; }
+
     public void EnqueuePods(params PodInfo[] pods) => _podResponses.Enqueue(pods);
 
     public Task<IReadOnlyList<PodInfo>> GetPodsAsync(string ns, string? labelSelector = null, CancellationToken ct = default)
     {
         LastNamespace = ns;
+        if (GetPodsError is not null)
+            return Task.FromException<IReadOnlyList<PodInfo>>(GetPodsError);
         return Task.FromResult(_podResponses.Count > 0 ? _podResponses.Dequeue() : []);
     }
 
@@ -62,10 +67,13 @@ internal sealed class RecordingAksClient : IAksClient
     public Task<IReadOnlyList<CronJobInfo>> GetCronJobsAsync(string ns, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<CronJobInfo>>([]);
 }
 
-internal sealed class FakePool(IAksClient? client) : IMonitoringConnectionPool
+internal sealed class FakePool(IAksClient? client, string? configuredContext = null) : IMonitoringConnectionPool
 {
     public IAksClient? GetAksClient() => client;
     public IAksClient? GetAksClient(string? context) => client;
+    // Mirrors SidecarMonitoringConnectionPool: empty pin → the configured context.
+    public string? ResolveAksContext(string? context) =>
+        string.IsNullOrWhiteSpace(context) ? configuredContext : context;
     public IServiceBusClient? GetServiceBusClient(string alias) => throw new NotSupportedException();
     public ValueTask<IRedisClient?> GetRedisClientAsync(string displayName, CancellationToken ct = default) => throw new NotSupportedException();
     public void InvalidateStaleConnections() { }
@@ -101,8 +109,8 @@ public class AksPodHealthSignalSourceTests
         OwnerKind = ownerKind,
     };
 
-    private static AksPodHealthSignalSource Source(IAksClient? client) =>
-        new(new FakePool(client), NullLogger<AksPodHealthSignalSource>.Instance);
+    private static AksPodHealthSignalSource Source(IAksClient? client, string? configuredContext = null) =>
+        new(new FakePool(client, configuredContext), NullLogger<AksPodHealthSignalSource>.Instance);
 
     [Fact]
     public async Task EvaluateAsync_EmptyNamespace_PassesEmptyStringToClient()
@@ -150,6 +158,48 @@ public class AksPodHealthSignalSourceTests
         var result = await source.EvaluateAsync(Rule("dev-briocomp"), CancellationToken.None);
 
         Assert.Equal(AlertSignalStatus.Ok, result.Status);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_Error_PrefixesMessageWithPinnedContext()
+    {
+        // "pods is forbidden" alone doesn't say which cluster answered — the error must
+        // name the context the rule evaluated against.
+        var client = new RecordingAksClient { GetPodsError = new InvalidOperationException("pods is forbidden") };
+        var source = Source(client);
+        var rule = Rule("dev-briocomp");
+        rule.AksPodParams!.KubeconfigContext = "aks-prod";
+
+        var result = await source.EvaluateAsync(rule, CancellationToken.None);
+
+        Assert.Equal(AlertSignalStatus.Error, result.Status);
+        Assert.Equal("[aks-prod] pods is forbidden", result.Message);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_Error_ResolvesConfiguredContext_WhenRuleHasNoPin()
+    {
+        // A rule following "Configured context" must still name the cluster — the pool
+        // resolves the profile's configured context for it.
+        var client = new RecordingAksClient { GetPodsError = new InvalidOperationException("pods is forbidden") };
+        var source = Source(client, configuredContext: "aks-dev");
+
+        var result = await source.EvaluateAsync(Rule("dev-briocomp"), CancellationToken.None);
+
+        Assert.Equal(AlertSignalStatus.Error, result.Status);
+        Assert.Equal("[aks-dev] pods is forbidden", result.Message);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_Error_WithoutKnownContext_LeavesMessageUnprefixed()
+    {
+        var client = new RecordingAksClient { GetPodsError = new InvalidOperationException("pods is forbidden") };
+        var source = Source(client); // no configured context → kubeconfig current-context fallback
+
+        var result = await source.EvaluateAsync(Rule("dev-briocomp"), CancellationToken.None);
+
+        Assert.Equal(AlertSignalStatus.Error, result.Status);
+        Assert.Equal("pods is forbidden", result.Message);
     }
 
     [Fact]

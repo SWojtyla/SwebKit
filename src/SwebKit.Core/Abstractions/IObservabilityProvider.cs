@@ -53,3 +53,32 @@ public interface IGuidedKqlCompiler
 {
     GuidedKqlCompileResult Compile(GuidedKqlQueryDefinition definition);
 }
+
+/// <summary>One Log Analytics workspace as discovered through ARM — carries the
+/// <c>customerId</c> the Logs query API keys on (<c>QueryWorkspaceAsync</c> takes the
+/// workspace customerId GUID, not the ARM resource id).</summary>
+public record LogAnalyticsWorkspaceInfo(
+    string ResourceId,
+    string Name,
+    string CustomerId,
+    string SubscriptionId,
+    string SubscriptionName,
+    string ResourceGroup,
+    string Location);
+
+/// <summary>
+/// Finds Log Analytics workspaces and runs KQL against them — the workspace analogue of the
+/// <see cref="IObservabilityResourceDiscovery"/> + <see cref="IObservabilityProvider"/> pair
+/// for App Insights. Kept separate because the query surface differs (workspace customerId vs.
+/// resource id) and a workspace carries no overview/metrics/presets concept.
+/// </summary>
+public interface ILogAnalyticsWorkspaceService
+{
+    /// <summary>Workspaces visible to the signed-in identity across subscriptions, optionally
+    /// narrowed by a case-insensitive substring matched against the workspace name and its ARM
+    /// resource id.</summary>
+    Task<IReadOnlyList<LogAnalyticsWorkspaceInfo>> FindWorkspacesAsync(string? nameFilter = null, CancellationToken ct = default);
+
+    /// <summary>Runs KQL against a workspace by its <c>customerId</c>.</summary>
+    Task<LogQueryResult> RunWorkspaceQueryAsync(string customerId, string query, TimeRange range, int maxRows, CancellationToken ct = default);
+}

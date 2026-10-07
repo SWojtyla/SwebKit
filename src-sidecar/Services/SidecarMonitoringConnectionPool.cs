@@ -52,6 +52,16 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
 
     public IAksClient? GetAksClient() => GetAksClient(null);
 
+    public string? ResolveAksContext(string? context)
+    {
+        if (!string.IsNullOrWhiteSpace(context))
+            return context;
+        if (_demo.IsDemoMode)
+            // The demo "current" context — GetContextsAsync marks aks-ecommerce-dev IsCurrent.
+            return "aks-ecommerce-dev";
+        return _profile.GetProfileData().Config.AksConfig?.KubeconfigContext;
+    }
+
     public IAksClient? GetAksClient(string? context)
     {
         if (_demo.IsDemoMode)

@@ -23,6 +23,16 @@ public interface IMonitoringConnectionPool : IAsyncDisposable
     IAksClient? GetAksClient(string? context);
 
     /// <summary>
+    /// Resolves which kubeconfig context <see cref="GetAksClient(string?)"/> will actually use
+    /// for <paramref name="context"/> — the explicit name when given, otherwise the profile's
+    /// configured context. Lets signal sources label errors with the real target cluster
+    /// ("pods is forbidden" is meaningless when the wrong cluster answered). Returns
+    /// <see langword="null"/> when no context is known (kubeconfig current-context fallback).
+    /// </summary>
+    string? ResolveAksContext(string? context) =>
+        string.IsNullOrWhiteSpace(context) ? null : context;
+
+    /// <summary>
     /// Returns the cached <see cref="IServiceBusClient"/> for <paramref name="alias"/>,
     /// or <see langword="null"/> if the alias is not found or not credentialed.
     /// Connection is established lazily on first call and reused thereafter.

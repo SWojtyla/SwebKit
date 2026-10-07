@@ -33,13 +33,29 @@ public class ObservabilityToolsTests
     private static void ConfigureObservability(AppConfig config) =>
         config.ObservabilityConfig = new ObservabilityConfig { SelectedResourceId = "/subscriptions/x/appinsights" };
 
+    private static Mock<IObservabilityResourceDiscovery> MakeDiscovery(params ObservabilityResourceInfo[] resources)
+    {
+        var discovery = new Mock<IObservabilityResourceDiscovery>();
+        discovery.Setup(d => d.DiscoverResourcesAsync(It.IsAny<CancellationToken>()))
+            .Returns(resources.ToAsyncEnumerable());
+        return discovery;
+    }
+
+    private static ObservabilityResourceInfo Ai(string name, string resourceId) => new(
+        ResourceId: resourceId,
+        Name: name,
+        SubscriptionId: "sub-1",
+        SubscriptionName: "Contoso",
+        ResourceGroup: "rg-1",
+        Location: "weu");
+
     // ── GetMetricsTool ────────────────────────────────────────────────────
 
     [Fact]
     public async Task GetMetrics_NotConfigured_ReturnsError()
     {
         var (factory, _) = MakeProvider();
-        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState());
+        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(), MakeDiscovery().Object);
 
         var result = await tool.ExecuteAsync(Args("{}"), CancellationToken.None);
 
@@ -54,7 +70,7 @@ public class ObservabilityToolsTests
         provider.Setup(p => p.GetOverviewAsync(It.IsAny<TimeRange>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Overview());
 
-        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability));
+        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability), MakeDiscovery().Object);
         var result = await tool.ExecuteAsync(Args("{}"), CancellationToken.None);
 
         using var doc = JsonDocument.Parse(result);
@@ -71,7 +87,7 @@ public class ObservabilityToolsTests
         provider.Setup(p => p.GetOverviewAsync(It.IsAny<TimeRange>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Overview());
 
-        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability));
+        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability), MakeDiscovery().Object);
         var result = await tool.ExecuteAsync(Args("""{ "metric_type": "failure_rate" }"""), CancellationToken.None);
 
         using var doc = JsonDocument.Parse(result);
@@ -87,7 +103,7 @@ public class ObservabilityToolsTests
         provider.Setup(p => p.GetOverviewAsync(It.IsAny<TimeRange>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("kql failed"));
 
-        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability));
+        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability), MakeDiscovery().Object);
         var result = await tool.ExecuteAsync(Args("{}"), CancellationToken.None);
 
         using var doc = JsonDocument.Parse(result);
@@ -101,7 +117,7 @@ public class ObservabilityToolsTests
         provider.Setup(p => p.GetTopExceptionsAsync(It.IsAny<TimeRange>(), 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new ExceptionGroup("System.NullReferenceException", "pid-1", 7, DateTimeOffset.UtcNow, "npe", null)]);
 
-        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability));
+        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability), MakeDiscovery().Object);
         var result = await tool.ExecuteAsync(Args("""{ "metric_type": "exceptions" }"""), CancellationToken.None);
 
         using var doc = JsonDocument.Parse(result);
@@ -120,7 +136,7 @@ public class ObservabilityToolsTests
                 Truncated: false,
                 MaxReturned: 20));
 
-        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability));
+        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability), MakeDiscovery().Object);
         var result = await tool.ExecuteAsync(Args("""{ "metric_type": "dependencies" }"""), CancellationToken.None);
 
         using var doc = JsonDocument.Parse(result);
@@ -138,7 +154,7 @@ public class ObservabilityToolsTests
                 new AvailabilityResult("ping", "us", false, DateTimeOffset.UtcNow, 200, "timeout"),
             ]);
 
-        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability));
+        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability), MakeDiscovery().Object);
         var result = await tool.ExecuteAsync(Args("""{ "metric_type": "availability" }"""), CancellationToken.None);
 
         using var doc = JsonDocument.Parse(result);
@@ -154,7 +170,7 @@ public class ObservabilityToolsTests
         provider.Setup(p => p.GetOperationPerformanceAsync(It.IsAny<TimeRange>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([new OperationPerformance("GET /", 500, 1.0, 50, 120, 200)]);
 
-        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability));
+        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability), MakeDiscovery().Object);
         var result = await tool.ExecuteAsync(Args("""{ "metric_type": "latency" }"""), CancellationToken.None);
 
         using var doc = JsonDocument.Parse(result);
@@ -169,7 +185,7 @@ public class ObservabilityToolsTests
     public async Task QueryLogs_NotConfigured_ReturnsError()
     {
         var (factory, _) = MakeProvider();
-        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState());
+        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState(), MakeDiscovery().Object);
 
         var result = await tool.ExecuteAsync(Args("""{ "query": "requests | take 1" }"""), CancellationToken.None);
 
@@ -188,7 +204,7 @@ public class ObservabilityToolsTests
         provider.Setup(p => p.RunQueryAsync("requests | take 1", It.IsAny<TimeRange>(), 50, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new LogQueryResult(["name", "count"], rows, TimeSpan.FromMilliseconds(10), false));
 
-        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability));
+        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability), MakeDiscovery().Object);
         var result = await tool.ExecuteAsync(Args("""{ "query": "requests | take 1" }"""), CancellationToken.None);
 
         using var doc = JsonDocument.Parse(result);
@@ -203,7 +219,7 @@ public class ObservabilityToolsTests
         provider.Setup(p => p.RunQueryAsync(It.IsAny<string>(), It.IsAny<TimeRange>(), 500, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new LogQueryResult([], [], TimeSpan.Zero, false));
 
-        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability));
+        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability), MakeDiscovery().Object);
         await tool.ExecuteAsync(Args("""{ "query": "q", "max_rows": 99999 }"""), CancellationToken.None);
 
         provider.Verify(p => p.RunQueryAsync("q", It.IsAny<TimeRange>(), 500, It.IsAny<CancellationToken>()), Times.Once);
@@ -216,11 +232,113 @@ public class ObservabilityToolsTests
         provider.Setup(p => p.RunQueryAsync(It.IsAny<string>(), It.IsAny<TimeRange>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("bad syntax"));
 
-        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability));
+        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability), MakeDiscovery().Object);
         var result = await tool.ExecuteAsync(Args("""{ "query": "broken" }"""), CancellationToken.None);
 
         using var doc = JsonDocument.Parse(result);
         Assert.Equal("bad syntax", doc.RootElement.GetProperty("error").GetString());
         Assert.False(string.IsNullOrWhiteSpace(doc.RootElement.GetProperty("hint").GetString()));
+    }
+
+    // ── resource parameter ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task QueryLogs_ExplicitResourceId_QueriesThatResource()
+    {
+        var (factory, provider) = MakeProvider();
+        provider.Setup(p => p.RunQueryAsync(It.IsAny<string>(), It.IsAny<TimeRange>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new LogQueryResult([], [], TimeSpan.Zero, false));
+
+        const string otherId = "/subscriptions/other/resourceGroups/rg/providers/microsoft.insights/components/ai-prd";
+        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState(), MakeDiscovery().Object);
+        var result = await tool.ExecuteAsync(
+            Args($$"""{ "query": "requests | take 1", "resource": "{{otherId}}" }"""), CancellationToken.None);
+
+        factory.Verify(f => f.Create(otherId, It.IsAny<bool>()), Times.Once);
+        using var doc = JsonDocument.Parse(result);
+        Assert.Equal(otherId, doc.RootElement.GetProperty("resource_id").GetString());
+    }
+
+    [Fact]
+    public async Task QueryLogs_ResourceName_ResolvesViaDiscovery()
+    {
+        var (factory, provider) = MakeProvider();
+        provider.Setup(p => p.RunQueryAsync(It.IsAny<string>(), It.IsAny<TimeRange>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new LogQueryResult([], [], TimeSpan.Zero, false));
+
+        var discovery = MakeDiscovery(
+            Ai("ai-sign-prd", "/subscriptions/p1/ai-sign-prd"),
+            Ai("ai-sign-dev", "/subscriptions/p1/ai-sign-dev"));
+
+        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState(), discovery.Object);
+        await tool.ExecuteAsync(Args("""{ "query": "q", "resource": "ai-sign-prd" }"""), CancellationToken.None);
+
+        factory.Verify(f => f.Create("/subscriptions/p1/ai-sign-prd", It.IsAny<bool>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task QueryLogs_ResourceAmbiguous_ReturnsCandidates()
+    {
+        var (factory, _) = MakeProvider();
+        var discovery = MakeDiscovery(
+            Ai("ai-sign-dev", "/subscriptions/p1/ai-sign-dev"),
+            Ai("ai-sign-prd", "/subscriptions/p1/ai-sign-prd"));
+
+        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState(), discovery.Object);
+        var result = await tool.ExecuteAsync(Args("""{ "query": "q", "resource": "ai-sign" }"""), CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(result);
+        Assert.Contains("matches 2", doc.RootElement.GetProperty("error").GetString());
+        Assert.Equal(2, doc.RootElement.GetProperty("candidates").GetArrayLength());
+        factory.Verify(f => f.Create(It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task QueryLogs_ResourceNotFound_ListsDiscoveryHint()
+    {
+        var (factory, _) = MakeProvider();
+        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState(), MakeDiscovery().Object);
+        var result = await tool.ExecuteAsync(Args("""{ "query": "q", "resource": "missing" }"""), CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(result);
+        Assert.Contains("No Application Insights resource matches", doc.RootElement.GetProperty("error").GetString());
+        Assert.Contains("list_observability_resources", doc.RootElement.GetProperty("hint").GetString());
+        factory.Verify(f => f.Create(It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    public void QueryLogs_ExplicitResource_ConnectionKeyIsNull()
+    {
+        var (factory, _) = MakeProvider();
+        var tool = new QueryLogsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability), MakeDiscovery().Object);
+        Assert.Null(tool.GetConnectionKey(Args("""{ "query": "q", "resource": "ai-prd" }""")));
+        // Without the argument the configured resource still keys the access report.
+        Assert.Equal("/subscriptions/x/appinsights", tool.GetConnectionKey(Args("""{ "query": "q" }""")));
+    }
+
+    [Fact]
+    public async Task GetMetrics_ExplicitResource_QueriesThatResource()
+    {
+        var (factory, provider) = MakeProvider();
+        provider.Setup(p => p.GetOverviewAsync(It.IsAny<TimeRange>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Overview());
+
+        const string otherId = "/subscriptions/other/ai-prd";
+        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(), MakeDiscovery().Object);
+        var result = await tool.ExecuteAsync(
+            Args($$"""{ "resource": "{{otherId}}" }"""), CancellationToken.None);
+
+        factory.Verify(f => f.Create(otherId, It.IsAny<bool>()), Times.Once);
+        using var doc = JsonDocument.Parse(result);
+        Assert.Equal(otherId, doc.RootElement.GetProperty("resource_id").GetString());
+    }
+
+    [Fact]
+    public void GetMetrics_ExplicitResource_ConnectionKeyIsNull()
+    {
+        var (factory, _) = MakeProvider();
+        var tool = new GetMetricsTool(factory.Object, TestSupport.CreateAppState(ConfigureObservability), MakeDiscovery().Object);
+        Assert.Null(tool.GetConnectionKey(Args("""{ "resource": "ai-prd" }""")));
+        Assert.Equal("/subscriptions/x/appinsights", tool.GetConnectionKey(Args("{}")));
     }
 }

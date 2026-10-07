@@ -26,7 +26,11 @@ public abstract class PodSignalSourceBase : IAlertSignalSource
 
     public async Task<AlertSignalResult> EvaluateAsync(MonitoringAlertRule rule, CancellationToken ct)
     {
-        var client = _pool.GetAksClient(rule.AksPodParams?.KubeconfigContext);
+        // Resolve the effective context up front: rules may follow the globally configured
+        // context (empty pin), and an error like "pods is forbidden" is undiagnosable unless
+        // the message says which cluster it came from.
+        var context = _pool.ResolveAksContext(rule.AksPodParams?.KubeconfigContext);
+        var client = _pool.GetAksClient(context);
         if (client is null)
             return new AlertSignalResult(AlertSignalStatus.Skipped, "AKS not configured");
 
@@ -34,13 +38,20 @@ public abstract class PodSignalSourceBase : IAlertSignalSource
         try
         {
             var pods = await client.GetPodsAsync(ns, null, ct).ConfigureAwait(false);
-            return Evaluate(rule, ns, pods);
+            var result = Evaluate(rule, ns, pods);
+            // Firing messages surface in notifications and alert history without the rule
+            // row's context/namespace label — tag the cluster there too.
+            return context is not null && result.Status == AlertSignalStatus.Firing
+                ? result with { Message = $"[{context}] {result.Message}" }
+                : result;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "{SignalSource} error for rule {RuleId}", GetType().Name, rule.Id);
-            return new AlertSignalResult(AlertSignalStatus.Error, ex.Message);
+            Logger.LogWarning(ex, "{SignalSource} error for rule {RuleId} on context {Context}", GetType().Name, rule.Id, context);
+            return new AlertSignalResult(
+                AlertSignalStatus.Error,
+                context is null ? ex.Message : $"[{context}] {ex.Message}");
         }
         // Note: do NOT dispose client - the pool owns its lifetime.
     }

@@ -1180,4 +1180,46 @@ test.describe("Service Bus", () => {
         await expect(page.getByTestId("message-list")).toBeVisible();
         await expect(page.getByText("ResubmitEditedE2E")).toBeVisible();
     });
+
+    test("the footer bar stays visible below a viewport-filling message list", async ({
+        page,
+    }) => {
+        // Regression: the list container used h-full while sitting below the
+        // breadcrumb/tabs/properties siblings, so it overflowed the panel and
+        // overflow-hidden clipped the footer exactly when rows filled the view.
+        const msgs = Array.from({ length: 400 }, (_, i) => ({
+            messageId: `m-${i}`,
+            correlationId: null,
+            subject: `Subject ${i}`,
+            contentType: "application/json",
+            body: "{}",
+            applicationProperties: {},
+            systemProperties: null,
+            deadLetterReason: null,
+            deadLetterErrorDescription: null,
+            enqueuedAt: new Date().toISOString(),
+            deliveryCount: 1,
+            lockToken: null,
+            sequenceNumber: i + 1,
+            sessionId: null,
+        }));
+        await page.route("**/peek**", (route) => route.fulfill({ json: msgs }));
+
+        await page.goto("/service-bus");
+        await page
+            .getByTestId("sb-namespace-select")
+            .selectOption({ label: "orders-dev" });
+        await page.getByTestId("entity-tree-queue-order-created").click();
+        await expect(page.getByTestId("message-list")).toBeVisible();
+
+        const footer = page.getByTestId("message-filter-count");
+        await expect(footer).toBeVisible();
+        const box = await footer.boundingBox();
+        const viewport = page.viewportSize();
+        expect(box).not.toBeNull();
+        expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height);
+
+        await expect(page.getByTestId("message-list-refresh")).toBeVisible();
+        await expect(page.getByTestId("load-more-button")).toBeVisible();
+    });
 });

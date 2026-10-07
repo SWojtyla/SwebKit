@@ -13,20 +13,25 @@ public sealed class GetMetricsTool : IAccessAwareTool
 {
     private readonly IObservabilityProviderFactory _providerFactory;
     private readonly AppStateService _appState;
+    private readonly IObservabilityResourceDiscovery _resourceDiscovery;
 
     public GetMetricsTool(
         IObservabilityProviderFactory providerFactory,
-        AppStateService appState)
+        AppStateService appState,
+        IObservabilityResourceDiscovery resourceDiscovery)
     {
         _providerFactory = providerFactory;
         _appState = appState;
+        _resourceDiscovery = resourceDiscovery;
     }
 
     public string Name => "get_metrics";
 
     public string Description =>
         "Retrieves metrics data from Application Insights including request counts, failure rates, " +
-        "latency, exceptions, and dependency health. Returns aggregated metrics for the specified time range.";
+        "latency, exceptions, and dependency health. Returns aggregated metrics for the specified time range. " +
+        "Defaults to the configured resource — pass 'resource' (name or resource_id, see " +
+        "list_observability_resources) to target a different app.";
 
     public FeatureArea FeatureArea => FeatureArea.Observability;
 
@@ -34,15 +39,23 @@ public sealed class GetMetricsTool : IAccessAwareTool
     public string Capability => AccessCapabilities.ObservabilityLogs;
 
     public string? GetConnectionKey(JsonElement arguments) =>
-        _appState.Config.ObservabilityConfig?.SelectedResourceId is { Length: > 0 } resourceId
-            ? resourceId
-            // The demo-mode probe row is keyed "demo-observability" when no resource is selected.
-            : _appState.UseDemoData ? "demo-observability" : null;
+        arguments.TryGetProperty("resource", out var res) && res.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(res.GetString())
+            // An explicit resource may target one the access report never probed.
+            ? null
+            : _appState.Config.ObservabilityConfig?.SelectedResourceId is { Length: > 0 } resourceId
+                ? resourceId
+                // The demo-mode probe row is keyed "demo-observability" when no resource is selected.
+                : _appState.UseDemoData ? "demo-observability" : null;
 
     public JsonElement ParametersSchema { get; } = AgentToolSchema.Parse("""
         {
           "type": "object",
           "properties": {
+            "resource": {
+              "type": "string",
+              "description": "Target Application Insights resource: a name, substring, or full ARM resource id. Omit to use the configured resource."
+            },
             "metric_type": {
               "type": "string",
               "enum": ["requests", "exceptions", "dependencies", "availability", "latency", "failure_rate"],
@@ -65,12 +78,27 @@ public sealed class GetMetricsTool : IAccessAwareTool
 
     public async Task<string> ExecuteAsync(JsonElement arguments, CancellationToken ct)
     {
-        var config = _appState.Config.ObservabilityConfig;
-        if (config == null || string.IsNullOrWhiteSpace(config.SelectedResourceId))
+        var resourceArg = arguments.TryGetProperty("resource", out var resEl) && resEl.ValueKind == JsonValueKind.String
+            ? resEl.GetString()
+            : null;
+        string resourceId;
+        if (resourceArg is { Length: > 0 })
+        {
+            var (resolved, errorJson) = await ObservabilityResourceResolver.ResolveAsync(_resourceDiscovery, resourceArg, ct)
+                .ConfigureAwait(false);
+            if (errorJson is not null) return errorJson;
+            resourceId = resolved!;
+        }
+        else if (_appState.Config.ObservabilityConfig?.SelectedResourceId is { Length: > 0 } configured)
+        {
+            resourceId = configured;
+        }
+        else
         {
             return JsonSerializer.Serialize(new
             {
-                error = "Observability not configured. Please configure an Application Insights resource."
+                error = "Observability not configured and no 'resource' was given.",
+                hint = "Run list_observability_resources to see what's available, then pass its name or resource_id as 'resource'."
             });
         }
 
@@ -89,7 +117,7 @@ public sealed class GetMetricsTool : IAccessAwareTool
         try
         {
             var timeRange = CalculateTimeRange(timeRangeHours);
-            var provider = _providerFactory.Create(config.SelectedResourceId, _appState.UseDemoData);
+            var provider = _providerFactory.Create(resourceId, _appState.UseDemoData);
 
             if (provider == null)
             {
@@ -112,7 +140,7 @@ public sealed class GetMetricsTool : IAccessAwareTool
 
             return JsonSerializer.Serialize(new
             {
-                resource_id = config.SelectedResourceId,
+                resource_id = resourceId,
                 metric_type = metricType,
                 time_range_start = timeRange.Start.ToString("o"),
                 time_range_end = timeRange.End.ToString("o"),

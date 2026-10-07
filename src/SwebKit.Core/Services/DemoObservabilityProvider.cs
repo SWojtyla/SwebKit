@@ -384,3 +384,47 @@ public sealed class DemoObservabilityResourceDiscovery : IObservabilityResourceD
         }
     }
 }
+
+/// <summary>
+/// Demo implementation of <see cref="ILogAnalyticsWorkspaceService"/>: one fake shared
+/// workspace returning a canned WAF allow/block table — the shape a real query against
+/// <c>AzureDiagnostics</c> / <c>ApplicationGatewayFirewallLog</c> produces, so the agent's
+/// workspace-query path is exercisable in demo mode.
+/// </summary>
+public sealed class DemoLogAnalyticsWorkspaceService : ILogAnalyticsWorkspaceService
+{
+    private static readonly LogAnalyticsWorkspaceInfo DemoWorkspace = new(
+        ResourceId: "/subscriptions/demo-sub-shared/resourceGroups/rg-contoso-shared/providers/Microsoft.OperationalInsights/workspaces/log-contoso-shared-001",
+        Name: "log-contoso-shared-001",
+        CustomerId: "00000000-0000-0000-0000-0000000000aa",
+        SubscriptionId: "demo-sub-shared",
+        SubscriptionName: "Contoso Shared",
+        ResourceGroup: "rg-contoso-shared",
+        Location: "West Europe");
+
+    public Task<IReadOnlyList<LogAnalyticsWorkspaceInfo>> FindWorkspacesAsync(string? nameFilter = null, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        IReadOnlyList<LogAnalyticsWorkspaceInfo> result =
+            nameFilter is null
+            || DemoWorkspace.Name.Contains(nameFilter, StringComparison.OrdinalIgnoreCase)
+            || DemoWorkspace.ResourceId.Contains(nameFilter, StringComparison.OrdinalIgnoreCase)
+                ? [DemoWorkspace]
+                : [];
+        return Task.FromResult(result);
+    }
+
+    public Task<LogQueryResult> RunWorkspaceQueryAsync(string customerId, string query, TimeRange range, int maxRows, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var now = DateTimeOffset.UtcNow;
+        var columns = new List<string> { "TimeGenerated", "clientIP_s", "requestUri_s", "action_s", "ruleId_s" };
+        var rows = new List<LogRow>
+        {
+            new(new Dictionary<string, object?> { ["TimeGenerated"] = now.AddMinutes(-4), ["clientIP_s"] = "203.0.113.10", ["requestUri_s"] = "https://sign.contoso.example/webhook", ["action_s"] = "Blocked", ["ruleId_s"] = "944210" }),
+            new(new Dictionary<string, object?> { ["TimeGenerated"] = now.AddMinutes(-31), ["clientIP_s"] = "203.0.113.10", ["requestUri_s"] = "https://sign.contoso.example/webhook", ["action_s"] = "Blocked", ["ruleId_s"] = "944210" }),
+            new(new Dictionary<string, object?> { ["TimeGenerated"] = now.AddHours(-2), ["clientIP_s"] = "198.51.100.7", ["requestUri_s"] = "https://sign.contoso.example/health", ["action_s"] = "Allowed", ["ruleId_s"] = "" }),
+        };
+        return Task.FromResult(new LogQueryResult(columns, rows, TimeSpan.FromMilliseconds(42), false));
+    }
+}

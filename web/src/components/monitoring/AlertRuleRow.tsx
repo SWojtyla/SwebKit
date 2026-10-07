@@ -5,6 +5,7 @@ import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { RuleMuteControl } from "./RuleMuteControl";
 import { isRuleMuted, muteBadgeLabel } from "./silenceWindows";
+import { useProfile } from "../../lib/hooks";
 import type {
     MonitoringAlertRule,
     AlertSignalStatus,
@@ -76,6 +77,16 @@ export function AlertRuleRow({
     const [askAiOpen, setAskAiOpen] = useState(false);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
     const muted = isRuleMuted(rule.mutedUntil);
+    // An empty kubeconfigContext means "follow the configured context" — resolve it here so
+    // the row always names the cluster it evaluates against, not just the namespace.
+    const { data: profile } = useProfile();
+    const effectiveAksContext = rule.source.startsWith("Aks")
+        ? rule.aksPodParams?.kubeconfigContext ||
+          profile?.config.aksConfig?.kubeconfigContext ||
+          ""
+        : "";
+    const followsConfiguredContext =
+        rule.source.startsWith("Aks") && !rule.aksPodParams?.kubeconfigContext;
 
     return (
         <div
@@ -159,9 +170,17 @@ export function AlertRuleRow({
                             rule.aksPodParams?.namespace && (
                                 <>
                                     {" · "}
-                                    {rule.aksPodParams.kubeconfigContext
-                                        ? `${rule.aksPodParams.kubeconfigContext}/${rule.aksPodParams.namespace}`
-                                        : rule.aksPodParams.namespace}
+                                    <span
+                                        title={
+                                            followsConfiguredContext
+                                                ? "Evaluates against the configured cluster context"
+                                                : `Pinned to cluster context ${effectiveAksContext}`
+                                        }
+                                    >
+                                        {effectiveAksContext
+                                            ? `${effectiveAksContext}/${rule.aksPodParams.namespace}`
+                                            : rule.aksPodParams.namespace}
+                                    </span>
                                 </>
                             )}
                         {/* Prefer the live stream's evaluatedAt — the persisted lastEvaluatedAt

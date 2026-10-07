@@ -1,6 +1,6 @@
 # AI & MCP Architecture
 
-How the SwebKit agent is wired end to end: model providers, the domain-tool model, the MCP bridge that exposes those tools to external agents, and the extension points we are building toward. For the user-facing feature description see `functionalities/agent.md`; this doc is about *how the machinery works*.
+How the SwebKit agent is wired end to end: model providers, the domain-tool model, the MCP bridge that exposes those tools to external agents, and the extension points we are building toward. For the user-facing feature description see `functionalities/agent.md`; this doc is about _how the machinery works_.
 
 ## Big picture
 
@@ -34,7 +34,7 @@ How the SwebKit agent is wired end to end: model providers, the domain-tool mode
                                             └─────────────────────┘
 ```
 
-Both provider paths execute the *same* registry. The difference is who drives the tool loop:
+Both provider paths execute the _same_ registry. The difference is who drives the tool loop:
 
 - **OpenAI-compatible** — the sidecar drives: send tool definitions → model returns `tool_calls` → execute → feed results back.
 - **ACP** — the external agent drives: it gets our tools as an **MCP server** at session creation and calls them whenever it wants.
@@ -60,20 +60,21 @@ Result convention: a JSON **string**; a top-level `"error"` property marks failu
 Tools are registered as open-type DI (`IEnumerable<IAgentTool>`) into `AgentToolRegistry` — adding a tool is adding one class. There are two categories:
 
 - **Primitive tools** — `list_pods`, `get_queue_stats`, `list_redis_keys`, `query_logs` (KQL), `get_metrics`.
+- **Discovery tools** — `list_observability_resources`, `list_aks_contexts`, `query_workspace_logs` (a no-`workspace` call lists workspaces). These exist so the agent can enumerate the resources behind the other tools' selector arguments — `resource` on `query_logs`/`get_metrics` (name or ARM id → `ObservabilityResourceResolver`), `context` on the AKS tools, `workspace` on `query_workspace_logs`. Without them the model dead-ended on "not configured" whenever the target wasn't the configured default.
 - **Composite investigative tools** — `investigate_pod_issue`, `analyze_queue_health`, `investigate_workspace_issue`. One call fans out to several data sources **sidecar-side** and returns one synthesized projection. These are our main "smart harness" lever: deterministic multi-step gathering without burning model tool calls.
 
-Mutation tools are named `propose_*` and never execute the change — they create a *pending action* the user confirms in the UI (`PendingActionCard` → feature's `ActionExecutor`).
+Mutation tools are named `propose_*` and never execute the change — they create a _pending action_ the user confirms in the UI (`PendingActionCard` → feature's `ActionExecutor`).
 
 ## 2. Per-turn tool visibility gates
 
 `AgentToolCallOrchestrator.ResolveTools` decides which definitions a turn sees, applied in order:
 
-| Gate | Rule | Default |
-|---|---|---|
-| Capability | No tool-calling support → no tools | — |
-| Mode | `"ask"` keeps only `ToolKind.Read` | anything ≠ `ask_and_do` → ask |
-| Scope | `"feature"` keeps only the turn's `FeatureArea` | anything ≠ `workspace` → feature |
-| Area | Contextual panel's area + **exempt**: `Observability` (cross-cutting telemetry) and `get_screen_state` | global `/agent` → no area filter |
+| Gate       | Rule                                                                                                   | Default                          |
+| ---------- | ------------------------------------------------------------------------------------------------------ | -------------------------------- |
+| Capability | No tool-calling support → no tools                                                                     | —                                |
+| Mode       | `"ask"` keeps only `ToolKind.Read`                                                                     | anything ≠ `ask_and_do` → ask    |
+| Scope      | `"feature"` keeps only the turn's `FeatureArea`                                                        | anything ≠ `workspace` → feature |
+| Area       | Contextual panel's area + **exempt**: `Observability` (cross-cutting telemetry) and `get_screen_state` | global `/agent` → no area filter |
 
 Same gate produces both the definition list for OpenAI-compatible models **and** the `?tools=` allowlist baked into the MCP bridge URL for ACP agents.
 
@@ -87,7 +88,7 @@ http://localhost:{port}/mcp/swebkit-tools?tools=list_pods,get_pod_logs,…&sel=a
 
 - `?tools=` — the resolved allowlist for this turn's mode/area/scope. Absent ⇒ **standalone surface: read-only tools only** (internal ACP sessions always carry an explicit allowlist, so an absent one means an unmanaged client attached directly); empty ⇒ no tools.
 - `?mode=full` — opt-in escape hatch for standalone clients: exposes the whole registry including `propose_*` mutations. Only meaningful without `?tools=`.
-- `?sel=` — key/value pairs pushed into `AgentExecutionContext` on every call, so tools can default to *the resource the user is looking at* without the model passing identifiers.
+- `?sel=` — key/value pairs pushed into `AgentExecutionContext` on every call, so tools can default to _the resource the user is looking at_ without the model passing identifiers.
 
 Call flow:
 
@@ -101,7 +102,7 @@ MCP tools/call (name, arguments)
   → registry.ExecuteAsync → IAgentTool → domain service → JSON result
 ```
 
-An out-of-scope call is deliberately a *distinguishable* error, not "unknown tool" — it tells the agent the tool exists but needs wider scope (`OutOfScopeCallTracker` counts these so the UI can offer a scope-widening retry).
+An out-of-scope call is deliberately a _distinguishable_ error, not "unknown tool" — it tells the agent the tool exists but needs wider scope (`OutOfScopeCallTracker` counts these so the UI can offer a scope-widening retry).
 
 ## 4. ACP external agents (Claude, Gemini, …)
 
@@ -119,14 +120,28 @@ The `session/new` payload (with one configured external server of each transport
 
 ```json
 {
-  "cwd": "<profile.WorkingDirectory or sidecar cwd>",
-  "mcpServers": [
-    { "type": "http", "name": "swebkit", "url": "http://127.0.0.1:5198/mcp/swebkit-tools?tools=…&sel=…", "headers": [] },
-    { "type": "http", "name": "azure", "url": "https://mcp.example.com/mcp",
-      "headers": [{ "name": "X-Env", "value": "prod" }] },
-    { "type": "stdio", "name": "local", "command": "npx",
-      "args": ["-y", "@scope/server"], "env": [{ "name": "LOG_LEVEL", "value": "debug" }] }
-  ]
+    "cwd": "<profile.WorkingDirectory or sidecar cwd>",
+    "mcpServers": [
+        {
+            "type": "http",
+            "name": "swebkit",
+            "url": "http://127.0.0.1:5198/mcp/swebkit-tools?tools=…&sel=…",
+            "headers": []
+        },
+        {
+            "type": "http",
+            "name": "azure",
+            "url": "https://mcp.example.com/mcp",
+            "headers": [{ "name": "X-Env", "value": "prod" }]
+        },
+        {
+            "type": "stdio",
+            "name": "local",
+            "command": "npx",
+            "args": ["-y", "@scope/server"],
+            "env": [{ "name": "LOG_LEVEL", "value": "debug" }]
+        }
+    ]
 }
 ```
 
@@ -136,16 +151,16 @@ Because MCP servers are fixed at session creation, changing the allowlist/spec d
 
 ### Two independent approval layers
 
-| Layer | Mechanism | Applies to |
-|---|---|---|
-| Domain actions | `propose_*` tools → `PendingActionCard` → `ActionExecutor` | every provider — our mutations are self-gating |
+| Layer                | Mechanism                                                                 | Applies to                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Domain actions       | `propose_*` tools → `PendingActionCard` → `ActionExecutor`                | every provider — our mutations are self-gating                                                               |
 | Provider permissions | `session/request_permission` → `AcpPermissionStore` → `AcpPermissionCard` | ACP only, and only when `RequireToolApproval` is on (default off — redundant second click for our own tools) |
 
 With external MCP servers plugged in (below), the provider layer becomes the gate for tools we don't control — which is the argument for defaulting `RequireToolApproval` ON once a profile has extra MCP servers.
 
 ## 5. Context injection (the cheap intelligence)
 
-What the harness does *before/around* the model so it doesn't have to:
+What the harness does _before/around_ the model so it doesn't have to:
 
 - **Selection (`sel=`)** — tools default to the resource open in the UI; "this pod" needs zero discovery calls.
 - **Screen state** — pages publish whitelisted snapshots → `ScreenStateStore` (5 min TTL) → `get_screen_state` reads them. Must never include secrets/bodies.
@@ -186,9 +201,9 @@ The bridge is a real MCP server on the sidecar's HTTP port — any client that s
 
 ```json
 {
-  "mcpServers": {
-    "swebkit": { "url": "http://127.0.0.1:5199/mcp/swebkit-tools" }
-  }
+    "mcpServers": {
+        "swebkit": { "url": "http://127.0.0.1:5199/mcp/swebkit-tools" }
+    }
 }
 ```
 
@@ -211,7 +226,7 @@ Caveats: external tools don't consume `sel=`/`AgentExecutionContext` (foreign se
 
 ### Phase 3 — Native App Insights: already partly done
 
-`query_logs` (KQL) + `get_metrics` exist via `SwebKit.Observability`'s `AzureAppInsightsProvider`, and `Observability` is exempt from per-area filtering precisely so cross-area investigations can pull telemetry. Native *expansion* (UI surfaces, alert-rule sourcing, more tools) is a product decision, not a prerequisite for the MCP work.
+`query_logs` (KQL) + `get_metrics` exist via `SwebKit.Observability`'s `AzureAppInsightsProvider`, `list_observability_resources` enumerates App Insights components, and `query_workspace_logs` covers Log Analytics workspaces (WAF, App Gateway, diagnostic settings) through `ILogAnalyticsWorkspaceService`. `Observability` is exempt from per-area filtering precisely so cross-area investigations can pull telemetry. Native _expansion_ (UI surfaces, alert-rule sourcing, more tools) is a product decision, not a prerequisite for the MCP work.
 
 ## 7. Security model (non-negotiables)
 
@@ -220,23 +235,23 @@ Caveats: external tools don't consume `sel=`/`AgentExecutionContext` (foreign se
 - Empty allowlist ⇒ zero tools; allowlist baked per session, not per request.
 - Standalone MCP access (no `?tools=`) is **read-only by default**; `propose_*` tools need explicit `?mode=full`, and proposals still require UI confirmation.
 - `ask` mode and proactive investigations are structurally read-only.
-- External MCP servers are user-configured. ACP path: approval-gated via `session/request_permission` (Settings auto-enables it on first attach). In-process path: `readOnlyHint` tools run directly; anything else only *proposes* — `ExternalMcpCall` pending actions need an explicit UI confirm before the remote server is invoked.
+- External MCP servers are user-configured. ACP path: approval-gated via `session/request_permission` (Settings auto-enables it on first attach). In-process path: `readOnlyHint` tools run directly; anything else only _proposes_ — `ExternalMcpCall` pending actions need an explicit UI confirm before the remote server is invoked.
 
 ## File map
 
-| Concern | Location |
-|---|---|
-| Tool contract + metadata | `src/SwebKit.Agents/Tools/IAgentTool.cs` |
-| Tool implementations | `src/SwebKit.Agents/Tools/{Aks,Redis,Sql,Storage,ApiClient,Monitoring}/…`, `Tools/*.cs` |
-| Registry | `src/SwebKit.Agents/AgentToolRegistry.cs` |
-| Turn gates + step tracking | `src-sidecar/Services/AgentToolCallOrchestrator.cs` |
-| Chat service / routing | `src-sidecar/Services/SidecarAgentChatService.cs`, `AgentModelClientRouter.cs` |
-| Context building/budget | `src/SwebKit.Agents/AgentContextBuilder.cs`, `src-sidecar/Services/AgentContextBudgetPlanner.cs` |
-| MCP bridge | `src-sidecar/Services/Acp/SwebKitToolsMcpBridge.cs` (`Program.cs: MapMcp`) |
-| ACP host/peer/launch | `src-sidecar/Services/Acp/AcpAgentHost.cs`, `AcpJsonRpcPeer.cs`, `AcpProcessLauncher.cs` |
-| Permissions | `src-sidecar/Services/Acp/AcpPermissionStore.cs`, `OutOfScopeCallTracker.cs` |
-| External MCP client adapter | `src-sidecar/Services/ExternalMcpToolSource.cs` (proxy + proposals) |
-| External mutation executor | `src-sidecar/Services/ExternalMcpActionExecutor.cs` (`ExternalMcpCall` confirm path) |
-| Pending-action pipeline | `src/SwebKit.Agents/IAgentActionCoordinator.cs`, `AgentActionApplier.cs` |
-| Profile model | `src/SwebKit.Core/Domain/AgentProfile.cs` |
-| Frontend | `web/src/lib/hooks/useAgent.ts`, `web/src/components/agent/` |
+| Concern                     | Location                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------------------ |
+| Tool contract + metadata    | `src/SwebKit.Agents/Tools/IAgentTool.cs`                                                         |
+| Tool implementations        | `src/SwebKit.Agents/Tools/{Aks,Redis,Sql,Storage,ApiClient,Monitoring}/…`, `Tools/*.cs`          |
+| Registry                    | `src/SwebKit.Agents/AgentToolRegistry.cs`                                                        |
+| Turn gates + step tracking  | `src-sidecar/Services/AgentToolCallOrchestrator.cs`                                              |
+| Chat service / routing      | `src-sidecar/Services/SidecarAgentChatService.cs`, `AgentModelClientRouter.cs`                   |
+| Context building/budget     | `src/SwebKit.Agents/AgentContextBuilder.cs`, `src-sidecar/Services/AgentContextBudgetPlanner.cs` |
+| MCP bridge                  | `src-sidecar/Services/Acp/SwebKitToolsMcpBridge.cs` (`Program.cs: MapMcp`)                       |
+| ACP host/peer/launch        | `src-sidecar/Services/Acp/AcpAgentHost.cs`, `AcpJsonRpcPeer.cs`, `AcpProcessLauncher.cs`         |
+| Permissions                 | `src-sidecar/Services/Acp/AcpPermissionStore.cs`, `OutOfScopeCallTracker.cs`                     |
+| External MCP client adapter | `src-sidecar/Services/ExternalMcpToolSource.cs` (proxy + proposals)                              |
+| External mutation executor  | `src-sidecar/Services/ExternalMcpActionExecutor.cs` (`ExternalMcpCall` confirm path)             |
+| Pending-action pipeline     | `src/SwebKit.Agents/IAgentActionCoordinator.cs`, `AgentActionApplier.cs`                         |
+| Profile model               | `src/SwebKit.Core/Domain/AgentProfile.cs`                                                        |
+| Frontend                    | `web/src/lib/hooks/useAgent.ts`, `web/src/components/agent/`                                     |
