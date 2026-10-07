@@ -237,7 +237,16 @@ jobs:
         working-directory: web
         env:
           PLAYWRIGHT_SIDECAR_DLL: src-sidecar/bin/Debug/net10.0/SwebKit.Sidecar.dll
-        run: npx playwright test
+        run: |
+          free -h
+          npx playwright test || {
+            code=$?
+            echo "=== playwright exited with $code — memory/process diagnostics ==="
+            free -h
+            ps aux --sort=-%mem | head -15
+            sudo dmesg | tail -30
+            exit $code
+          }
 
       - name: Upload Playwright report
         # playwright.config.ts uses the "list" reporter (no HTML report file) by
