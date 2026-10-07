@@ -224,9 +224,14 @@ jobs:
 
       # Build once, in isolation: `dotnet run` in globalSetup would otherwise do
       # this restore+compile inside the test step while node/vite are already
-      # running — that memory spike is what got the suite SIGKILLed (exit 137).
+      # running. -nr:false + UseSharedCompilation=false keep MSBuild/Roslyn
+      # server processes from staying resident, and build-server shutdown makes
+      # sure of it — those orphans held enough memory to get the suite SIGKILLed
+      # (exit 137) the moment Playwright started.
       - name: Build sidecar
-        run: dotnet build src-sidecar/SwebKit.Sidecar.csproj
+        run: |
+          dotnet build src-sidecar/SwebKit.Sidecar.csproj -nr:false -p:UseSharedCompilation=false
+          dotnet build-server shutdown
 
       - name: Run E2E suite
         working-directory: web
