@@ -27,13 +27,18 @@ const e2eAppDataRoot =
 export const sidecarPort = process.env.PLAYWRIGHT_SIDECAR_PORT ?? "5198";
 export const vitePort = process.env.PLAYWRIGHT_VITE_PORT ?? "1419";
 
+const repoRoot = path.resolve(e2eAppDataRoot, "..", "..");
 const sidecarProject = path.resolve(
-    e2eAppDataRoot,
-    "..",
-    "..",
+    repoRoot,
     "src-sidecar",
     "SwebKit.Sidecar.csproj",
 );
+// CI sets this to the pre-built dll so globalSetup doesn't run a full MSBuild
+// restore+compile inside the test step — that build spike (Roslyn + node + vite
+// coexisting) is what got the suite OOM-killed (exit 137) on the runners.
+const sidecarDll = process.env.PLAYWRIGHT_SIDECAR_DLL
+    ? path.resolve(repoRoot, process.env.PLAYWRIGHT_SIDECAR_DLL)
+    : null;
 
 /**
  * Best-effort kill of a process listening on a local TCP port. On Windows this
@@ -135,13 +140,15 @@ async function waitForSidecarHealth(port: string, timeoutMs: number) {
 export async function startSidecar(): Promise<ChildProcess> {
     const proc = spawn(
         "dotnet",
-        [
-            "run",
-            "--project",
-            sidecarProject,
-            "--urls",
-            `http://127.0.0.1:${sidecarPort}`,
-        ],
+        sidecarDll
+            ? [sidecarDll, "--urls", `http://127.0.0.1:${sidecarPort}`]
+            : [
+                  "run",
+                  "--project",
+                  sidecarProject,
+                  "--urls",
+                  `http://127.0.0.1:${sidecarPort}`,
+              ],
         {
             cwd: path.resolve(e2eAppDataRoot, ".."),
             env: { ...process.env, SWEBKIT_APPDATA_ROOT: e2eAppDataRoot },

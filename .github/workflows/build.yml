@@ -222,8 +222,16 @@ jobs:
         working-directory: web
         run: npx playwright install --with-deps chromium
 
+      # Build once, in isolation: `dotnet run` in globalSetup would otherwise do
+      # this restore+compile inside the test step while node/vite are already
+      # running — that memory spike is what got the suite SIGKILLed (exit 137).
+      - name: Build sidecar
+        run: dotnet build src-sidecar/SwebKit.Sidecar.csproj
+
       - name: Run E2E suite
         working-directory: web
+        env:
+          PLAYWRIGHT_SIDECAR_DLL: src-sidecar/bin/Debug/net10.0/SwebKit.Sidecar.dll
         run: npx playwright test
 
       - name: Upload Playwright report
