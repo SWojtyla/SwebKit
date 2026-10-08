@@ -4,8 +4,9 @@ import {
     Check,
     CopyPlus,
     Loader2,
+    XCircle,
 } from "lucide-react";
-import type { SbEntityInfo, SbMessage } from "@/lib/types";
+import type { SbEntityInfo, SbMessage, SbViewMode } from "@/lib/types";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { resendTargetText, sendableEntityPath } from "./resendHelpers";
 import {
@@ -18,6 +19,7 @@ export type PendingBulkConfirm =
     | { kind: "complete"; seqNumbers: number[] }
     | { kind: "resubmit"; seqNumbers: number[] }
     | { kind: "deadletter"; seqNumbers: number[] }
+    | { kind: "cancelScheduled"; seqNumbers: number[] }
     | { kind: "resend"; messages: SbMessage[] };
 
 export interface BulkProgress {
@@ -30,13 +32,14 @@ export interface BulkActionBarProps {
     selectedCount: number;
     filteredCount: number;
     bulkProgress: BulkProgress | null;
-    viewMode: "active" | "dlq";
+    viewMode: SbViewMode;
     entity: SbEntityInfo | null;
     onToggleSelectAll: () => void;
     onResend: () => void;
     onResubmit: () => void;
     onDeadLetter: () => void;
     onComplete: () => void;
+    onCancelScheduled: () => void;
     onClearSelection: () => void;
 }
 
@@ -88,74 +91,94 @@ export function BulkActionBar(p: BulkActionBarProps) {
                     : "Select all"}
             </button>
             <div className="ml-auto flex items-center gap-1.5">
-                {/* Resend moves each selected message back to the queue it failed
+                {/* Scheduled view: receive/settle ops can't touch a message that hasn't
+                    fired — the only valid bulk op is sender-side cancel-by-sequence. */}
+                {p.viewMode === "scheduled" ? (
+                    <button
+                        onClick={p.onCancelScheduled}
+                        disabled={busy}
+                        title={
+                            busy
+                                ? "Cancelling…"
+                                : "Cancel each selected scheduled message — it never fires and is removed from the queue"
+                        }
+                        className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                        data-testid="bulk-cancel-scheduled"
+                    >
+                        <XCircle className="h-3 w-3" /> Cancel scheduled
+                    </button>
+                ) : (
+                    <>
+                        {/* Resend moves each selected message back to the queue it failed
             in (NServiceBus.FailedQ) — works on active messages (e.g. an
             NServiceBus error queue) and on the DLQ. */}
-                <button
-                    onClick={p.onResend}
-                    disabled={busy || sessionBlocked}
-                    title={
-                        sessionBlocked
-                            ? SESSIONS_NOT_SUPPORTED_TOOLTIP
-                            : busy
-                              ? "Resending…"
-                              : "Send each selected message back to the queue it originally failed in (NServiceBus.FailedQ — or this entity if unset), then remove it here"
-                    }
-                    className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                    data-testid="bulk-resend"
-                >
-                    <CopyPlus className="h-3 w-3" /> Resend to origin
-                </button>
-                {p.viewMode === "dlq" && p.entity && (
-                    <button
-                        onClick={p.onResubmit}
-                        disabled={busy || sessionBlocked}
-                        title={
-                            sessionBlocked
-                                ? SESSIONS_NOT_SUPPORTED_TOOLTIP
-                                : busy
-                                  ? "Resubmitting…"
-                                  : `Send each selected message back to ${sendableEntityPath(p.entity)} — the entity this dead-letter queue belongs to — then remove it from the DLQ`
-                        }
-                        className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                        data-testid="bulk-resubmit"
-                    >
-                        <ArrowUpRight className="h-3 w-3" /> Resubmit to{" "}
-                        {sendableEntityPath(p.entity)}
-                    </button>
+                        <button
+                            onClick={p.onResend}
+                            disabled={busy || sessionBlocked}
+                            title={
+                                sessionBlocked
+                                    ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                                    : busy
+                                      ? "Resending…"
+                                      : "Send each selected message back to the queue it originally failed in (NServiceBus.FailedQ — or this entity if unset), then remove it here"
+                            }
+                            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                            data-testid="bulk-resend"
+                        >
+                            <CopyPlus className="h-3 w-3" /> Resend to origin
+                        </button>
+                        {p.viewMode === "dlq" && p.entity && (
+                            <button
+                                onClick={p.onResubmit}
+                                disabled={busy || sessionBlocked}
+                                title={
+                                    sessionBlocked
+                                        ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                                        : busy
+                                          ? "Resubmitting…"
+                                          : `Send each selected message back to ${sendableEntityPath(p.entity)} — the entity this dead-letter queue belongs to — then remove it from the DLQ`
+                                }
+                                className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                                data-testid="bulk-resubmit"
+                            >
+                                <ArrowUpRight className="h-3 w-3" /> Resubmit to{" "}
+                                {sendableEntityPath(p.entity)}
+                            </button>
+                        )}
+                        {p.viewMode === "active" && (
+                            <button
+                                onClick={p.onDeadLetter}
+                                disabled={busy || sessionBlocked}
+                                title={
+                                    sessionBlocked
+                                        ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                                        : busy
+                                          ? "Dead-lettering…"
+                                          : "Move each selected message into this entity's dead-letter queue — a broker move, not a copy (a dead-letter reason is recorded)"
+                                }
+                                className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                                data-testid="bulk-deadletter"
+                            >
+                                <Ban className="h-3 w-3" /> Move to DLQ
+                            </button>
+                        )}
+                        <button
+                            onClick={p.onComplete}
+                            disabled={busy || sessionBlocked}
+                            title={
+                                sessionBlocked
+                                    ? SESSIONS_NOT_SUPPORTED_TOOLTIP
+                                    : busy
+                                      ? "Completing…"
+                                      : `Settle each selected message — permanently removed from ${p.viewMode === "dlq" ? "the dead-letter queue" : "the queue"}, no redelivery`
+                            }
+                            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                            data-testid="bulk-complete"
+                        >
+                            <Check className="h-3 w-3" /> Complete
+                        </button>
+                    </>
                 )}
-                {p.viewMode === "active" && (
-                    <button
-                        onClick={p.onDeadLetter}
-                        disabled={busy || sessionBlocked}
-                        title={
-                            sessionBlocked
-                                ? SESSIONS_NOT_SUPPORTED_TOOLTIP
-                                : busy
-                                  ? "Dead-lettering…"
-                                  : "Move each selected message into this entity's dead-letter queue — a broker move, not a copy (a dead-letter reason is recorded)"
-                        }
-                        className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                        data-testid="bulk-deadletter"
-                    >
-                        <Ban className="h-3 w-3" /> Move to DLQ
-                    </button>
-                )}
-                <button
-                    onClick={p.onComplete}
-                    disabled={busy || sessionBlocked}
-                    title={
-                        sessionBlocked
-                            ? SESSIONS_NOT_SUPPORTED_TOOLTIP
-                            : busy
-                              ? "Completing…"
-                              : `Settle each selected message — permanently removed from ${p.viewMode === "dlq" ? "the dead-letter queue" : "the queue"}, no redelivery`
-                    }
-                    className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
-                    data-testid="bulk-complete"
-                >
-                    <Check className="h-3 w-3" /> Complete
-                </button>
                 <button
                     onClick={p.onClearSelection}
                     className="rounded border px-2 py-1 text-xs hover:bg-accent"
@@ -183,20 +206,24 @@ export function BulkConfirmBar({
             message={
                 pending.kind === "complete"
                     ? `Complete ${pending.seqNumbers.length} message(s)? They are settled and permanently removed — no redelivery.`
-                    : pending.kind === "resubmit"
-                      ? `Resubmit ${pending.seqNumbers.length} message(s) back to ${entity ? sendableEntityPath(entity) : "the source entity"}? Each copy gets a new Message ID and the original leaves the dead-letter queue once sent.`
-                      : pending.kind === "deadletter"
-                        ? `Move ${pending.seqNumbers.length} message(s) to the dead-letter queue of ${entity?.entityPath ?? "this entity"}?`
-                        : `Resend ${pending.messages.length} message(s) to ${resendTargetText(pending.messages, entity?.entityPath ?? "")}? Originals are removed once each copy is sent — every copy gets a new Message ID.`
+                    : pending.kind === "cancelScheduled"
+                      ? `Cancel ${pending.seqNumbers.length} scheduled message(s)? They never fire and are removed from the queue — this cannot be undone.`
+                      : pending.kind === "resubmit"
+                        ? `Resubmit ${pending.seqNumbers.length} message(s) back to ${entity ? sendableEntityPath(entity) : "the source entity"}? Each copy gets a new Message ID and the original leaves the dead-letter queue once sent.`
+                        : pending.kind === "deadletter"
+                          ? `Move ${pending.seqNumbers.length} message(s) to the dead-letter queue of ${entity?.entityPath ?? "this entity"}?`
+                          : `Resend ${pending.messages.length} message(s) to ${resendTargetText(pending.messages, entity?.entityPath ?? "")}? Originals are removed once each copy is sent — every copy gets a new Message ID.`
             }
             confirmLabel={
                 pending.kind === "complete"
                     ? "Complete"
-                    : pending.kind === "resubmit"
-                      ? "Resubmit"
-                      : pending.kind === "deadletter"
-                        ? "Dead-letter"
-                        : "Resend"
+                    : pending.kind === "cancelScheduled"
+                      ? "Cancel scheduled"
+                      : pending.kind === "resubmit"
+                        ? "Resubmit"
+                        : pending.kind === "deadletter"
+                          ? "Dead-letter"
+                          : "Resend"
             }
             onConfirm={onConfirm}
             onCancel={onCancel}

@@ -1,5 +1,5 @@
-import { Loader2, AlertCircle, RefreshCw, RotateCw } from "lucide-react";
-import type { SbMessage } from "@/lib/types";
+import { Loader2, AlertCircle, RefreshCw, RotateCw, Timer } from "lucide-react";
+import type { SbMessage, SbViewMode } from "@/lib/types";
 import { LastRefreshed } from "@/components/shared/LastRefreshed";
 import {
     NSB_COLUMN_DEFS,
@@ -16,8 +16,14 @@ export interface MessageGridContext {
     customColumns: string[];
     nsbMode: boolean;
     rowDensity: RowDensity;
-    viewMode: "active" | "dlq";
+    viewMode: SbViewMode;
 }
+
+const VIEW_EMPTY_LABEL: Record<SbViewMode, string> = {
+    active: "active",
+    scheduled: "scheduled",
+    dlq: "dead-lettered",
+};
 
 export function MessageTableEmpty({
     sourceEmpty,
@@ -25,20 +31,30 @@ export function MessageTableEmpty({
 }: {
     /** messages.length === 0 — distinguishes "queue is empty" from "filtered to nothing". */
     sourceEmpty: boolean;
-    viewMode: "active" | "dlq";
+    viewMode: SbViewMode;
 }) {
     return (
         <div
-            className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground"
+            className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 text-sm text-muted-foreground"
             data-testid={
                 sourceEmpty
                     ? "message-list-no-messages"
                     : "message-list-no-matches"
             }
         >
-            {sourceEmpty
-                ? `No ${viewMode === "dlq" ? "dead-lettered" : "active"} messages`
-                : "No messages match the current filters"}
+            <span>
+                {sourceEmpty
+                    ? `No ${VIEW_EMPTY_LABEL[viewMode]} messages`
+                    : "No messages match the current filters"}
+            </span>
+            {/* Honest limit: peek returns scheduled messages only inside the fetched window —
+                deeper ones exist on the broker but are invisible here. */}
+            {sourceEmpty && viewMode === "scheduled" && (
+                <span className="text-xs text-muted-foreground/80">
+                    Scheduled messages beyond the peek window aren't returned —
+                    raise the peek count to look deeper.
+                </span>
+            )}
         </div>
     );
 }
@@ -132,6 +148,8 @@ export function MessageRow({
                 const value = col.render(msg);
                 const isDelivery = col.key === "deliveryCount";
                 const isDlqReason = col.key === "deadLetterReason";
+                const isState = col.key === "state";
+                const scheduled = isState && msg.scheduledEnqueueTime;
                 return (
                     <div
                         key={col.key}
@@ -143,10 +161,15 @@ export function MessageRow({
                             msg.deliveryCount > 0
                                 ? "text-destructive"
                                 : ""
-                        } ${isDlqReason ? "text-destructive" : ""}`}
+                        } ${isDlqReason ? "text-destructive" : ""} ${
+                            scheduled ? "text-amber-500" : ""
+                        }`}
                     >
                         {isDlqReason && msg.deadLetterReason && (
                             <AlertCircle className="mr-1 inline h-3 w-3 shrink-0" />
+                        )}
+                        {scheduled && (
+                            <Timer className="mr-1 inline h-3 w-3 shrink-0" />
                         )}
                         <span className="truncate">{value}</span>
                     </div>

@@ -1,6 +1,7 @@
-import { formatLocalTime } from "@/lib/datetime";
+import { formatLocalDateTime, formatLocalTime } from "@/lib/datetime";
 import type { RowDensity } from "@/lib/stores/sb-preferences";
 import type { SbMessage } from "@/lib/types";
+import { isScheduledMessage } from "./filterLogic";
 
 export const densityClass: Record<RowDensity, string> = {
     compact: "py-0.5",
@@ -24,6 +25,8 @@ export const ROW_HEIGHT_ESTIMATE: Record<RowDensity, number> = {
 export const CHECKBOX_COL_WIDTH = "32px";
 export const CUSTOM_COLUMN_WIDTH = "140px";
 export const COLUMN_WIDTHS: Record<string, string> = {
+    state: "100px",
+    scheduledFor: "150px",
     enqueuedAt: "110px",
     sequenceNumber: "90px",
     messageId: "160px",
@@ -54,6 +57,27 @@ export interface ColumnDef {
 }
 
 export const COLUMN_DEFS: ColumnDef[] = [
+    // `state` is what distinguishes a scheduled message from an active one in a peek —
+    // the row otherwise looks identical. The Scheduled view force-includes it (that's the
+    // point of the view); elsewhere it's a normal toggleable column.
+    {
+        key: "state",
+        label: "State",
+        render: (m) =>
+            m.deadLetterReason
+                ? "Dead-lettered"
+                : isScheduledMessage(m)
+                  ? "Scheduled"
+                  : "Active",
+    },
+    {
+        key: "scheduledFor",
+        label: "Scheduled for",
+        render: (m) =>
+            m.scheduledEnqueueTime
+                ? formatLocalDateTime(m.scheduledEnqueueTime)
+                : "-",
+    },
     {
         key: "enqueuedAt",
         label: "Enqueued",

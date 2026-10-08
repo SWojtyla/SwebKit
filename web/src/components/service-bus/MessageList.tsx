@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { invalidateServiceBusQueries, useSbSessions } from "@/lib/hooks";
 import { apiSend } from "@/lib/api";
-import type { SbEntityInfo, SbMessage } from "@/lib/types";
+import type { SbEntityInfo, SbMessage, SbViewMode } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
 import { buildZip } from "@/lib/zip";
 import { useNotification } from "@/components/layout/notification-context";
@@ -15,24 +15,10 @@ import {
 } from "./exportHelpers";
 import { resendTargetText, sendableEntityPath } from "./resendHelpers";
 import { runInChunks } from "./bulkOps";
-import { applyFilters, hasActiveFilters } from "./filterLogic";
-import type { AdvancedFilterRule } from "./filterTypes";
-import { isRuleConfigured, createFilterRule } from "./filterTypes";
+import { applyFilters, isScheduledMessage } from "./filterLogic";
 import {
-    loadSbPreferences,
-    saveSbPreferences,
-    type SbListPreferences,
-    type RowDensity,
-} from "@/lib/stores/sb-preferences";
-import {
-    loadSavedFilters,
-    addSavedFilter,
-    deleteSavedFilter,
-    type SbSavedFilter,
-} from "@/lib/stores/sb-filters";
-import {
-    MessageListToolbar,
     ColumnTogglePanel,
+    FilterChipBar,
     SessionPinFilter,
     SessionChipBar,
     AdvancedFilterSection,
@@ -52,11 +38,15 @@ import {
     type MessageGridContext,
 } from "./MessageListTable";
 import { useGridKeyboardNav } from "@/lib/hooks/useGridKeyboardNav";
+import type { SbListControls } from "./useSbListControls";
 
 interface Props {
     nsId: string | null;
     entity: SbEntityInfo | null;
-    viewMode: "active" | "dlq";
+    viewMode: SbViewMode;
+    /** Filter/prefs state — lifted to the page so the ribbon's Messages/View tabs
+     * and this list's own chrome read and write the same source. */
+    controls: SbListControls;
     messages: SbMessage[];
     isLoading: boolean;
     /** Distinct from "no messages" — a fetch failure must never render like a genuinely empty queue. */
@@ -72,6 +62,11 @@ interface Props {
     selectedMessage: SbMessage | null;
     onSelectMessage: (message: SbMessage) => void;
     onLoadMore: () => void;
+    /** Registers list-side commands the ribbon calls (ZIP needs the selection, which lives here). */
+    onActionsReady?: (api: {
+        downloadZip: () => void;
+        zipDisabled: boolean;
+    }) => void;
 }
 
 import {
@@ -87,6 +82,7 @@ export function MessageList({
     nsId,
     entity,
     viewMode,
+    controls: c,
     messages,
     isLoading,
     isError,
@@ -100,43 +96,35 @@ export function MessageList({
     selectedMessage,
     onSelectMessage,
     onLoadMore,
+    onActionsReady,
 }: Props) {
     const qc = useQueryClient();
     const { notify } = useNotification();
     const listRef = useRef<HTMLDivElement>(null);
     const sentinelRef = useRef<HTMLDivElement>(null);
-    // Root container of toolbar + list — lets the `/` grid shortcut reach the
-    // toolbar's filter input without threading a ref prop through it.
+    // Root container of the chips bar + list — lets the `/` grid shortcut reach the
+    // filter input without threading a ref prop through it.
     const panelRef = useRef<HTMLDivElement | null>(null);
-    const [textFilter, setTextFilter] = useState("");
-    const [advancedRules, setAdvancedRules] = useState<AdvancedFilterRule[]>(
-        [],
-    );
-    const [advancedEnabled, setAdvancedEnabled] = useState(false);
-    const [pinnedSessionId, setPinnedSessionId] = useState<string | null>(null);
-    const [showColumnToggle, setShowColumnToggle] = useState(false);
     const [selectedMsgs, setSelectedMsgs] = useState<Set<string>>(new Set());
-    const [customColumnInput, setCustomColumnInput] = useState("");
 
-    // Master filter switch and saved filter state
-    const [filtersEnabled, setFiltersEnabled] = useState(true);
-    const [savedFilters, setSavedFilters] = useState<SbSavedFilter[]>([]);
-    const [showSavedFilters, setShowSavedFilters] = useState(false);
-    const [saveFilterName, setSaveFilterName] = useState("");
-    const [showSaveFilterInput, setShowSaveFilterInput] = useState(false);
-
-    // Load preferences
-    const [prefs, setPrefs] = useState<SbListPreferences>(() => {
-        if (nsId && entity) return loadSbPreferences(nsId, entity.entityPath);
-        return {
-            peekCount: 50,
-            autoRefreshInterval: 0,
-            rowDensity: "default" as RowDensity,
-            visibleColumns: ["subject", "sequenceNumber", "enqueuedAt"],
-            customColumns: [],
-            nsbMode: false,
-        };
-    });
+    // Lifted controls — the ribbon's Messages/View tabs write these, this list reads them.
+    const {
+        prefs,
+        setPrefs,
+        textFilter,
+        advancedRules,
+        setAdvancedRules,
+        advancedEnabled,
+        filtersEnabled,
+        pinnedSessionId,
+        setPinnedSessionId,
+        showColumnToggle,
+        customColumnInput,
+        setCustomColumnInput,
+        addCustomColumn,
+        removeCustomColumn,
+        toggleBuiltInColumn,
+    } = c;
 
     const entityPath = entity?.entityPath;
 
@@ -153,29 +141,8 @@ export function MessageList({
         [sessionEntity, sessionsQuery.data, messages],
     );
 
-    // Reload prefs when entity changes
-    useEffect(() => {
-        if (nsId && entityPath) {
-            setPrefs(loadSbPreferences(nsId, entityPath));
-        }
-    }, [nsId, entityPath]);
-
-    // Save prefs on change
-    useEffect(() => {
-        if (nsId && entityPath) {
-            saveSbPreferences(nsId, entityPath, prefs);
-        }
-    }, [prefs, nsId, entityPath]);
-
     const visibleColumns = new Set(prefs.visibleColumns);
     const nsbMode = prefs.nsbMode ?? false;
-
-    // Load saved filters when entity changes
-    useEffect(() => {
-        if (nsId && entityPath) {
-            setSavedFilters(loadSavedFilters(nsId, entityPath));
-        }
-    }, [nsId, entityPath]);
 
     // Auto-refresh
     useEffect(() => {
@@ -276,6 +243,18 @@ export function MessageList({
         setPendingBulkConfirm({ kind: "resend", messages: selected });
     }, [nsId, entity, sessionEntity, selectedMsgs, messages]);
 
+    // Scheduled view's bulk op: cancel-by-sequence rides the sender, so it works even on
+    // session-required entities (unlike every receive/settle action above).
+    const handleBulkCancelScheduled = useCallback(() => {
+        if (!nsId || !entity || selectedMsgs.size === 0) return;
+        const seqNumbers = messages
+            .filter((m) => selectedMsgs.has(sbMessageKey(m)))
+            .map((m) => m.sequenceNumber)
+            .filter((n): n is number => n !== null);
+        if (seqNumbers.length === 0) return;
+        setPendingBulkConfirm({ kind: "cancelScheduled", seqNumbers });
+    }, [nsId, entity, selectedMsgs, messages]);
+
     // Bulk runs are chunked so the progress bar reflects real completed work —
     // a single request gives no signal until it finishes. The selection stays
     // checked for the duration so the bar (which only renders with a selection)
@@ -307,6 +286,17 @@ export function MessageList({
                     sequenceNumbers: chunk.map(String),
                     deadLetter: viewMode === "dlq",
                 });
+        } else if (action.kind === "cancelScheduled") {
+            items = action.seqNumbers;
+            label = "Cancelling";
+            failTitle = "Couldn't cancel scheduled messages";
+            successText = `Cancelled ${items.length} scheduled message(s)`;
+            run = (chunk) =>
+                Promise.all(
+                    chunk.map((seq) =>
+                        apiSend(`${base}/scheduled/${seq}`, "DELETE"),
+                    ),
+                );
         } else {
             items = action.seqNumbers;
             if (action.kind === "complete") {
@@ -382,29 +372,6 @@ export function MessageList({
         }
     };
 
-    const addCustomColumn = () => {
-        const col = customColumnInput.trim();
-        if (!col || prefs.customColumns.includes(col)) return;
-        setPrefs((p) => ({ ...p, customColumns: [...p.customColumns, col] }));
-        setCustomColumnInput("");
-    };
-
-    const removeCustomColumn = (col: string) => {
-        setPrefs((p) => ({
-            ...p,
-            customColumns: p.customColumns.filter((c) => c !== col),
-        }));
-    };
-
-    const toggleBuiltInColumn = (col: string) => {
-        setPrefs((p) => {
-            const next = new Set(p.visibleColumns);
-            if (next.has(col)) next.delete(col);
-            else next.add(col);
-            return { ...p, visibleColumns: [...next] };
-        });
-    };
-
     // Suggested custom columns from loaded messages
     const suggestedColumns = useMemo(() => {
         if (messages.length === 0) return [];
@@ -417,55 +384,34 @@ export function MessageList({
             .slice(0, 10);
     }, [messages, prefs.customColumns]);
 
+    // The view's message state comes first — Active shows only deliverable-now messages
+    // (a scheduled message whose fire time passed is active again), Scheduled shows only
+    // not-yet-fired ones, DLQ shows the dead-letter listing. Then the user filters run.
+    const viewSource = useMemo(() => {
+        if (viewMode === "scheduled")
+            return messages.filter((m) => isScheduledMessage(m));
+        if (viewMode === "active")
+            return messages.filter((m) => !isScheduledMessage(m));
+        return messages;
+    }, [messages, viewMode]);
+
     const filteredMessages = useMemo(() => {
-        if (!filtersEnabled) return messages;
+        if (!filtersEnabled) return viewSource;
         return applyFilters(
-            messages,
+            viewSource,
             textFilter,
             advancedRules,
             advancedEnabled,
             pinnedSessionId,
         );
     }, [
-        messages,
+        viewSource,
         textFilter,
         advancedRules,
         advancedEnabled,
         pinnedSessionId,
         filtersEnabled,
     ]);
-
-    const activeRuleCount = advancedRules.filter(
-        (r) => r.enabled && isRuleConfigured(r),
-    ).length;
-
-    const canSaveFilter = hasActiveFilters(
-        textFilter,
-        pinnedSessionId,
-        advancedRules,
-    );
-
-    const clearAllFilters = () => {
-        setTextFilter("");
-        setPinnedSessionId(null);
-        setAdvancedRules([]);
-    };
-
-    const handleSaveFilter = () => {
-        if (!nsId || !entity || !saveFilterName.trim()) return;
-        const filter: SbSavedFilter = {
-            name: saveFilterName.trim(),
-            text: textFilter,
-            filtersEnabled,
-            advancedEnabled,
-            advancedRules,
-            pinnedSessionId,
-        };
-        const updated = addSavedFilter(nsId, entity.entityPath, filter);
-        setSavedFilters(updated);
-        setShowSaveFilterInput(false);
-        setSaveFilterName("");
-    };
 
     const handleDownloadZip = useCallback(async () => {
         if (!entity) return;
@@ -497,13 +443,34 @@ export function MessageList({
         );
     }, [entity, messages, filteredMessages, selectedMsgs, notify]);
 
+    // The ribbon's Messages tab exposes the ZIP export — the selection set lives here,
+    // so the page calls back in via this registration rather than owning the handler.
+    useEffect(() => {
+        onActionsReady?.({
+            downloadZip: handleDownloadZip,
+            zipDisabled: filteredMessages.length === 0 || isLoadingMore,
+        });
+    }, [
+        onActionsReady,
+        handleDownloadZip,
+        filteredMessages.length,
+        isLoadingMore,
+    ]);
+
     // Columns actually rendered given current view mode + toggles, and the
     // shared grid template both the header and every virtualized row use so
     // columns stay aligned across independently-positioned row elements.
-    const activeColumnDefs = COLUMN_DEFS.filter(
-        (col) =>
-            visibleColumns.has(col.key) && (!col.dlqOnly || viewMode === "dlq"),
-    );
+    // The Scheduled view always leads with State + Scheduled-for — distinguishing a
+    // scheduled message from an active one is the whole point of the view.
+    const activeColumnDefs = COLUMN_DEFS.filter((col) => {
+        if (col.dlqOnly && viewMode !== "dlq") return false;
+        if (
+            viewMode === "scheduled" &&
+            (col.key === "state" || col.key === "scheduledFor")
+        )
+            return true;
+        return visibleColumns.has(col.key);
+    });
     const gridTemplateColumns = [
         CHECKBOX_COL_WIDTH,
         ...activeColumnDefs.map((col) => COLUMN_WIDTHS[col.key] ?? "140px"),
@@ -610,61 +577,12 @@ export function MessageList({
             className="flex min-h-0 flex-1 flex-col"
             data-testid="message-list-container"
         >
-            <MessageListToolbar
-                textFilter={textFilter}
-                onTextFilterChange={setTextFilter}
-                savedFilters={savedFilters}
-                showSavedFilters={showSavedFilters}
-                canSaveFilter={canSaveFilter}
-                showSaveFilterInput={showSaveFilterInput}
-                saveFilterName={saveFilterName}
-                onToggleSavedFilters={() =>
-                    setShowSavedFilters(!showSavedFilters)
-                }
-                onShowSaveFilterInput={setShowSaveFilterInput}
-                onSaveFilterNameChange={setSaveFilterName}
-                onApplySavedFilter={(f) => {
-                    setTextFilter(f.text);
-                    setFiltersEnabled(f.filtersEnabled);
-                    setAdvancedEnabled(f.advancedEnabled);
-                    setAdvancedRules(f.advancedRules);
-                    setPinnedSessionId(f.pinnedSessionId);
-                    setShowSavedFilters(false);
-                }}
-                onDeleteSavedFilter={(f) => {
-                    if (!nsId || !entity) return;
-                    setSavedFilters(
-                        deleteSavedFilter(nsId, entity.entityPath, f.name),
-                    );
-                }}
-                onSaveFilter={handleSaveFilter}
-                prefs={prefs}
-                onPrefsChange={setPrefs}
-                nsbMode={nsbMode}
-                filtersEnabled={filtersEnabled}
-                onToggleFiltersEnabled={() =>
-                    setFiltersEnabled(!filtersEnabled)
-                }
-                advancedEnabled={advancedEnabled}
-                onToggleAdvanced={() => setAdvancedEnabled((prev) => !prev)}
-                activeRuleCount={activeRuleCount}
-                anyFiltersActive={hasActiveFilters(
-                    textFilter,
-                    pinnedSessionId,
-                    advancedRules,
-                )}
-                onClearAllFilters={clearAllFilters}
-                onAddRule={() =>
-                    setAdvancedRules((rules) => [...rules, createFilterRule()])
-                }
-                showColumnToggle={showColumnToggle}
-                onToggleColumnPanel={() =>
-                    setShowColumnToggle(!showColumnToggle)
-                }
-                onDownloadZip={handleDownloadZip}
-                downloadDisabled={
-                    filteredMessages.length === 0 || isLoadingMore
-                }
+            {/* The chips bar is outside the ribbon on purpose — a collapsed ribbon must
+                never hide that filters are narrowing the list right now. */}
+            <FilterChipBar
+                controls={c}
+                filteredCount={filteredMessages.length}
+                loadedCount={viewSource.length}
             />
 
             {showColumnToggle && (
@@ -713,6 +631,7 @@ export function MessageList({
                     onResubmit={handleBulkResubmit}
                     onDeadLetter={handleBulkDeadLetter}
                     onComplete={handleBulkComplete}
+                    onCancelScheduled={handleBulkCancelScheduled}
                     onClearSelection={() => setSelectedMsgs(new Set())}
                 />
             )}

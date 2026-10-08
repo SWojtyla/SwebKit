@@ -98,7 +98,13 @@ export interface SbMessage {
     lockToken: string | null;
     sequenceNumber: number | null;
     sessionId: string | null;
+    /** Broker-side fire time for scheduled messages — absent/null on ordinary messages. */
+    scheduledEnqueueTime?: string | null;
 }
+
+/** The three message states the list can show — scheduled rides the ordinary peek
+ * (scheduled messages live in the active queue until they fire). */
+export type SbViewMode = "active" | "scheduled" | "dlq";
 
 export interface SbSystemProperties {
     expiresAt: string | null;

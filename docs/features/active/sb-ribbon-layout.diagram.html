@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SB ribbon layout — change map</title>
+<style>
+  :root {
+    --bg: #f7f7f8; --panel: #ffffff; --line: #d4d4d8; --text: #1f2328;
+    --muted: #6b7280; --accent: #2563eb; --amber: #b45309; --danger: #b91c1c;
+    --chip: #eef2ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141417; --panel: #1d1d22; --line: #3a3a41; --text: #e4e4e7;
+      --muted: #9ca3af; --accent: #60a5fa; --amber: #fbbf24; --danger: #f87171;
+      --chip: #26283a;
+    }
+  }
+  body { margin: 0; padding: 32px 24px; background: var(--bg); color: var(--text);
+         font: 14px/1.5 system-ui, sans-serif; max-width: 980px; margin-inline: auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .06em;
+       color: var(--muted); margin: 28px 0 10px; }
+  p.lead { color: var(--muted); margin: 0 0 8px; max-width: 72ch; }
+  svg { display: block; width: 100%; height: auto; background: var(--panel);
+        border: 1px solid var(--line); border-radius: 10px; }
+  .box { fill: none; stroke: var(--line); rx: 6; }
+  .b-accent { stroke: var(--accent); } .b-amber { stroke: var(--amber); }
+  .b-danger { stroke: var(--danger); }
+  .t { fill: var(--text); font-size: 11px; }
+  .tm { fill: var(--muted); font-size: 10px; }
+  .tl { fill: var(--muted); font-size: 8.5px; text-transform: uppercase; letter-spacing: .08em; }
+  .acc { fill: var(--accent); } .amb { fill: var(--amber); } .dgr { fill: var(--danger); }
+  .chipr { fill: var(--chip); }
+  ul { margin: 6px 0; padding-left: 20px; } li { margin: 3px 0; }
+  code { background: var(--chip); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>Service Bus — ribbon layout, filter chips, scheduled state</h1>
+<p class="lead">The stacked toolbar + overflow "Actions" menu collapsed ~20 controls into three
+rows of undifferentiated buttons. This change groups them into a compact four-tab ribbon, makes
+active filters permanently visible as chips, and promotes <em>Scheduled</em> to a first-class
+message state alongside Active and DLQ.</p>
+
+<h2>Chrome — before → after</h2>
+<svg viewBox="0 0 940 190" role="img" aria-label="Before: three stacked toolbars. After: one ribbon with four tabs plus a filter chip strip.">
+  <text class="tm" x="12" y="22">BEFORE</text>
+  <rect class="box" x="12" y="30" width="440" height="34" rx="6"/>
+  <text class="t" x="24" y="51">namespace · entity breadcrumb · Active|DLQ · Ask AI · pin</text>
+  <rect class="box" x="12" y="70" width="440" height="34" rx="6"/>
+  <text class="t" x="24" y="91">entity ops + Actions ▾ (compose, batch, replay, purge, reach…)</text>
+  <rect class="box" x="12" y="110" width="440" height="34" rx="6"/>
+  <text class="t" x="24" y="131">list toolbar (refresh, peek, auto, filters, columns, zip, saved…)</text>
+  <text class="tm" x="12" y="166">filters invisible once panel closed · scheduled messages indistinguishable</text>
+
+  <text class="tm" x="500" y="22">AFTER</text>
+  <rect class="box b-accent" x="500" y="30" width="428" height="34" rx="6"/>
+  <text class="t" x="512" y="51">Home | Messages | DLQ &amp; Recovery | View ········· ns picker · ▾</text>
+  <rect class="box" x="500" y="70" width="428" height="30" rx="6"/>
+  <text class="tm" x="512" y="89">tab body: compact icon+label pills in labelled groups</text>
+  <rect class="box" x="500" y="106" width="428" height="34" rx="6"/>
+  <text class="t" x="512" y="127">breadcrumb · [Active n | Scheduled n | DLQ n] · Ask AI · pin</text>
+  <rect class="box b-amber" x="500" y="146" width="428" height="30" rx="6"/>
+  <text class="t" x="512" y="166">🔍 search · [rule chips] · session · + rule · clear all · 12 of 50</text>
+</svg>
+
+<h2>Scheduled state — how a scheduled message flows</h2>
+<svg viewBox="0 0 940 150" role="img" aria-label="Scheduled messages live in the active collection; peeks see them, receivers don't until the stamp fires.">
+  <rect class="box" x="12" y="18" width="250" height="48" rx="6"/>
+  <text class="t" x="24" y="38">Send / Schedule</text>
+  <text class="tm" x="24" y="54">SbMessage.ScheduledEnqueueTime = T</text>
+
+  <rect class="box" x="310" y="18" width="300" height="48" rx="6"/>
+  <text class="t" x="322" y="38">Active collection</text>
+  <text class="tm" x="322" y="54">peek sees it · ScheduledMessageCount++ · ActiveMessageCount stays</text>
+
+  <rect class="box b-amber" x="658" y="18" width="270" height="48" rx="6"/>
+  <text class="t" x="670" y="38">view=scheduled filter</text>
+  <text class="tm" x="670" y="54">isScheduledMessage: stamp set &amp; T &gt; now</text>
+
+  <text class="t" x="270" y="44">→</text>
+  <text class="t" x="620" y="44">→</text>
+
+  <rect class="box" x="12" y="96" width="916" height="40" rx="6"/>
+  <text class="tm" x="24" y="112">Receive-style ops (complete · dead-letter · purge · park-for-reach · resubmit-active) guard on IsReceivable:</text>
+  <text class="t" x="24" y="128">stamp absent or already fired — unfired scheduled messages stay put. Cancel = sender-side delete.</text>
+</svg>
+
+<h2>Typed filter rules</h2>
+<svg viewBox="0 0 940 132" role="img" aria-label="Rule fields split into text, numeric and date operator families; values stay flat strings for saved-filter round-trips.">
+  <rect class="box" x="12" y="14" width="290" height="104" rx="6"/>
+  <text class="tl" x="24" y="34">text — msg-id · subject · corr-id · prop</text>
+  <text class="t" x="24" y="54">contains · equals · not-equals</text>
+  <text class="t" x="24" y="70">starts-with · regex</text>
+  <text class="tm" x="24" y="94">absent subject/correlation → no match</text>
+  <text class="tm" x="24" y="108">invalid regex → no match</text>
+
+  <rect class="box" x="322" y="14" width="290" height="104" rx="6"/>
+  <text class="tl" x="334" y="34">numeric — delivery · sequence</text>
+  <text class="t" x="334" y="54">= ≠ &gt; ≥ &lt; ≤ · between min,max</text>
+  <text class="tm" x="334" y="94">number input in the builder</text>
+  <text class="tm" x="334" y="108">NaN value → no match</text>
+
+  <rect class="box" x="632" y="14" width="296" height="104" rx="6"/>
+  <text class="tl" x="644" y="34">date — enqueued · scheduled-for</text>
+  <text class="t" x="644" y="54">before · ≤ · after · ≥ · exactly</text>
+  <text class="t" x="644" y="70">between · older than N · within last N</text>
+  <text class="tm" x="644" y="94">duration stored flat: 30m · 2h · 7d</text>
+  <text class="tm" x="644" y="108">no stamp on message → no match</text>
+</svg>
+
+<h2>Decisions worth knowing</h2>
+<ul>
+  <li><b>Scheduled rides the ordinary peek</b> — the SDK has no scheduled-only listing; the view
+      filters the active window by stamp, and load-more + footer compare against
+      <code>ScheduledMessageCount</code>.</li>
+  <li><b>Purge keeps scheduled messages</b> — it emulates a receive-delete loop and receivers can't
+      touch unfired schedules; the ribbon disables Purge on the scheduled view and says why.</li>
+  <li><b>Chips bar lives outside the ribbon</b> — collapsing the ribbon can never hide that the
+      list is narrowed.</li>
+  <li><b>All ribbon testids preserved</b> from the old toolbar/menu — e2e only gained a tab click.</li>
+  <li><b>Saved filters unchanged</b> — new operators and the <code>min,max</code> range encoding are
+      additive inside the existing rule shape.</li>
+</ul>
+
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SB UX prototype — Progressive disclosure</title>
+<style>
+  :root {
+    --bg:#12141c; --card:#1a1d29; --card2:#20242f; --border:#2a2e3d;
+    --fg:#eef0f6; --muted:#8a8f9f; --primary:#8b8cf8; --primary-soft:#8b8cf826;
+    --danger:#e5484d; --ok:#46c98e;
+  }
+  * { box-sizing:border-box; margin:0; font:13px/1.45 "Segoe UI",system-ui,sans-serif; }
+  body { background:var(--bg); color:var(--fg); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  button { font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
+  select, input[type=text] { background:var(--card2); border:1px solid var(--border); color:var(--fg); border-radius:6px; padding:4px 8px; font-size:12px; }
+
+  /* ── the ENTIRE chrome: one line ── */
+  .topbar { display:flex; align-items:center; gap:10px; padding:7px 14px; border-bottom:1px solid var(--border); background:var(--card); }
+  .edge { position:absolute; left:0; top:50%; transform:translateY(-50%); z-index:5;
+          writing-mode:vertical-rl; padding:10px 3px; font-size:11px; color:var(--muted);
+          background:var(--card); border:1px solid var(--border); border-left:none; border-radius:0 6px 6px 0; }
+  .edge:hover { color:var(--fg); }
+  .crumbs { font-size:12px; }
+  .crumbs a { color:var(--muted); cursor:pointer; }
+  .crumbs b { font-weight:600; }
+  .counts { font-size:11px; color:var(--muted); }
+  .counts .a { color:var(--ok); } .counts .d { color:var(--danger); }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .seg button { padding:3px 12px; font-size:12px; color:var(--muted); }
+  .seg button.on { background:var(--primary); color:#fff; }
+  .btn { border:1px solid var(--border); border-radius:6px; padding:4px 12px; font-size:12px; }
+  .btn.pri { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .icon-btn { padding:4px 7px; border-radius:5px; color:var(--muted); }
+  .icon-btn:hover { background:var(--card2); color:var(--fg); }
+
+  .listwrap { flex:1; overflow:auto; position:relative; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; padding:6px 12px; font-size:10px; font-weight:700; letter-spacing:.8px; color:var(--muted); text-transform:uppercase; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); }
+  td { padding:7px 12px; border-bottom:1px solid #1f2330; color:#cfd3de; }
+  tbody tr { cursor:pointer; }
+  tbody tr:hover { background:var(--card2); }
+  tr.sel { background:var(--primary-soft); }
+  .mono { font-family:Consolas,monospace; font-size:11px; }
+  .row-acts { opacity:0; white-space:nowrap; text-align:right; }
+  tr:hover .row-acts { opacity:1; }
+  .row-acts button { color:var(--muted); padding:1px 5px; border-radius:4px; font-size:11px; }
+  .row-acts button:hover { color:var(--fg); background:var(--card); }
+
+  .statusline { display:flex; gap:12px; padding:5px 14px; border-top:1px solid var(--border); font-size:11px; color:var(--muted); background:var(--card); }
+
+  /* ── overlay: entities ── */
+  .scrim { position:fixed; inset:0; background:#000a; z-index:9; display:none; }
+  .scrim.on { display:block; }
+  .drawer-l { position:fixed; left:0; top:0; bottom:0; width:260px; background:var(--card); border-right:1px solid var(--border); z-index:10; transform:translateX(-100%); transition:transform .18s; display:flex; flex-direction:column; }
+  .drawer-l.on { transform:none; }
+  .grp { padding:10px 12px 4px; font-size:10px; font-weight:700; letter-spacing:1px; color:var(--muted); text-transform:uppercase; }
+  .ent { display:flex; align-items:center; gap:8px; padding:5px 12px; cursor:pointer; font-size:12px; }
+  .ent:hover, .ent.sel { background:var(--primary-soft); }
+  .ent .name { flex:1; }
+  .badge { font-size:10px; padding:1px 6px; border-radius:8px; background:var(--card2); color:var(--muted); }
+  .badge.dlq { color:var(--danger); background:#e5484d22; }
+  .badge.act { color:var(--ok); background:#46c98e1f; }
+
+  /* ── overlay: ⋯ menu ── */
+  .menu { position:fixed; top:44px; right:14px; width:250px; background:var(--card); border:1px solid var(--border); border-radius:8px; box-shadow:0 12px 32px #0009; z-index:11; padding:5px; display:none; }
+  .menu.on { display:block; }
+  .menu h4 { font-size:10px; font-weight:700; letter-spacing:1px; color:var(--muted); text-transform:uppercase; padding:6px 10px 3px; }
+  .mi { display:flex; align-items:center; gap:9px; width:100%; padding:6px 10px; border-radius:5px; font-size:12px; text-align:left; }
+  .mi:hover { background:var(--card2); }
+  .mi.dgr { color:var(--danger); }
+  .mi .k { margin-left:auto; font-size:10px; color:var(--muted); }
+
+  /* ── overlay: filter/view popover ── */
+  .pop { position:fixed; top:44px; right:110px; width:320px; background:var(--card); border:1px solid var(--border); border-radius:8px; box-shadow:0 12px 32px #0009; z-index:11; padding:12px; display:none; }
+  .pop.on { display:block; }
+  .pop h4 { font-size:10px; font-weight:700; letter-spacing:1px; color:var(--muted); text-transform:uppercase; margin:8px 0 6px; }
+  .pop h4:first-child { margin-top:0; }
+  .prow { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:12px; }
+  .prow label { width:88px; color:var(--muted); font-size:11px; }
+  .prow select, .prow input { flex:1; }
+  .fchip { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--border); border-radius:14px; padding:2px 9px; font-size:11px; color:var(--muted); }
+  .fchip.on { background:var(--primary-soft); border-color:var(--primary); color:var(--primary); }
+
+  /* ── bottom drawer: detail ── */
+  .drawer-b { position:fixed; left:0; right:0; bottom:0; height:46%; background:var(--card); border-top:1px solid var(--border); z-index:10; transform:translateY(102%); transition:transform .2s; display:flex; flex-direction:column; box-shadow:0 -12px 32px #0007; }
+  .drawer-b.on { transform:none; }
+  .db-head { display:flex; align-items:center; gap:12px; padding:8px 14px; border-bottom:1px solid var(--border); }
+  .db-body { flex:1; display:flex; overflow:hidden; }
+  .db-props { width:250px; flex:none; padding:12px 14px; border-right:1px solid var(--border); overflow:auto; }
+  .kv { display:grid; grid-template-columns:90px 1fr; gap:4px 8px; font-size:11px; }
+  .kv dt { color:var(--muted); } .kv dd { font-family:Consolas,monospace; }
+  .db-body pre { flex:1; margin:0; padding:12px 14px; background:#0d0f16; font:11px/1.5 Consolas,monospace; color:#a5d6a7; overflow:auto; }
+  .btn.dgr { color:var(--danger); border-color:#e5484d55; }
+</style>
+</head>
+<body>
+
+<!-- one line of chrome. that's it. -->
+<header class="topbar">
+  <span class="crumbs"><a>Overview</a> / portima-dev / <b>orders</b></span>
+  <span class="counts"><span class="a">● 1 284</span> · <span class="d">● 37</span></span>
+  <div class="seg"><button class="on">Active</button><button>DLQ</button></div>
+  <div style="flex:1"></div>
+  <button class="fchip on" id="fbtn" title="Search, filters &amp; view">⚡ 2</button>
+  <button class="icon-btn" title="Ask AI">✦</button>
+  <button class="btn pri">+ Compose</button>
+  <button class="icon-btn" id="mbtn" title="More actions">⋯</button>
+</header>
+
+<button class="edge" id="edge">▸ Entities</button>
+
+<div class="listwrap">
+  <table>
+    <thead><tr><th style="width:30px"><input type="checkbox"></th><th>Message ID</th><th>Subject</th><th>Enqueued</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+<div class="statusline">
+  <span>200 of 1 284</span><a style="color:var(--primary);cursor:pointer">load more</a>
+  <span style="margin-left:auto">⟳ 4s ago · auto 10s</span>
+</div>
+
+<!-- entities overlay -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer-l" id="ents">
+  <div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+    <input type="text" placeholder="Filter entities…" style="width:100%">
+  </div>
+  <div class="grp">Queues</div>
+  <div class="ent sel"><span>≡</span><span class="name">orders</span><span class="badge act">1 284</span><span class="badge dlq">37</span></div>
+  <div class="ent"><span>≡</span><span class="name">payments</span><span class="badge act">56</span></div>
+  <div class="ent"><span>≡</span><span class="name">invoices</span><span class="badge act">12</span><span class="badge dlq">3</span></div>
+  <div class="ent"><span>≡</span><span class="name">notifications</span></div>
+  <div class="grp">Topics</div>
+  <div class="ent"><span>◈</span><span class="name">events</span></div>
+  <div class="ent" style="padding-left:26px"><span>↳</span><span class="name">sub-billing</span><span class="badge act">8</span></div>
+  <div class="ent" style="padding-left:26px"><span>↳</span><span class="name">sub-audit</span><span class="badge act">201</span></div>
+</aside>
+
+<!-- ⋯ menu -->
+<div class="menu" id="menu">
+  <h4>Send</h4>
+  <button class="mi">⇪ Batch send <span class="k">CSV/JSON</span></button>
+  <button class="mi">▤ Templates</button>
+  <button class="mi">⏱ Scheduled <span class="k">entity</span></button>
+  <h4>Recovery</h4>
+  <button class="mi">↺ Batch replay <span class="k">DLQ</span></button>
+  <button class="mi">▦ DLQ triage</button>
+  <button class="mi">◎ Reach message</button>
+  <button class="mi">⇥ Replay to… <span class="k">cross-env</span></button>
+  <h4>Danger</h4>
+  <button class="mi dgr">🗑 Purge all</button>
+</div>
+
+<!-- filter/view popover -->
+<div class="pop" id="pop">
+  <h4>Search &amp; filters</h4>
+  <div class="prow"><input type="text" placeholder="Search id, subject, body…"></div>
+  <div class="prow"><label>Rules</label><button class="fchip on">deliveryCount &gt; 1 ✕</button><button class="fchip on">subject ~ order ✕</button><button class="fchip">＋</button></div>
+  <div class="prow"><label>Saved</label><select><option>pick a saved filter…</option><option>stuck orders</option></select></div>
+  <h4>Fetch &amp; view</h4>
+  <div class="prow"><label>Peek</label><select><option>50</option><option selected>200</option></select><label style="width:auto">every</label><select><option>Off</option><option selected>10s</option></select></div>
+  <div class="prow"><label>Density</label><select><option>Default</option><option>Compact</option><option>Comfort</option></select></div>
+  <div class="prow"><label>Columns</label><button class="fchip">＋ choose…</button><button class="fchip">NSB</button></div>
+  <div class="prow"><label>Export</label><button class="fchip">⇓ ZIP</button></div>
+</div>
+
+<!-- bottom drawer: message detail -->
+<div class="drawer-b" id="detail">
+  <div class="db-head">
+    <span class="mono" style="font-weight:600">ord-88412</span>
+    <span style="color:var(--muted);font-size:11px">OrderCreated · seq 88 412</span>
+    <div style="flex:1"></div>
+    <button class="btn pri" style="padding:3px 12px">Complete</button>
+    <button class="btn" style="padding:3px 12px">Edit &amp; resubmit</button>
+    <button class="btn" style="padding:3px 12px">Replay</button>
+    <button class="btn" style="padding:3px 12px">Schedule</button>
+    <button class="btn dgr" style="padding:3px 12px">Dead-letter</button>
+    <button class="icon-btn" id="dclose">✕</button>
+  </div>
+  <div class="db-body">
+    <div class="db-props">
+      <dl class="kv">
+        <dt>Message ID</dt><dd>ord-88412</dd>
+        <dt>Sequence</dt><dd>88 412</dd>
+        <dt>Enqueued</dt><dd>08/10 11:42:03</dd>
+        <dt>Delivery</dt><dd>1</dd>
+        <dt>Session</dt><dd>—</dd>
+        <dt>TTL</dt><dd>14 days</dd>
+      </dl>
+    </div>
+    <pre>{
+  "orderId": "88412",
+  "customer": "RE-4402",
+  "total": 1290.50,
+  "currency": "EUR",
+  "lines": [ { "sku": "SWB-ENT", "qty": 1 } ]
+}</pre>
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const closers = () => ["ents", "menu", "pop"].forEach(x => $(x).classList.remove("on")) || $("scrim").classList.remove("on");
+  $("edge").onclick = () => { closers(); $("ents").classList.add("on"); $("scrim").classList.add("on"); };
+  $("mbtn").onclick = e => { e.stopPropagation(); const on = $("menu").classList.contains("on"); closers(); if (!on) $("menu").classList.add("on"); };
+  $("fbtn").onclick = e => { e.stopPropagation(); const on = $("pop").classList.contains("on"); closers(); if (!on) $("pop").classList.add("on"); };
+  $("scrim").onclick = closers;
+  $("dclose").onclick = () => $("detail").classList.remove("on");
+  document.addEventListener("click", e => { if (!e.target.closest(".menu,.pop")) { $("menu").classList.remove("on"); $("pop").classList.remove("on"); } });
+
+  const subjects = ["OrderCreated","OrderCreated","PaymentRequested","OrderCreated","InvoiceIssued","OrderCancelled","OrderCreated","StockReserved","OrderCreated","OrderShipped","OrderCreated","OrderCreated"];
+  const tb = document.getElementById("rows");
+  for (let i = 0; i < 12; i++) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><input type="checkbox"></td>
+      <td class="mono">ord-${88412 - i * 7}</td>
+      <td>${subjects[i]}</td>
+      <td>11:${42 - Math.min(i, 9)}:${(i * 13 % 60).toString().padStart(2, "0")}</td>
+      <td class="row-acts"><button title="Complete">✓</button><button title="Replay">↺</button><button title="Dead-letter">✕</button></td>`;
+    tr.onclick = () => { document.querySelectorAll("#rows tr").forEach(r => r.classList.remove("sel")); tr.classList.add("sel"); $("detail").classList.add("on"); };
+    tb.appendChild(tr);
+  }
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { closers(); $("detail").classList.remove("on"); } });
+</script>
+</body>
+</html>
