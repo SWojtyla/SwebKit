@@ -19,9 +19,13 @@ export function BatchSendPanel({ nsId, namespaces, entity, onClose }: Props) {
     const qc = useQueryClient();
     const { notify } = useNotification();
     const [targetNsId, setTargetNsId] = useState(nsId ?? "");
-    const [targetEntityPath, setTargetEntityPath] = useState(
-        entity?.entityPath ?? "",
-    );
+    // Same mount race as MessageComposer: `entity` derives from URL params +
+    // topology queries and can resolve after mount. Keep the path derived from
+    // the prop until the user edits the field — then the manual value wins.
+    const [targetEntityPathManual, setTargetEntityPathManual] = useState<
+        string | null
+    >(null);
+    const targetEntityPath = targetEntityPathManual ?? entity?.entityPath ?? "";
     const [input, setInput] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [preview, setPreview] = useState<SbMessage[] | null>(null);
@@ -232,7 +236,7 @@ export function BatchSendPanel({ nsId, namespaces, entity, onClose }: Props) {
                             <EntityPathInput
                                 nsId={targetNsId || null}
                                 value={targetEntityPath}
-                                onChange={setTargetEntityPath}
+                                onChange={setTargetEntityPathManual}
                                 testId="batch-target-entity"
                             />
                         </div>

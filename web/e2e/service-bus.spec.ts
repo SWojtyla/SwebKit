@@ -600,6 +600,11 @@ test.describe("Service Bus", () => {
 
         await page.getByTestId("sb-compose-button").click();
         await expect(page.getByTestId("message-composer")).toBeVisible();
+        // The selected entity derives from URL params + topology queries and can
+        // resolve a beat after the composer mounts — the target field follows it.
+        await expect(page.getByTestId("composer-target-entity")).toHaveValue(
+            "order-created",
+        );
 
         // Fill in fields
         await page.getByTestId("composer-subject").fill("Test Subject");
@@ -752,6 +757,9 @@ test.describe("Service Bus", () => {
 
         await page.getByTestId("sb-batch-send-button").click();
         await expect(page.getByTestId("batch-send-panel")).toBeVisible();
+        await expect(page.getByTestId("batch-target-entity")).toHaveValue(
+            "order-created",
+        );
 
         // Paste JSON array with a single message
         const json = JSON.stringify([

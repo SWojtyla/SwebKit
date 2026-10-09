@@ -1075,7 +1075,7 @@ test.describe("API Client", () => {
         // Debounced parse shows the resolved method + URL before committing.
         await expect(page.getByTestId("curl-import-preview")).toBeVisible();
         await expect(page.getByTestId("curl-import-preview")).toContainText(
-            "Post",
+            "POST",
         );
 
         await page
