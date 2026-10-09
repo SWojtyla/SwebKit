@@ -6,6 +6,8 @@ import type {
     MoveCollectionTarget,
 } from "@/lib/collection-tree-utils";
 import type {
+    ApiChainSummary,
+    ApiChainUpsert,
     ApiCollection,
     ApiCollectionNode,
     HttpRequestEntry,
@@ -186,6 +188,40 @@ export interface ApiClientPageContextValue {
     handleRunSubtree: (collectionId: string, nodeId: string) => void;
     /** "Run selection (N)" — explicit ordered request node ids. */
     handleRunSelection: (collectionId: string, requestIds: string[]) => void;
+
+    // ── Request chains (persisted, cross-collection ordered runs) ─────────
+    /** Chain summaries for the sidebar section (id, name, stepCount). */
+    chains: ApiChainSummary[];
+    /**
+     * Which chain the editor dialog is open on — `{chainId: null}` is create
+     * mode, `null` state means closed.
+     */
+    chainEditor: { chainId: string | null } | null;
+    openChainEditor: (chainId: string | null) => void;
+    closeChainEditor: () => void;
+    /** Persists a chain draft (POST create / PUT replace); false on failure. */
+    handleSaveChain: (
+        chainId: string | null,
+        draft: ApiChainUpsert,
+    ) => Promise<boolean>;
+    /** "Run" — expands the chain server-side and streams into the run drawer. */
+    handleRunChain: (chainId: string) => void;
+    /** Rename via the shared name dialog (GET + PUT of the full chain). */
+    handleRenameChain: (chain: ApiChainSummary) => void;
+    /** Delete with ConfirmDialog confirmation. */
+    handleDeleteChain: (chain: ApiChainSummary) => void;
+    /** Downloads a chain-only JSON export (`<name>.swebchain.json`). */
+    handleExportChain: (chainId: string) => void;
+    /**
+     * "Add to chain →" on request nodes — appends a step to `chainId`, or
+     * (`chainId` null) prompts for a name and creates the chain with this
+     * request as step 1. `nodeId` is the request's tree node id.
+     */
+    handleAddToChain: (
+        chainId: string | null,
+        collectionId: string,
+        nodeId: string,
+    ) => void;
 }
 
 /**

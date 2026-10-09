@@ -39,6 +39,17 @@ export interface ApiRunStepState {
     error: string | null;
     captured: ApiRunCapturedVariable[];
     response: ApiClientExecutionResponse | null;
+    // ── Chain-run context (mode "chain") ──────────────────────────────────
+    /** The collection this step resolved against — chain steps each carry their own. */
+    collectionId: string | null;
+    /** Display label for the collection badge in the drawer. */
+    collectionName: string | null;
+    /** The chain step this plan entry expands (chain runs only). */
+    stepId: string | null;
+    /** True when the step is a pulled-in dependency of a declared chain step. */
+    isDependency: boolean;
+    /** For dependency steps: the chain step that pulled it in. */
+    ownerStepId: string | null;
 }
 
 export interface ApiRunSummary {
@@ -109,18 +120,33 @@ export function reduceApiRunEvent(
                     error: null,
                     captured: [],
                     response: null,
+                    collectionId: s.collectionId ?? null,
+                    collectionName: s.collectionName ?? null,
+                    stepId: s.stepId ?? null,
+                    isDependency: s.isDependency ?? false,
+                    ownerStepId: s.ownerStepId ?? null,
                 })),
             };
-        case "stepStarted":
-            if (!state.steps.some((s) => s.index === event.index)) return state;
+        case "stepStarted": {
+            const existing = state.steps.find((s) => s.index === event.index);
+            if (!existing) return state;
             return {
                 ...state,
                 steps: patchStep(state.steps, event.index, {
                     status: "running",
                     name: event.name,
                     requestId: event.requestId,
+                    // Chain context arrives on the plan step; stepStarted may
+                    // re-stamp it but must not erase it when absent.
+                    collectionId: event.collectionId ?? existing.collectionId,
+                    collectionName:
+                        event.collectionName ?? existing.collectionName,
+                    stepId: event.stepId ?? existing.stepId,
+                    isDependency: event.isDependency ?? existing.isDependency,
+                    ownerStepId: event.ownerStepId ?? existing.ownerStepId,
                 }),
             };
+        }
         case "stepCompleted":
             if (!state.steps.some((s) => s.index === event.index)) return state;
             return {

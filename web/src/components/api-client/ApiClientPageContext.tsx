@@ -19,6 +19,8 @@ import {
     useLinkedRootActions,
     useDemoMode,
     useApiRun,
+    useApiChains,
+    useApiChainActions,
     type ApiRunCallbacks,
 } from "@/lib/hooks";
 import type { ResponseHistoryEntry } from "./ResponseViewer";
@@ -35,6 +37,12 @@ import {
     type TabState,
 } from "./api-client-context";
 import { buildVariableScope } from "@/lib/variable-utils";
+import { downloadText } from "@/lib/download";
+import {
+    hasChainStep,
+    newChainStep,
+    type ChainRequestCandidate,
+} from "@/lib/api-chain-utils";
 import { getSecret, pickDirectory, revealInExplorer } from "@/lib/tauri-bridge";
 import { buildResponseExample } from "@/lib/response-example";
 import { runRequestActions } from "@/lib/request-action-runner";
@@ -63,10 +71,13 @@ import { describeApiError } from "@/lib/api";
 import {
     DEFAULT_RUN_OPTIONS,
     lastResponseOf,
+    requestEntryId,
     type ApiRunOptions,
     type ApiRunState,
 } from "@/lib/api-run-utils";
 import type {
+    ApiChainSummary,
+    ApiChainUpsert,
     ApiCollection,
     ApiCollectionNode,
     HttpRequestEntry,
@@ -443,6 +454,14 @@ export function ApiClientPageProvider({
     const [runDrawerOpen, setRunDrawerOpen] = useState(false);
     const [runOptions, setRunOptions] =
         useState<ApiRunOptions>(DEFAULT_RUN_OPTIONS);
+
+    // ── Request chains ────────────────────────────────────────────────────
+    const { data: chains = [] } = useApiChains();
+    const chainActions = useApiChainActions();
+    // `chainId: null` = the editor is open in create mode; null state = closed.
+    const [chainEditor, setChainEditor] = useState<{
+        chainId: string | null;
+    } | null>(null);
 
     // Refs mirror the per-keystroke tab state so handlers living in the *page*
     // context (delete-node, conflict resolution, select-node) can read it without
@@ -1758,6 +1777,214 @@ export function ApiClientPageProvider({
         [buildRunRequest, startRun, runCallbacks],
     );
 
+    // ── Request chains ────────────────────────────────────────────────────
+
+    const openChainEditor = useCallback((chainId: string | null) => {
+        setChainEditor({ chainId });
+    }, []);
+
+    const closeChainEditor = useCallback(() => setChainEditor(null), []);
+
+    /** Create (chainId null) or replace — the dialog holds the step list. */
+    const handleSaveChain = useCallback(
+        async (
+            chainId: string | null,
+            draft: ApiChainUpsert,
+        ): Promise<boolean> => {
+            const saved = chainId
+                ? await chainActions.update(chainId, draft)
+                : await chainActions.create(draft);
+            if (!saved) return false;
+            notify(
+                "success",
+                chainId ? "Chain saved" : "Chain created",
+                `"${saved.name}" — ${saved.steps.length} step${saved.steps.length === 1 ? "" : "s"}.`,
+            );
+            return true;
+        },
+        [chainActions, notify],
+    );
+
+    /**
+     * Chain runs need no env ids — the backend resolves each step's own
+     * collection + scoped/global environment pair. The shared runOptions
+     * (stopOnError/delayMs) still apply.
+     */
+    const handleRunChain = useCallback(
+        (chainId: string) => {
+            const req: ApiRunRequest = {
+                mode: "chain",
+                chainId,
+                stopOnError: runOptionsRef.current.stopOnError,
+                delayMs: runOptionsRef.current.delayMs,
+            };
+            setRunDrawerOpen(true);
+            startRun(req, runCallbacks());
+        },
+        [startRun, runCallbacks],
+    );
+
+    /** Rename = GET the full chain (steps are part of the PUT body) + PUT. */
+    const handleRenameChain = useCallback(
+        (chain: ApiChainSummary) => {
+            setNameDialog({
+                title: "Rename Chain",
+                label: "Chain name",
+                defaultValue: chain.name,
+                confirmText: "Rename",
+                onConfirm: (name) => {
+                    setNameDialog(null);
+                    void (async () => {
+                        const full = await chainActions.get(chain.id);
+                        if (!full) return;
+                        const updated = await chainActions.update(chain.id, {
+                            name,
+                            description: full.description ?? null,
+                            steps: full.steps,
+                        });
+                        if (updated)
+                            notify(
+                                "success",
+                                "Chain renamed",
+                                `Now called "${updated.name}".`,
+                            );
+                    })();
+                },
+            });
+        },
+        [chainActions, notify],
+    );
+
+    const handleDeleteChain = useCallback(
+        (chain: ApiChainSummary) => {
+            setConfirmDialog({
+                message: `Delete chain "${chain.name}"? This cannot be undone.`,
+                confirmText: "Delete",
+                onConfirm: () => {
+                    setConfirmDialog(null);
+                    void chainActions.remove(chain.id).then((ok) => {
+                        if (!ok) return;
+                        notify(
+                            "success",
+                            "Chain deleted",
+                            `"${chain.name}" was removed.`,
+                        );
+                        // Don't leave the editor open on a chain that's gone.
+                        setChainEditor((prev) =>
+                            prev?.chainId === chain.id ? null : prev,
+                        );
+                    });
+                },
+            });
+        },
+        [chainActions, notify],
+    );
+
+    /** Chain-only JSON download — steps are id refs only, nothing secret. */
+    const handleExportChain = useCallback(
+        (chainId: string) => {
+            void (async () => {
+                const chain = await chainActions.get(chainId);
+                if (!chain) return;
+                const fileName = `${chain.name}.swebchain.json`;
+                downloadText(
+                    fileName,
+                    JSON.stringify(
+                        {
+                            schemaVersion: 1,
+                            exportedAt: new Date().toISOString(),
+                            chain,
+                        },
+                        null,
+                        2,
+                    ),
+                );
+                notify("success", "Chain exported", fileName);
+            })();
+        },
+        [chainActions, notify],
+    );
+
+    /**
+     * "Add to chain →" — appends the request as a step to an existing chain
+     * (GET + PUT, deduped), or with `chainId` null prompts for a name and
+     * creates a chain with this request as step 1, then opens the editor.
+     */
+    const handleAddToChain = useCallback(
+        (chainId: string | null, collectionId: string, nodeId: string) => {
+            const collection = collectionsRef.current.find(
+                (c) => c.id === collectionId,
+            );
+            const node = collection
+                ? findRequestNode(collection.nodes, nodeId)
+                : null;
+            if (!collection || !node || node.type !== "Request" || !node.request)
+                return;
+            const candidate: ChainRequestCandidate = {
+                nodeId: node.id,
+                requestId: requestEntryId(node),
+                name: node.name,
+                method: node.request.method,
+                collectionId: collection.id,
+                collectionName: collection.name,
+                linkedRootId:
+                    collection.origin?.kind === "linked"
+                        ? (collection.origin.rootId ?? null)
+                        : null,
+                originKind: collection.origin?.kind,
+            };
+            const step = newChainStep(candidate);
+
+            if (chainId === null) {
+                setNameDialog({
+                    title: "New Chain",
+                    label: "Chain name",
+                    defaultValue: node.name,
+                    confirmText: "Create",
+                    onConfirm: (name) => {
+                        setNameDialog(null);
+                        void chainActions
+                            .create({
+                                name,
+                                description: null,
+                                steps: [step],
+                            })
+                            .then((created) => {
+                                if (created)
+                                    setChainEditor({ chainId: created.id });
+                            });
+                    },
+                });
+                return;
+            }
+
+            void (async () => {
+                const chain = await chainActions.get(chainId);
+                if (!chain) return;
+                if (hasChainStep(chain.steps, candidate)) {
+                    notify(
+                        "info",
+                        "Already in chain",
+                        `"${node.name}" is already a step in "${chain.name}".`,
+                    );
+                    return;
+                }
+                const updated = await chainActions.update(chainId, {
+                    name: chain.name,
+                    description: chain.description ?? null,
+                    steps: [...chain.steps, step],
+                });
+                if (updated)
+                    notify(
+                        "success",
+                        "Added to chain",
+                        `"${node.name}" → "${chain.name}".`,
+                    );
+            })();
+        },
+        [chainActions, notify],
+    );
+
     /**
      * "Send with dependencies" — the split-button sibling of handleSend. Saves
      * the draft first (the chain resolves deps from the persisted request),
@@ -2655,6 +2882,19 @@ export function ApiClientPageProvider({
             handleRunSubtree,
             // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
             handleRunSelection,
+
+            chains,
+            chainEditor,
+            openChainEditor,
+            closeChainEditor,
+            handleSaveChain,
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
+            handleRunChain,
+            handleRenameChain,
+            handleDeleteChain,
+            handleExportChain,
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
+            handleAddToChain,
         }),
         [
             collections,
@@ -2711,6 +2951,16 @@ export function ApiClientPageProvider({
             runOptions,
             handleRunSubtree,
             handleRunSelection,
+            chains,
+            chainEditor,
+            openChainEditor,
+            closeChainEditor,
+            handleSaveChain,
+            handleRunChain,
+            handleRenameChain,
+            handleDeleteChain,
+            handleExportChain,
+            handleAddToChain,
         ],
     );
 

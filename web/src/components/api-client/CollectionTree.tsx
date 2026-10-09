@@ -28,6 +28,7 @@ import {
     ListOrdered,
 } from "lucide-react";
 import type {
+    ApiChainSummary,
     ApiCollection,
     ApiCollectionNode,
     HttpRequestEntry,
@@ -118,6 +119,15 @@ interface CollectionTreeProps {
     /** "Run selection" — a ctrl/cmd+click multi-selection of request nodes,
      *  run in tree order (the parent re-sorts by the collection tree). */
     onRunSelection: (collectionId: string, requestIds: string[]) => void;
+    /** Persisted chains — feeds the "Add to chain →" submenu on request nodes. */
+    chains: ApiChainSummary[];
+    /** "Add to chain → <chain>", or `chainId: null` for "New chain…".
+     *  `nodeId` is the request's tree node id. */
+    onAddToChain: (
+        chainId: string | null,
+        collectionId: string,
+        nodeId: string,
+    ) => void;
 }
 
 interface ContextMenuState {
@@ -151,6 +161,8 @@ export function CollectionTree({
     onOpenGit,
     onRunSubtree,
     onRunSelection,
+    chains,
+    onAddToChain,
 }: CollectionTreeProps) {
     const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
         const ids = new Set(collections.map((c) => c.id));
@@ -161,6 +173,9 @@ export function CollectionTree({
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(
         null,
     );
+    // The "Add to chain →" submenu inside the request context menu — hover/flyout
+    // state lives here because the menu itself unmounts between opens.
+    const [chainSubmenuOpen, setChainSubmenuOpen] = useState(false);
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState("");
     const [renameCollectionId, setRenameCollectionId] = useState<string | null>(
@@ -339,6 +354,7 @@ export function CollectionTree({
     ) => {
         e.preventDefault();
         e.stopPropagation();
+        setChainSubmenuOpen(false);
         setContextMenu({
             x: e.clientX,
             y: e.clientY,
@@ -1364,6 +1380,92 @@ export function CollectionTree({
                                 </button>
                             );
                         })()}
+                    {!contextMenu.isCollection &&
+                        contextMenu.nodeType === "Request" && (
+                            <div
+                                className="relative"
+                                onMouseEnter={() => setChainSubmenuOpen(true)}
+                                onMouseLeave={() => setChainSubmenuOpen(false)}
+                            >
+                                <button
+                                    className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
+                                    onClick={(e) => {
+                                        // The document click handler closes the
+                                        // whole menu — keep the flyout open on
+                                        // click for keyboard/touch users.
+                                        e.stopPropagation();
+                                        setChainSubmenuOpen((v) => !v);
+                                    }}
+                                    aria-haspopup="menu"
+                                    aria-expanded={chainSubmenuOpen}
+                                    data-testid="ctx-add-to-chain"
+                                >
+                                    <Link2 className="h-3.5 w-3.5" /> Add to
+                                    chain
+                                    <ChevronRight className="ml-auto h-3 w-3 opacity-60" />
+                                </button>
+                                {chainSubmenuOpen && (
+                                    <div
+                                        className={`absolute top-0 z-50 min-w-[180px] rounded-md border bg-popover py-1 shadow-lg ${
+                                            // Flip left when the submenu would
+                                            // overflow the window's right edge.
+                                            contextMenu.x + 340 >
+                                            window.innerWidth
+                                                ? "right-full"
+                                                : "left-full"
+                                        }`}
+                                        role="menu"
+                                        data-testid="chain-picker-menu"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        {chains.length === 0 && (
+                                            <div className="px-3 py-1.5 text-xs text-muted-foreground">
+                                                No chains yet
+                                            </div>
+                                        )}
+                                        {chains.map((chain) => (
+                                            <button
+                                                key={chain.id}
+                                                role="menuitem"
+                                                className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
+                                                onClick={() => {
+                                                    onAddToChain(
+                                                        chain.id,
+                                                        contextMenu.collectionId,
+                                                        contextMenu.nodeId,
+                                                    );
+                                                    setContextMenu(null);
+                                                }}
+                                                data-testid={`ctx-add-to-chain-${chain.id}`}
+                                            >
+                                                <span className="min-w-0 flex-1 truncate text-left">
+                                                    {chain.name}
+                                                </span>
+                                                <span className="shrink-0 text-[10px] text-muted-foreground">
+                                                    {chain.stepCount}
+                                                </span>
+                                            </button>
+                                        ))}
+                                        <button
+                                            role="menuitem"
+                                            className="flex w-full items-center gap-2 border-t px-3 py-1.5 text-sm hover:bg-accent"
+                                            onClick={() => {
+                                                onAddToChain(
+                                                    null,
+                                                    contextMenu.collectionId,
+                                                    contextMenu.nodeId,
+                                                );
+                                                setContextMenu(null);
+                                            }}
+                                            data-testid="ctx-add-to-chain-new"
+                                        >
+                                            <Plus className="h-3.5 w-3.5" /> New
+                                            chain…
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     <button
                         className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10"
                         onClick={() => {

@@ -12,6 +12,7 @@ export * from "./useSql";
 export * from "./useStorage";
 export * from "./useApiClient";
 export * from "./useApiRun";
+export * from "./useApiChains";
 export * from "./useLinkedRoots";
 export * from "./useAgent";
 export * from "./useMonitoring";
