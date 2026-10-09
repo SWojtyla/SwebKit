@@ -28,6 +28,7 @@ public sealed class TeamPackService
     private readonly CollectionRepository _collections;
     private readonly EnvironmentRepository _environments;
     private readonly LinkedCollectionRootRepository _linkedRoots;
+    private readonly ChainRepository _chains;
     private readonly DemoModeService _demo;
 
     public TeamPackService(
@@ -37,6 +38,7 @@ public sealed class TeamPackService
         CollectionRepository collections,
         EnvironmentRepository environments,
         LinkedCollectionRootRepository linkedRoots,
+        ChainRepository chains,
         DemoModeService demo)
     {
         _profiles = profiles;
@@ -45,6 +47,7 @@ public sealed class TeamPackService
         _collections = collections;
         _environments = environments;
         _linkedRoots = linkedRoots;
+        _chains = chains;
         _demo = demo;
     }
 
@@ -138,6 +141,14 @@ public sealed class TeamPackService
                 .ToList();
         }
 
+        if (include(TeamPackSections.ApiChains))
+        {
+            // Chains are pure references + metadata — no auth config, no variables — so there's
+            // nothing to strip; the demo chain is synthetic and never reaches the persisted store.
+            await _chains.LoadAsync().ConfigureAwait(false);
+            pack.ApiChains = Clone(_chains.Chains.ToList());
+        }
+
         pack.CredentialRefs = CollectCredentialRefs(pack);
         pack.Warnings = CollectWarnings(pack);
         return pack;
@@ -198,6 +209,12 @@ public sealed class TeamPackService
 
         if (pack.LinkedRoots is not null)
             await ImportLinkedRootsAsync(pack.LinkedRoots, replace, options.DryRun, result).ConfigureAwait(false);
+
+        // Chains import last so step collectionIds rebind onto whatever the collections section
+        // minted (or an existing same-named collection). Request ids travel verbatim — collection
+        // import preserves them, so a chain over imported collections keeps working.
+        if (pack.ApiChains is not null)
+            await ImportChainsAsync(pack.ApiChains, replace, options.DryRun, result, collectionIdRemap).ConfigureAwait(false);
 
         return result;
     }
@@ -511,6 +528,70 @@ public sealed class TeamPackService
                 if (root.BrunoSyncFolderPath is not null || root.BrunoSyncEnabled != added.BrunoSyncEnabled)
                     await _linkedRoots.UpdateBrunoSyncSettingsAsync(added.Id, root.BrunoSyncFolderPath, root.BrunoSyncEnabled).ConfigureAwait(false);
             }
+        }
+    }
+
+    /// <summary>Merge keys by chain name; each step's <see cref="ApiChainStep.CollectionId"/>
+    /// rebinds through <paramref name="collectionIdRemap"/> so a chain over just-imported
+    /// collections still resolves. References that can't rebind (linked-root ids, request ids
+    /// from a collection the pack didn't carry) stay verbatim and surface as plan errors.</summary>
+    private async Task ImportChainsAsync(
+        List<ApiChain> packChains, bool replace, bool dryRun, TeamPackImportResult result,
+        Dictionary<string, string> collectionIdRemap)
+    {
+        await _chains.LoadAsync().ConfigureAwait(false);
+        foreach (var chain in packChains)
+        {
+            chain.Steps ??= [];
+            foreach (var step in chain.Steps)
+            {
+                if (collectionIdRemap.TryGetValue(step.CollectionId, out var remapped))
+                    step.CollectionId = remapped;
+                // Step ids are run-correlation keys — mint one when the pack left it blank so a
+                // malformed pack can't produce steps with no SSE identity.
+                if (string.IsNullOrWhiteSpace(step.Id))
+                    step.Id = Guid.NewGuid().ToString("N");
+            }
+        }
+
+        if (replace)
+        {
+            result.Skipped += _chains.Chains.Count;
+            if (!dryRun)
+            {
+                foreach (var chain in packChains)
+                {
+                    chain.Id = Guid.NewGuid().ToString("N");
+                    chain.UpdatedAt = DateTimeOffset.UtcNow;
+                }
+                await _chains.ReplaceStoreAsync(new ChainsStore
+                {
+                    SchemaVersion = 1,
+                    Chains = packChains,
+                }).ConfigureAwait(false);
+            }
+            result.Added += packChains.Count;
+            return;
+        }
+
+        var existingByName = _chains.Chains
+            .GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        foreach (var chain in packChains)
+        {
+            if (existingByName.TryGetValue(chain.Name, out _))
+            {
+                result.Skipped++;
+                result.Conflicts.Add($"apiChains: '{chain.Name}' already exists — skipped (use replace to overwrite)");
+                continue;
+            }
+
+            existingByName[chain.Name] = chain;
+            result.Added++;
+            // AddChainAsync always mints a fresh chain id — a teammate may already own the
+            // pack's id for a different chain, and the id must never silently repoint.
+            if (!dryRun)
+                await _chains.AddChainAsync(chain).ConfigureAwait(false);
         }
     }
 

@@ -54,11 +54,12 @@ public static class ApiClientEndpoints
             // and maps it (an InvalidOperationException from request building stays a 400, an
             // UnauthorizedAccessException stays a 401), whereas catching it here collapsed
             // everything into a 500 that echoed a raw, unlogged ex.Message back to the client.
-            var result = await executor.ExecuteAsync(req.Request, collection, activeEnvironment, globalEnvironment, ct);
+            var result = await executor.ExecuteAsync(req.Request, collection, activeEnvironment, globalEnvironment, cancellationToken: ct);
             return Results.Ok(Map(result));
         });
 
         // Request runs (api-client-request-runs): dependency chains + batch runs streamed as SSE.
+        // The chains repository joins for mode "chain" (api-request-chains).
         app.MapPost("/api/api-client/run", (
             ApiRunRequest req,
             HttpContext httpContext,
@@ -67,8 +68,35 @@ public static class ApiClientEndpoints
             EnvironmentRepository environments,
             LinkedCollectionRootRepository linkedRoots,
             LinkedCollectionFileService linkedFiles,
+            ChainRepository chains,
             DemoModeService demo) =>
-            RunRequestsAsync(req, httpContext, runs, collections, environments, linkedRoots, linkedFiles, demo));
+            RunRequestsAsync(req, httpContext, runs, collections, environments, linkedRoots, linkedFiles, chains, demo));
+
+        // Named request chains (api-request-chains): persisted ordered sequences spanning
+        // collections, expanded by run mode "chain".
+        app.MapGet("/api/api-client/chains", (
+            ChainRepository chains,
+            DemoModeService demo) => ListChainsAsync(chains, demo));
+
+        app.MapGet("/api/api-client/chains/{chainId}", (
+            string chainId,
+            ChainRepository chains,
+            DemoModeService demo) => GetChainAsync(chainId, chains, demo));
+
+        app.MapPost("/api/api-client/chains", (
+            UpsertApiChainRequest req,
+            ChainRepository chains) => CreateChainAsync(req, chains));
+
+        app.MapPut("/api/api-client/chains/{chainId}", (
+            string chainId,
+            UpsertApiChainRequest req,
+            ChainRepository chains,
+            DemoModeService demo) => UpdateChainAsync(chainId, req, chains, demo));
+
+        app.MapDelete("/api/api-client/chains/{chainId}", (
+            string chainId,
+            ChainRepository chains,
+            DemoModeService demo) => DeleteChainAsync(chainId, chains, demo));
 
         app.MapPost("/api/api-client/preview-keyvault-secret", (
             PreviewKeyVaultSecretRequest req,
@@ -195,6 +223,123 @@ public static class ApiClientEndpoints
         return Results.Ok(new JsonPathEvaluationResponse { Value = value, Error = null });
     }
 
+    // ── Chains (api-request-chains) ──────────────────────────────────────────
+
+    /// <summary>List row of <c>GET /api/api-client/chains</c> — the sidebar shows name +
+    /// step count without loading every step.</summary>
+    internal sealed record ApiChainSummary(
+        string Id,
+        string Name,
+        string? Description,
+        int StepCount,
+        DateTimeOffset UpdatedAt);
+
+    internal static async Task<IResult> ListChainsAsync(ChainRepository chains, DemoModeService demo)
+    {
+        await chains.LoadAsync().ConfigureAwait(false);
+        var list = chains.Chains.Select(ToChainSummary).ToList();
+        // The demo chain is a synthetic overlay, exactly like the demo collection on the
+        // collections list — never persisted.
+        if (demo.IsDemoMode)
+        {
+            list.Insert(0, ToChainSummary(DemoApiCollectionFactory.CreateDemoChain()));
+        }
+        return Results.Ok(list);
+    }
+
+    internal static async Task<IResult> GetChainAsync(string chainId, ChainRepository chains, DemoModeService demo)
+    {
+        if (demo.IsDemoMode && string.Equals(chainId, DemoApiCollectionFactory.DemoChainId, StringComparison.Ordinal))
+        {
+            return Results.Ok(DemoApiCollectionFactory.CreateDemoChain());
+        }
+
+        await chains.LoadAsync().ConfigureAwait(false);
+        var chain = chains.Chains.FirstOrDefault(c => c.Id == chainId);
+        return chain is null ? ApiErrors.NotFound("Chain not found.") : Results.Ok(chain);
+    }
+
+    internal static async Task<IResult> CreateChainAsync(UpsertApiChainRequest req, ChainRepository chains)
+    {
+        if (string.IsNullOrWhiteSpace(req.Name))
+        {
+            return ApiErrors.BadRequest("Chain name is required.");
+        }
+
+        // Steps are stored verbatim — a step pointing at a request or collection that doesn't
+        // resolve is a plan error at run time, not a save-time rejection.
+        var chain = new ApiChain
+        {
+            Name = req.Name.Trim(),
+            Description = req.Description,
+            Steps = NormalizeChainSteps(req.Steps),
+        };
+        return Results.Ok(await chains.AddChainAsync(chain).ConfigureAwait(false));
+    }
+
+    internal static async Task<IResult> UpdateChainAsync(
+        string chainId,
+        UpsertApiChainRequest req,
+        ChainRepository chains,
+        DemoModeService demo)
+    {
+        if (demo.IsDemoMode && string.Equals(chainId, DemoApiCollectionFactory.DemoChainId, StringComparison.Ordinal))
+        {
+            return ApiErrors.BadRequest("The demo chain is read-only.");
+        }
+        if (string.IsNullOrWhiteSpace(req.Name))
+        {
+            return ApiErrors.BadRequest("Chain name is required.");
+        }
+
+        await chains.LoadAsync().ConfigureAwait(false);
+        var existing = chains.Chains.FirstOrDefault(c => c.Id == chainId);
+        if (existing is null)
+        {
+            return ApiErrors.NotFound("Chain not found.");
+        }
+
+        existing.Name = req.Name.Trim();
+        existing.Description = req.Description;
+        existing.Steps = NormalizeChainSteps(req.Steps);
+        await chains.UpdateChainAsync(existing).ConfigureAwait(false);
+        return Results.Ok(existing);
+    }
+
+    internal static async Task<IResult> DeleteChainAsync(string chainId, ChainRepository chains, DemoModeService demo)
+    {
+        if (demo.IsDemoMode && string.Equals(chainId, DemoApiCollectionFactory.DemoChainId, StringComparison.Ordinal))
+        {
+            return ApiErrors.BadRequest("The demo chain is read-only.");
+        }
+
+        await chains.LoadAsync().ConfigureAwait(false);
+        return await chains.DeleteChainAsync(chainId).ConfigureAwait(false)
+            ? Results.NoContent()
+            : ApiErrors.NotFound("Chain not found.");
+    }
+
+    private static ApiChainSummary ToChainSummary(ApiChain chain) =>
+        new(chain.Id, chain.Name, chain.Description, chain.Steps.Count, chain.UpdatedAt);
+
+    /// <summary>
+    /// Steps arrive verbatim — broken collection/request refs are a plan-time concern. The only
+    /// normalization is a stable id for rows the caller left unkeyed, because step ids correlate
+    /// the <c>stepId</c>/<c>ownerStepId</c> SSE fields.
+    /// </summary>
+    private static List<ApiChainStep> NormalizeChainSteps(List<ApiChainStep>? steps)
+    {
+        var normalized = steps ?? [];
+        foreach (var step in normalized)
+        {
+            if (string.IsNullOrWhiteSpace(step.Id))
+            {
+                step.Id = Guid.NewGuid().ToString("N");
+            }
+        }
+        return normalized;
+    }
+
     /// <summary>
     /// Handler body for the preview endpoint, extracted so it can be unit tested directly against a
     /// fake <see cref="IKeyVaultSecretResolver"/> without spinning up the ASP.NET pipeline.
@@ -290,43 +435,62 @@ public static class ApiClientEndpoints
         EnvironmentRepository environments,
         LinkedCollectionRootRepository linkedRoots,
         LinkedCollectionFileService linkedFiles,
+        ChainRepository chains,
         DemoModeService demo)
     {
         var ct = httpContext.RequestAborted;
 
-        var resolved = await ResolveRunCollectionAsync(req, collections, environments, linkedRoots, linkedFiles, demo, ct).ConfigureAwait(false);
-        if (resolved.Collection is null)
+        ApiRunPlanResult planResult;
+        if (string.Equals(req.Mode, "chain", StringComparison.OrdinalIgnoreCase))
         {
-            await WriteRunJsonAsync(httpContext, resolved.ErrorStatus, resolved.ErrorPayload!).ConfigureAwait(false);
-            return;
-        }
-        var collection = resolved.Collection;
-
-        // Same environment lookups as /execute — for a linked-root collection the source list is
-        // the root's on-disk environments, otherwise the internal repository's.
-        ApiEnvironment? activeEnvironment = null;
-        if (!string.IsNullOrWhiteSpace(req.ActiveEnvironmentId))
-        {
-            activeEnvironment = resolved.Environments.FirstOrDefault(e => e.Id == req.ActiveEnvironmentId);
-            if (activeEnvironment is null)
+            // Chain mode resolves a collection (+ env pair) per step rather than once up front —
+            // failure payloads name the step so the drawer can highlight the broken row.
+            var chainPlan = await PlanChainRunAsync(
+                req, httpContext, runs, collections, environments, linkedRoots, linkedFiles, chains, demo, ct)
+                .ConfigureAwait(false);
+            if (chainPlan is null)
             {
-                await WriteRunJsonAsync(httpContext, StatusCodes.Status404NotFound, new { error = "Environment not found" }).ConfigureAwait(false);
                 return;
             }
+            planResult = chainPlan;
         }
-
-        ApiEnvironment? globalEnvironment = null;
-        if (!string.IsNullOrWhiteSpace(req.GlobalEnvironmentId))
+        else
         {
-            globalEnvironment = resolved.Environments.FirstOrDefault(e => e.Id == req.GlobalEnvironmentId);
-            if (globalEnvironment is null)
+            var resolved = await ResolveRunCollectionAsync(req.CollectionId, req.LinkedRootId, collections, environments, linkedRoots, linkedFiles, demo, ct).ConfigureAwait(false);
+            if (resolved.Collection is null)
             {
-                await WriteRunJsonAsync(httpContext, StatusCodes.Status404NotFound, new { error = "Global environment not found" }).ConfigureAwait(false);
+                await WriteRunJsonAsync(httpContext, resolved.ErrorStatus, new { error = resolved.ErrorMessage }).ConfigureAwait(false);
                 return;
             }
+            var collection = resolved.Collection;
+
+            // Same environment lookups as /execute — for a linked-root collection the source list is
+            // the root's on-disk environments, otherwise the internal repository's.
+            ApiEnvironment? activeEnvironment = null;
+            if (!string.IsNullOrWhiteSpace(req.ActiveEnvironmentId))
+            {
+                activeEnvironment = resolved.Environments.FirstOrDefault(e => e.Id == req.ActiveEnvironmentId);
+                if (activeEnvironment is null)
+                {
+                    await WriteRunJsonAsync(httpContext, StatusCodes.Status404NotFound, new { error = "Environment not found" }).ConfigureAwait(false);
+                    return;
+                }
+            }
+
+            ApiEnvironment? globalEnvironment = null;
+            if (!string.IsNullOrWhiteSpace(req.GlobalEnvironmentId))
+            {
+                globalEnvironment = resolved.Environments.FirstOrDefault(e => e.Id == req.GlobalEnvironmentId);
+                if (globalEnvironment is null)
+                {
+                    await WriteRunJsonAsync(httpContext, StatusCodes.Status404NotFound, new { error = "Global environment not found" }).ConfigureAwait(false);
+                    return;
+                }
+            }
+
+            planResult = runs.BuildPlan(collection, req, activeEnvironment, globalEnvironment);
         }
 
-        var planResult = runs.BuildPlan(collection, req);
         if (planResult.Plan is null)
         {
             // The run service already shaped the failure for the wire ({error:"dependency_cycle",
@@ -346,7 +510,7 @@ public static class ApiClientEndpoints
 
         try
         {
-            await foreach (var evt in runs.RunAsync(plan, collection, activeEnvironment, globalEnvironment, req, ct).ConfigureAwait(false))
+            await foreach (var evt in runs.RunAsync(plan, req, ct).ConfigureAwait(false))
             {
                 // Runtime-type serialization — ApiRunEvent is a flat record whose response member
                 // already carries the /execute wire shape (ApiRunStepResponse).
@@ -373,23 +537,134 @@ public static class ApiClientEndpoints
         ApiCollection? Collection,
         IReadOnlyList<ApiEnvironment> Environments,
         int ErrorStatus,
-        object? ErrorPayload)
+        string? ErrorMessage)
     {
         public static RunCollectionResolution Found(ApiCollection collection, IReadOnlyList<ApiEnvironment> environments) =>
             new(collection, environments, 0, null);
 
         public static RunCollectionResolution Fail(int status, string error) =>
-            new(null, [], status, new { error });
+            new(null, [], status, error);
+    }
+
+    /// <summary>
+    /// Builds the plan for <c>mode:"chain"</c> — loads the chain (demo overlay first, then the
+    /// persisted store), resolves each <em>enabled</em> step's collection, and expands the chain
+    /// via <see cref="ApiClientRunService.BuildChainPlan"/>. Returns null when the response was
+    /// already written — every pre-flight failure answers as JSON before the SSE stream opens.
+    /// </summary>
+    private static async Task<ApiRunPlanResult?> PlanChainRunAsync(
+        ApiRunRequest req,
+        HttpContext httpContext,
+        ApiClientRunService runs,
+        CollectionRepository collections,
+        EnvironmentRepository environments,
+        LinkedCollectionRootRepository linkedRoots,
+        LinkedCollectionFileService linkedFiles,
+        ChainRepository chains,
+        DemoModeService demo,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.ChainId))
+        {
+            await WriteRunJsonAsync(httpContext, StatusCodes.Status400BadRequest, new { error = "chainId is required." }).ConfigureAwait(false);
+            return null;
+        }
+
+        ApiChain? chain;
+        if (demo.IsDemoMode && string.Equals(req.ChainId, DemoApiCollectionFactory.DemoChainId, StringComparison.Ordinal))
+        {
+            chain = DemoApiCollectionFactory.CreateDemoChain();
+        }
+        else
+        {
+            await chains.LoadAsync().ConfigureAwait(false);
+            chain = chains.Chains.FirstOrDefault(c => c.Id == req.ChainId);
+        }
+
+        if (chain is null)
+        {
+            await WriteRunJsonAsync(httpContext, StatusCodes.Status404NotFound, new { error = "Chain not found." }).ConfigureAwait(false);
+            return null;
+        }
+
+        var resolvedSteps = new List<ApiChainResolvedStep>();
+        var seenEnvironments = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var step in chain.Steps.Where(s => s.Enabled))
+        {
+            var resolution = await ResolveRunCollectionAsync(
+                step.CollectionId, step.LinkedRootId, collections, environments, linkedRoots, linkedFiles, demo, ct)
+                .ConfigureAwait(false);
+            if (resolution.Collection is null)
+            {
+                // The step's failure keeps the existing statuses (disabled root / demo-linked 400,
+                // missing collection 404) and names the chain step the drawer must highlight.
+                await WriteRunJsonAsync(httpContext, resolution.ErrorStatus,
+                    new { error = resolution.ErrorMessage, stepId = step.Id }).ConfigureAwait(false);
+                return null;
+            }
+
+            foreach (var env in resolution.Environments)
+            {
+                seenEnvironments.Add(env.Id);
+            }
+
+            var (active, global) = ResolveStepEnvironments(req, resolution.Environments, resolution.Collection.Id, environments.UiState);
+            resolvedSteps.Add(new ApiChainResolvedStep(step, resolution.Collection, active, global));
+        }
+
+        // Env ids are not portable across collections — the single-collection path 404s on an
+        // unknown id, so the chain path only fails when the id exists in *no* step's env list.
+        if (!string.IsNullOrWhiteSpace(req.ActiveEnvironmentId) && !seenEnvironments.Contains(req.ActiveEnvironmentId))
+        {
+            await WriteRunJsonAsync(httpContext, StatusCodes.Status404NotFound, new { error = "Environment not found" }).ConfigureAwait(false);
+            return null;
+        }
+        if (!string.IsNullOrWhiteSpace(req.GlobalEnvironmentId) && !seenEnvironments.Contains(req.GlobalEnvironmentId))
+        {
+            await WriteRunJsonAsync(httpContext, StatusCodes.Status404NotFound, new { error = "Global environment not found" }).ConfigureAwait(false);
+            return null;
+        }
+
+        return runs.BuildChainPlan(chain, resolvedSteps, req);
+    }
+
+    /// <summary>
+    /// The env pair one chain step runs with — mirrors the frontend's per-collection layering
+    /// (<c>resolveEnvironmentLayers</c>): the request's scoped id wins when the step's env list
+    /// actually contains it and it isn't scoped to a different collection, else the collection's
+    /// own stored selection (<see cref="ApiClientUiState.ActiveEnvironmentIdByCollection"/>) is
+    /// applied when this list is the internal repository's. A step whose list knows neither
+    /// simply runs unenv'd — ids aren't portable across collections, so a miss is "no env",
+    /// not an error.
+    /// </summary>
+    private static (ApiEnvironment? Active, ApiEnvironment? Global) ResolveStepEnvironments(
+        ApiRunRequest req,
+        IReadOnlyList<ApiEnvironment> envs,
+        string collectionId,
+        ApiClientUiState uiState)
+    {
+        var active = envs.FirstOrDefault(e =>
+                e.Id == req.ActiveEnvironmentId
+                && (e.CollectionId is null || string.Equals(e.CollectionId, collectionId, StringComparison.Ordinal)))
+            ?? (uiState.ActiveEnvironmentIdByCollection.TryGetValue(collectionId, out var scopedId)
+                ? envs.FirstOrDefault(e => e.Id == scopedId)
+                : null);
+
+        var global = envs.FirstOrDefault(e => e.Id == req.GlobalEnvironmentId);
+
+        return (active, global);
     }
 
     /// <summary>
     /// Mirrors <see cref="ResolveCollectionAsync"/> — internal repository first, the demo
     /// collection when demo mode is on — plus the linked-root branch keyed by
-    /// <see cref="ApiRunRequest.LinkedRootId"/>. Linked roots stay disabled in demo mode, matching
-    /// the rest of the linked-roots surface.
+    /// <paramref name="linkedRootId"/>. Linked roots stay disabled in demo mode, matching
+    /// the rest of the linked-roots surface. Called once for single-collection runs and once
+    /// per enabled step for chain runs.
     /// </summary>
     private static async Task<RunCollectionResolution> ResolveRunCollectionAsync(
-        ApiRunRequest req,
+        string? collectionId,
+        string? linkedRootId,
         CollectionRepository collections,
         EnvironmentRepository environments,
         LinkedCollectionRootRepository linkedRoots,
@@ -399,15 +674,15 @@ public static class ApiClientEndpoints
     {
         // A run plans against a persisted tree — collectionId is required (unlike /execute,
         // which can run a transient request against an empty collection shell).
-        if (string.IsNullOrWhiteSpace(req.CollectionId))
+        if (string.IsNullOrWhiteSpace(collectionId))
             return RunCollectionResolution.Fail(StatusCodes.Status400BadRequest, "collectionId is required.");
 
-        if (!string.IsNullOrWhiteSpace(req.LinkedRootId))
+        if (!string.IsNullOrWhiteSpace(linkedRootId))
         {
             if (demo.IsDemoMode)
                 return RunCollectionResolution.Fail(StatusCodes.Status400BadRequest, "Linked roots are disabled in demo mode.");
 
-            var root = linkedRoots.Roots.FirstOrDefault(r => r.Id == req.LinkedRootId);
+            var root = linkedRoots.Roots.FirstOrDefault(r => r.Id == linkedRootId);
             if (root is null)
                 return RunCollectionResolution.Fail(StatusCodes.Status404NotFound, "Linked root not found.");
 
@@ -424,13 +699,13 @@ public static class ApiClientEndpoints
                 return RunCollectionResolution.Fail(StatusCodes.Status400BadRequest, $"Linked root could not be loaded: {ex.Message}");
             }
 
-            var linkedCollection = loaded.Collections.FirstOrDefault(c => c.Id == req.CollectionId);
+            var linkedCollection = loaded.Collections.FirstOrDefault(c => c.Id == collectionId);
             return linkedCollection is null
-                ? RunCollectionResolution.Fail(StatusCodes.Status404NotFound, $"Collection '{req.CollectionId}' not found in the linked root.")
+                ? RunCollectionResolution.Fail(StatusCodes.Status404NotFound, $"Collection '{collectionId}' not found in the linked root.")
                 : RunCollectionResolution.Found(linkedCollection, loaded.Environments);
         }
 
-        var resolved = await ResolveCollectionAsync(req.CollectionId, collections, demo).ConfigureAwait(false);
+        var resolved = await ResolveCollectionAsync(collectionId, collections, demo).ConfigureAwait(false);
         return resolved is null
             ? RunCollectionResolution.Fail(StatusCodes.Status404NotFound, "Collection not found")
             : RunCollectionResolution.Found(resolved, environments.Environments);
@@ -473,6 +748,15 @@ public static class ApiClientEndpoints
             result.GraphQlErrors,
             result.SentHeaders.Select(h => new ResponseHeaderDto(h.Name, h.Value)).ToList(),
             result.SentBody);
+}
+
+/// <summary>Body of <c>POST/PUT /api/api-client/chains</c> — name + ordered steps, stored
+/// verbatim (broken refs are a plan-time error, not a save-time one).</summary>
+public sealed class UpsertApiChainRequest
+{
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+    public List<ApiChainStep>? Steps { get; set; }
 }
 
 public sealed class ExecuteRequestRequest

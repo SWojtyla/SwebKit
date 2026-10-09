@@ -23,6 +23,7 @@ public class ApiClientRunEndpointTests : IDisposable
     private readonly EnvironmentRepository _environments = new();
     private readonly LinkedCollectionRootRepository _roots = new();
     private readonly LinkedCollectionFileService _files = new(new LinkedGitService());
+    private readonly ChainRepository _chains = new();
     private readonly DemoModeService _demo = new();
     private readonly string _rootDir = Path.Combine(Path.GetTempPath(), "swebkit-run-tests", Guid.NewGuid().ToString("N"));
 
@@ -55,6 +56,7 @@ public class ApiClientRunEndpointTests : IDisposable
             ApiCollection collection,
             ApiEnvironment? activeEnvironment,
             ApiEnvironment? globalEnvironment = null,
+            IReadOnlyDictionary<string, string?>? overlay = null,
             CancellationToken cancellationToken = default)
         {
             lock (_gate) { ExecutedRequestIds.Add(request.Id); }
@@ -102,7 +104,7 @@ public class ApiClientRunEndpointTests : IDisposable
     private Task InvokeAsync(ApiRunRequest req, HttpContext context, FakeRunRequestExecutor executor) =>
         ApiClientEndpoints.RunRequestsAsync(
             req, context, new ApiClientRunService(executor, _collections),
-            _collections, _environments, _roots, _files, _demo);
+            _collections, _environments, _roots, _files, _chains, _demo);
 
     private static (DefaultHttpContext Context, RecordingResponseStream Body) BuildContext()
     {

@@ -47,6 +47,7 @@ builder.Logging.AddFilter<FileLoggerProvider>(_ => true);
 builder.Services.AddSingleton<ProfileRepository>();
 builder.Services.AddSingleton<EnvironmentRepository>();
 builder.Services.AddSingleton<CollectionRepository>();
+builder.Services.AddSingleton<ChainRepository>();
 // The same instance the file logger above reads settings from, so a change to logging
 // settings via PUT /api/config/user-settings takes effect without a restart.
 builder.Services.AddSingleton(userSettingsRepository);

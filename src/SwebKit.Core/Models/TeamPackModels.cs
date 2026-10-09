@@ -42,6 +42,12 @@ public sealed class TeamPack
     /// <summary>Linked collection roots ("linked projects") — paths as they were on the source machine.</summary>
     public List<TeamPackLinkedRoot>? LinkedRoots { get; set; }
 
+    /// <summary>API request chains — references and metadata only. Steps carry ids into
+    /// collections/linked roots, never secrets or captured runtime values; a reference that
+    /// didn't travel (or a linked-root path that doesn't exist locally) survives verbatim and
+    /// surfaces as a run-time plan error.</summary>
+    public List<ApiChain>? ApiChains { get; set; }
+
     /// <summary>Names (never values) of the secrets the importer must re-link — powers the
     /// "N secrets to re-link" report.</summary>
     public List<TeamPackCredentialRef> CredentialRefs { get; set; } = [];
@@ -61,9 +67,10 @@ public static class TeamPackSections
     public const string Collections = "collections";
     public const string Environments = "environments";
     public const string LinkedRoots = "linkedRoots";
+    public const string ApiChains = "apiChains";
 
     public static readonly IReadOnlyList<string> All =
-        [Maps, SqlQueries, AlertRules, Collections, Environments, LinkedRoots];
+        [Maps, SqlQueries, AlertRules, Collections, Environments, LinkedRoots, ApiChains];
 }
 
 /// <summary>

@@ -13,6 +13,13 @@ public static class DemoApiCollectionFactory
     private const string DemoCollectionName = "Demo API Samples";
 
     /// <summary>
+    /// Id of the synthetic chain the sidecar overlays onto <c>GET /api/api-client/chains</c> in
+    /// demo mode (api-request-chains). It is produced on the fly by <see cref="CreateDemoChain"/>,
+    /// never persisted — the same treatment the demo collection itself gets.
+    /// </summary>
+    public const string DemoChainId = "__demo__chain_jsonplaceholder_crud";
+
+    /// <summary>
     /// Creates a demo API collection with sample requests for various free APIs.
     /// This collection is designed to appear automatically when demo mode is enabled.
     /// </summary>
@@ -602,6 +609,13 @@ public static class DemoApiCollectionFactory
         folder.Children.Add(CreateChainGetTokenRequest());
         folder.Children.Add(CreateChainListOrdersRequest());
 
+        // Named-chain demo steps (api-request-chains): create → read → delete a JSONPlaceholder
+        // post, where the create captures $.id into demoPostId and the follow-ups read it through
+        // the run-scoped variable overlay via {{demoPostId}}.
+        folder.Children.Add(CreateChainCreatePostRequest());
+        folder.Children.Add(CreateChainGetCapturedPostRequest());
+        folder.Children.Add(CreateChainDeleteCapturedPostRequest());
+
         return folder;
     }
 
@@ -664,7 +678,117 @@ public static class DemoApiCollectionFactory
         };
     }
 
+    private static ApiCollectionNode CreateChainCreatePostRequest()
+    {
+        return new ApiCollectionNode
+        {
+            Id = "__demo__chain_create_post",
+            Name = "POST /posts (create)",
+            Type = ApiCollectionNodeType.Request,
+            Request = new HttpRequestEntry
+            {
+                Id = "__demo__chain_create_post",
+                Name = "Create post (captures id)",
+                Method = ApiRequestMethod.Post,
+                Url = "https://jsonplaceholder.typicode.com/posts",
+                Headers = new List<KeyValuePair<string>>
+                {
+                    new KeyValuePair<string> { Key = "Content-Type", Value = "application/json" },
+                    new KeyValuePair<string> { Key = "Accept", Value = "application/json" }
+                },
+                Body = new RequestBody
+                {
+                    Mode = RequestBodyMode.Json,
+                    ContentType = "application/json",
+                    RawContent = "{\n  \"title\": \"swebkit demo post\",\n  \"body\": \"created by a request chain\",\n  \"userId\": 1\n}"
+                },
+                CaptureRules = new List<CaptureRule>
+                {
+                    new CaptureRule
+                    {
+                        Id = "__demo__chain_capture_post_id",
+                        TargetVariable = "demoPostId",
+                        TargetScope = "collection",
+                        Source = CaptureSource.BodyJsonPath,
+                        JsonPath = "$.id",
+                    }
+                },
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            }
+        };
+    }
+
+    private static ApiCollectionNode CreateChainGetCapturedPostRequest()
+    {
+        return new ApiCollectionNode
+        {
+            Id = "__demo__chain_get_post",
+            Name = "GET /posts/{{demoPostId}}",
+            Type = ApiCollectionNodeType.Request,
+            Request = new HttpRequestEntry
+            {
+                Id = "__demo__chain_get_post",
+                Name = "Get captured post",
+                Method = ApiRequestMethod.Get,
+                Url = "https://jsonplaceholder.typicode.com/posts/{{demoPostId}}",
+                Headers = new List<KeyValuePair<string>>
+                {
+                    new KeyValuePair<string> { Key = "Accept", Value = "application/json" }
+                },
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            }
+        };
+    }
+
+    private static ApiCollectionNode CreateChainDeleteCapturedPostRequest()
+    {
+        return new ApiCollectionNode
+        {
+            Id = "__demo__chain_delete_post",
+            Name = "DELETE /posts/{{demoPostId}}",
+            Type = ApiCollectionNodeType.Request,
+            Request = new HttpRequestEntry
+            {
+                Id = "__demo__chain_delete_post",
+                Name = "Delete captured post",
+                Method = ApiRequestMethod.Delete,
+                Url = "https://jsonplaceholder.typicode.com/posts/{{demoPostId}}",
+                Headers = new List<KeyValuePair<string>>
+                {
+                    new KeyValuePair<string> { Key = "Accept", Value = "application/json" }
+                },
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            }
+        };
+    }
+
     #endregion
+
+    /// <summary>
+    /// The demo named chain overlaid onto the chains list in demo mode (api-request-chains):
+    /// JSONPlaceholder create → read → delete, where the create step's capture rule feeds
+    /// <c>demoPostId</c> into the run-scoped overlay the later steps' URLs resolve against.
+    /// </summary>
+    public static ApiChain CreateDemoChain()
+    {
+        return new ApiChain
+        {
+            Id = DemoChainId,
+            Name = "JSONPlaceholder CRUD flow",
+            Description = "POST /posts → GET → DELETE, reusing the id captured from the create response.",
+            Steps =
+            [
+                new ApiChainStep { Id = "__demo__chain_step_create", CollectionId = DemoCollectionId, RequestId = "__demo__chain_create_post" },
+                new ApiChainStep { Id = "__demo__chain_step_get", CollectionId = DemoCollectionId, RequestId = "__demo__chain_get_post" },
+                new ApiChainStep { Id = "__demo__chain_step_delete", CollectionId = DemoCollectionId, RequestId = "__demo__chain_delete_post" },
+            ],
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+    }
 
     /// <summary>
     /// Checks if a collection is the demo collection.

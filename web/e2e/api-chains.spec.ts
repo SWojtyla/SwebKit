@@ -221,7 +221,10 @@ test.describe("API Client — request chains", () => {
 
         // The sidebar shows the new chain with its step count.
         const section = page.getByTestId("chain-section");
-        await expect(section).toContainText("Editor Chain");
-        await expect(section.getByText("2")).toBeVisible();
+        const row = section.locator('[data-testid^="chain-row-"]', {
+            hasText: "Editor Chain",
+        });
+        await expect(row).toBeVisible();
+        await expect(row.getByTitle("2 steps")).toBeVisible();
     });
 });

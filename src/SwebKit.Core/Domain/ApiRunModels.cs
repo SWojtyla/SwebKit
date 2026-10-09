@@ -11,11 +11,13 @@ namespace SwebKit.Core.Domain;
 /// </summary>
 public sealed class ApiRunRequest
 {
-    /// <summary>"requestWithDeps" (topo-sorted dependency chain) | "subtree" (folder/collection in tree order) | "explicit" (caller-supplied order).</summary>
+    /// <summary>"requestWithDeps" (topo-sorted dependency chain) | "subtree" (folder/collection in tree order) | "explicit" (caller-supplied order) | "chain" (expand a persisted <see cref="ApiChain"/>).</summary>
     public string Mode { get; init; } = "requestWithDeps";
     public string? CollectionId { get; init; }
     /// <summary>Set when the collection lives under a linked root.</summary>
     public string? LinkedRootId { get; init; }
+    /// <summary><c>chain</c>: id of the persisted chain whose enabled steps are expanded into the plan.</summary>
+    public string? ChainId { get; init; }
     /// <summary><c>requestWithDeps</c>: the request whose transitive dependencies are run before it.</summary>
     public string? RequestId { get; init; }
     /// <summary><c>subtree</c>: folder node id, or the collection's own id for the whole collection.</summary>
@@ -32,19 +34,59 @@ public sealed class ApiRunRequest
 
 // ─── Plan ────────────────────────────────────────────────────────────────────
 
-/// <summary>One step of a run plan (and of the <c>plan</c> SSE event's <c>steps</c> array).</summary>
-public sealed record ApiRunPlanStep(int Index, string RequestId, string Name);
+/// <summary>
+/// One step of a run plan (and of the <c>plan</c> SSE event's <c>steps</c> array).
+/// The chain-mode members (<see cref="CollectionId"/> … <see cref="OwnerStepId"/>) are populated
+/// only for chain-expanded steps so the wire shape of the older modes stays byte-identical.
+/// </summary>
+/// <param name="StepId"><c>chain</c>: id of the <see cref="ApiChainStep"/> this step expands — null on dep-expanded rows.</param>
+/// <param name="IsDependency"><c>chain</c>: <see langword="true"/> when the step was pulled in by a chain step's dependency edge rather than being a chain step itself.</param>
+/// <param name="OwnerStepId"><c>chain</c>: the <see cref="ApiChainStep"/> id that pulled this dependency in.</param>
+public sealed record ApiRunPlanStep(
+    int Index,
+    string RequestId,
+    string Name,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CollectionId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CollectionName = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? StepId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? IsDependency = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OwnerStepId = null);
 
 /// <summary>
-/// The ordered, validated output of <see cref="Services.ApiClientRunService.BuildPlan"/>.
-/// <see cref="Steps"/> is the public step list; <see cref="Requests"/> carries the resolved
-/// entries for execution and is never serialized.
+/// A plan step's execution context: the resolved request plus the collection and environment
+/// pair it runs against. Chain runs span collections, so the pair is per-step — for the
+/// single-collection modes every context simply carries the same collection and the resolved
+/// (possibly null) environments.
+/// </summary>
+public sealed record ApiRunResolvedStep(
+    HttpRequestEntry Request,
+    ApiCollection Collection,
+    ApiEnvironment? ActiveEnvironment,
+    ApiEnvironment? GlobalEnvironment);
+
+/// <summary>
+/// A chain step whose collection and environment pair have already been resolved — the endpoint
+/// does that per step (internal repository → linked root → demo) because it needs services the
+/// run service deliberately does not hold.
+/// </summary>
+public sealed record ApiChainResolvedStep(
+    ApiChainStep Step,
+    ApiCollection Collection,
+    ApiEnvironment? ActiveEnvironment,
+    ApiEnvironment? GlobalEnvironment);
+
+/// <summary>
+/// The ordered, validated output of <see cref="Services.ApiClientRunService.BuildPlan"/> and
+/// <see cref="Services.ApiClientRunService.BuildChainPlan"/>.
+/// <see cref="Steps"/> is the public step list; <see cref="ResolvedSteps"/> carries the per-step
+/// execution context and is never serialized.
 /// </summary>
 public sealed class ApiRunPlan
 {
     public string RunId { get; init; } = string.Empty;
     public IReadOnlyList<ApiRunPlanStep> Steps { get; init; } = [];
-    internal IReadOnlyList<HttpRequestEntry> Requests { get; init; } = [];
+    /// <summary>Aligned by index with <see cref="Steps"/>.</summary>
+    internal IReadOnlyList<ApiRunResolvedStep> ResolvedSteps { get; init; } = [];
 }
 
 /// <summary>
@@ -65,6 +107,10 @@ public sealed class ApiRunPlanError
     /// <summary><c>dependency_cycle</c>: the request ids forming the loop, first id repeated at the end (e.g. ["a","b","a"]).</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? Cycle { get; init; }
+    /// <summary><c>unknown_request</c> in chain mode: the chain step whose request could not be
+    /// resolved — the drawer highlights that row instead of a bare request id.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StepId { get; init; }
     /// <summary><c>too_many_steps</c>: the configured cap.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? Max { get; init; }
@@ -85,7 +131,8 @@ public sealed class ApiRunPlanResult
         string? nodeId = null,
         string? mode = null,
         IReadOnlyList<string>? cycle = null,
-        int? max = null) => new()
+        int? max = null,
+        string? stepId = null) => new()
         {
             Error = new ApiRunPlanError
             {
@@ -95,14 +142,23 @@ public sealed class ApiRunPlanResult
                 Mode = mode,
                 Cycle = cycle,
                 Max = max,
+                StepId = stepId,
             },
         };
 }
 
 // ─── SSE events ──────────────────────────────────────────────────────────────
 
-/// <summary>One captured variable as reported on a <c>stepCompleted</c> event.</summary>
-public sealed record ApiRunCapturedVariable(string TargetVariable, string Source);
+/// <summary>
+/// One captured variable as reported on a <c>stepCompleted</c> event. <paramref name="Scope"/> is
+/// <c>"run"</c> when the captured value also landed in the run-scoped overlay bag (i.e. visible to
+/// later steps in other collections at top priority) and <c>"environment"</c> when it only exists
+/// through the persisted write.
+/// </summary>
+public sealed record ApiRunCapturedVariable(
+    string TargetVariable,
+    string Source,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Scope = null);
 
 /// <summary>A single header pair inside <see cref="ApiRunStepResponse"/> — same wire shape as the /execute <c>ResponseHeaderDto</c>.</summary>
 public sealed record ApiRunHeader(string Name, string Value);
@@ -167,13 +223,15 @@ public sealed record ApiRunStepResponse
 /// other member is null unless it belongs to that event type, so plain System.Text.Json
 /// serialization produces exactly the documented wire shapes:
 /// <list type="bullet">
-/// <item><c>{"type":"plan","runId":...,"steps":[{index,requestId,name}]}</c></item>
-/// <item><c>{"type":"stepStarted","index":n,"requestId":...,"name":...}</c></item>
-/// <item><c>{"type":"stepCompleted","index":n,"requestId":...,"status":200,"durationMs":123,"captured":[{targetVariable,source}],"response":&lt;same map as /execute result&gt;}</c></item>
+/// <item><c>{"type":"plan","runId":...,"steps":[{index,requestId,name,collectionId?,collectionName?,stepId?,isDependency?,ownerStepId?}]}</c></item>
+/// <item><c>{"type":"stepStarted","index":n,"requestId":...,"name":...,"collectionId"?,"collectionName"?,"stepId"?,"isDependency"?,"ownerStepId"?}</c></item>
+/// <item><c>{"type":"stepCompleted","index":n,"requestId":...,"status":200,"durationMs":123,"captured":[{targetVariable,source,scope?}],"response":&lt;same map as /execute result&gt;}</c></item>
 /// <item><c>{"type":"stepFailed","index":n,"requestId":...,"status":404|null,"durationMs":n,"error":...,"response":?}</c></item>
 /// <item><c>{"type":"aborted","reason":"stopOnError"|"cancelled","completedSteps":n}</c></item>
 /// <item><c>{"type":"done","completedSteps":n,"failedSteps":n,"durationMs":n}</c></item>
 /// </list>
+/// The chain-correlation fields ride on stepStarted/stepCompleted/stepFailed too (not just the
+/// plan payload) so a drawer row can be labelled from any single event.
 /// </summary>
 public sealed record ApiRunEvent
 {
@@ -189,6 +247,22 @@ public sealed record ApiRunEvent
     public string? RequestId { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Name { get; init; }
+
+    /// <summary>Chain mode: the collection this step's request resolved in.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CollectionId { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CollectionName { get; init; }
+    /// <summary>Chain mode: the chain step this plan row expands (null on dep-expanded rows).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? StepId { get; init; }
+    /// <summary>Chain mode: the row was pulled in by a chain step's dependency edge.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsDependency { get; init; }
+    /// <summary>Chain mode: the chain step that pulled this dependency in.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OwnerStepId { get; init; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? Status { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -212,21 +286,33 @@ public sealed record ApiRunEvent
     public static ApiRunEvent Plan(string runId, IReadOnlyList<ApiRunPlanStep> steps) =>
         new() { Type = "plan", RunId = runId, Steps = steps };
 
-    public static ApiRunEvent StepStarted(int index, string requestId, string name) =>
-        new() { Type = "stepStarted", Index = index, RequestId = requestId, Name = name };
+    /// <summary>Copies the chain-correlation fields off the plan step so a drawer row can be
+    /// labelled from the event alone.</summary>
+    private static ApiRunEvent ForStep(string type, ApiRunPlanStep step) =>
+        new()
+        {
+            Type = type,
+            Index = step.Index,
+            RequestId = step.RequestId,
+            Name = step.Name,
+            CollectionId = step.CollectionId,
+            CollectionName = step.CollectionName,
+            StepId = step.StepId,
+            IsDependency = step.IsDependency,
+            OwnerStepId = step.OwnerStepId,
+        };
+
+    public static ApiRunEvent StepStarted(ApiRunPlanStep step) =>
+        ForStep("stepStarted", step);
 
     public static ApiRunEvent StepCompleted(
-        int index,
-        string requestId,
+        ApiRunPlanStep step,
         int status,
         double durationMs,
         IReadOnlyList<ApiRunCapturedVariable> captured,
         HttpRequestResult response) =>
-        new()
+        ForStep("stepCompleted", step) with
         {
-            Type = "stepCompleted",
-            Index = index,
-            RequestId = requestId,
             Status = status,
             DurationMs = durationMs,
             Captured = captured,
@@ -234,17 +320,13 @@ public sealed record ApiRunEvent
         };
 
     public static ApiRunEvent StepFailed(
-        int index,
-        string requestId,
+        ApiRunPlanStep step,
         int? status,
         double? durationMs,
         string error,
         HttpRequestResult? response) =>
-        new()
+        ForStep("stepFailed", step) with
         {
-            Type = "stepFailed",
-            Index = index,
-            RequestId = requestId,
             Status = status,
             DurationMs = durationMs,
             Error = error,

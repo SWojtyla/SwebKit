@@ -22,6 +22,7 @@ public class TeamPackServiceTests
         CollectionRepository Collections,
         EnvironmentRepository Environments,
         LinkedCollectionRootRepository LinkedRoots,
+        ChainRepository Chains,
         DemoModeService Demo) : IDisposable
     {
         public void Dispose() => SqlQueries.Dispose();
@@ -35,10 +36,11 @@ public class TeamPackServiceTests
         var collections = new CollectionRepository();
         var envs = new EnvironmentRepository();
         var roots = new LinkedCollectionRootRepository();
+        var chains = new ChainRepository();
         var demo = new DemoModeService();
         return new Fixture(
-            new TeamPackService(profiles, sql, rules, collections, envs, roots, demo),
-            profiles, sql, rules, collections, envs, roots, demo);
+            new TeamPackService(profiles, sql, rules, collections, envs, roots, chains, demo),
+            profiles, sql, rules, collections, envs, roots, chains, demo);
     }
 
     // ── Export: secret hygiene ───────────────────────────────────────────────
@@ -400,6 +402,122 @@ public class TeamPackServiceTests
         var rule = Assert.Single(rules);
         Assert.Equal("local-rule", rule.Id);
         Assert.Equal(120, rule.IntervalSeconds);
+    }
+
+    // ── apiChains section (api-request-chains) ──────────────────────────────
+
+    [Fact]
+    public async Task Export_IncludesChains_WithReferencesVerbatim_AndNoSecrets()
+    {
+        using var _ = new AppDataSandbox();
+        using var f = CreateFixture();
+        await f.Chains.AddChainAsync(new ApiChain
+        {
+            Name = "onboarding",
+            Steps =
+            [
+                new ApiChainStep { Id = "s1", CollectionId = "col-1", RequestId = "req-1" },
+                new ApiChainStep { Id = "s2", CollectionId = "col-2", LinkedRootId = "root-9", RequestId = "req-2", Enabled = false },
+            ],
+        });
+
+        var pack = await f.Svc.ExportAsync();
+
+        var chain = Assert.Single(pack.ApiChains!);
+        Assert.Equal("onboarding", chain.Name);
+        Assert.Equal("col-2", chain.Steps[1].CollectionId);
+        Assert.Equal("root-9", chain.Steps[1].LinkedRootId);
+        Assert.False(chain.Steps[1].Enabled);
+        // Chains are pure references — they contribute no credential refs and no warnings.
+        Assert.Empty(pack.CredentialRefs);
+    }
+
+    [Fact]
+    public async Task Export_SectionFilter_AcceptsApiChains()
+    {
+        using var _ = new AppDataSandbox();
+        using var f = CreateFixture();
+        await f.Chains.AddChainAsync(new ApiChain { Name = "flow" });
+
+        var pack = await f.Svc.ExportAsync(new HashSet<string> { TeamPackSections.ApiChains });
+
+        Assert.Single(pack.ApiChains!);
+        Assert.Null(pack.CollectionsData);
+        Assert.Null(pack.Maps);
+    }
+
+    [Fact]
+    public async Task Import_Merge_ChainsRebindCollectionIds_AndSkipNameClashes()
+    {
+        using var _ = new AppDataSandbox();
+        using var f = CreateFixture();
+        await f.Chains.AddChainAsync(new ApiChain { Name = "existing" });
+
+        var pack = new TeamPack
+        {
+            CollectionsData = new CollectionsStore
+            {
+                Collections = [new ApiCollection { Id = "pack-col", Name = "Team API" }],
+            },
+            ApiChains =
+            [
+                // Steps point at the pack's collection id — they must land on the fresh id
+                // the collections import just minted, not the dead pack id.
+                new ApiChain
+                {
+                    Id = "pack-chain",
+                    Name = "new flow",
+                    Steps =
+                    [
+                        new ApiChainStep { Id = "s1", CollectionId = "pack-col", RequestId = "req-1" },
+                    ],
+                },
+                new ApiChain { Id = "clash", Name = "EXISTING" },
+            ],
+        };
+
+        var result = await f.Svc.ImportAsync(pack, new TeamPackImportOptions());
+
+        Assert.Equal(2, result.Added);
+        Assert.Equal(1, result.Skipped);
+        Assert.Contains(result.Conflicts, c => c.StartsWith("apiChains:", StringComparison.Ordinal));
+        var imported = Assert.Single(f.Chains.Chains, c => c.Name == "new flow");
+        Assert.NotEqual("pack-chain", imported.Id);
+        var collection = Assert.Single(f.Collections.Collections);
+        Assert.Equal(collection.Id, imported.Steps[0].CollectionId);
+        // The dangling request id stays verbatim — it becomes a plan error at run time.
+        Assert.Equal("req-1", imported.Steps[0].RequestId);
+    }
+
+    [Fact]
+    public async Task Import_Replace_ChainsSwapsSection_AndDryRunWritesNothing()
+    {
+        using var _ = new AppDataSandbox();
+        using var f = CreateFixture();
+        await f.Chains.AddChainAsync(new ApiChain { Name = "old" });
+
+        var pack = new TeamPack
+        {
+            ApiChains = [new ApiChain { Id = "pack-chain", Name = "new" }],
+        };
+
+        var dry = await f.Svc.ImportAsync(pack, new TeamPackImportOptions
+        {
+            DryRun = true,
+            Strategy = TeamPackMergeStrategy.Replace,
+        });
+        Assert.Equal(1, dry.Added);
+        Assert.Single(f.Chains.Chains, c => c.Name == "old");
+
+        var result = await f.Svc.ImportAsync(pack, new TeamPackImportOptions
+        {
+            Strategy = TeamPackMergeStrategy.Replace,
+        });
+        Assert.Equal(1, result.Added);
+        Assert.Equal(1, result.Skipped);
+        var chain = Assert.Single(f.Chains.Chains);
+        Assert.Equal("new", chain.Name);
+        Assert.NotEqual("pack-chain", chain.Id);
     }
 
     // ── Deserialize / endpoint guards ────────────────────────────────────────
