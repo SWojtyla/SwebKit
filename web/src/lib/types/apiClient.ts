@@ -101,6 +101,13 @@ export interface CollectionImportResult {
     warnings: string[];
 }
 
+/** `POST /api/api-client/import-curl` — one parsed request per pasted command,
+ *  plus non-fatal notes for flags the parser ignored (e.g. `--insecure`). */
+export interface CurlImportResult {
+    requests: HttpRequestEntry[];
+    warnings: string[];
+}
+
 export interface HttpRequestEntry {
     id: string;
     name: string;

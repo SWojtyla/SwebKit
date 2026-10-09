@@ -640,16 +640,22 @@ public class ConfigEndpointsTests
     }
 
     [Fact]
-    public void GetCollectionsStore_DemoMode_PrependsTheDemoCollectionFirst()
+    public async Task GetCollectionsStore_DemoMode_PrependsTheDemoCollectionFirst()
     {
         var repo = new CollectionRepository();
         var demo = new DemoModeService { IsDemoMode = true };
+        var linkedRoots = new LinkedCollectionRootRepository();
+        var linkedFiles = new LinkedCollectionFileService(new LinkedGitService());
 
-        var result = Assert.IsAssignableFrom<IValueHttpResult>(ConfigEndpoints.GetCollectionsStore(repo, demo));
+        var result = Assert.IsAssignableFrom<IValueHttpResult>(
+            await ConfigEndpoints.GetCollectionsStore(repo, demo, linkedRoots, linkedFiles, CancellationToken.None));
         var store = Assert.IsType<CollectionsStoreResponse>(result.Value);
 
         Assert.Equal(DemoApiCollectionFactory.DemoCollectionId, store.Collections[0].Id);
         Assert.Equal(1, store.SchemaVersion);
+        // Demo mode never touches real disk — linked roots come back as an empty array.
+        Assert.NotNull(store.LinkedRoots);
+        Assert.Empty(store.LinkedRoots);
     }
 
     [Fact]

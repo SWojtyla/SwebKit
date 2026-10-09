@@ -45,92 +45,273 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
         return string.Join(" \\\n", lines);
     }
 
+    /// <summary>
+    /// Parses a pasted cURL command — or a paste holding several commands separated by newlines,
+    /// <c>&&</c>, or <c>;</c> — into request entries. Shell continuations (<c>\</c> and cmd.exe's
+    /// <c>^</c>) are joined first; each <c>curl</c> invocation and each <c>--next</c> section
+    /// produces one request. Flags the importer doesn't honor land in warnings rather than
+    /// failing the parse or being dropped silently.
+    /// </summary>
     public CurlImportResult ImportCurl(string command)
     {
-        var tokens = Tokenize(command);
-        if (tokens.Count == 0)
+        var warnings = new List<string>();
+        var groups = SplitCommandGroups(command, warnings);
+        if (groups.Count == 0)
         {
             return CurlImportResult.Failure("Paste a cURL command first.");
         }
 
-        if (tokens[0].Equals("curl", StringComparison.OrdinalIgnoreCase))
+        var requests = new List<HttpRequestEntry>();
+        foreach (var group in groups)
         {
-            tokens.RemoveAt(0);
+            var tokens = Tokenize(group);
+            if (tokens.Count > 0 && IsCurlToken(tokens[0]))
+            {
+                tokens.RemoveAt(0);
+            }
+
+            foreach (var invocation in SplitOnNextSeparator(tokens))
+            {
+                var (request, error) = ParseSingleCurlCommand(invocation, warnings);
+                if (error is not null)
+                {
+                    return CurlImportResult.Failure(error);
+                }
+
+                requests.Add(request!);
+            }
         }
 
+        if (requests.Count == 0)
+        {
+            return CurlImportResult.Failure("Could not find a URL in the cURL command.");
+        }
+
+        DeduplicateRequestNames(requests);
+        return CurlImportResult.Success(requests, warnings);
+    }
+
+    /// <summary>
+    /// Parses the tokens of one curl invocation (after the <c>curl</c> prefix was stripped).
+    /// Returns the request, or an error message for the same hard failures as before
+    /// (missing values, no URL).
+    /// </summary>
+    private static (HttpRequestEntry? Request, string? Error) ParseSingleCurlCommand(
+        IReadOnlyList<string> tokens, List<string> warnings)
+    {
         var method = ApiRequestMethod.Get;
         var url = string.Empty;
         var headers = new List<KeyValuePair<string>>();
         var bodyParts = new List<string>();
+        var formFields = new List<FormDataField>();
+        var endOfOptions = false;
         string? basicUser = null;
+        string? error = null;
+        var index = 0;
 
-        for (var index = 0; index < tokens.Count; index++)
+        string? TakeValue(string? inlineValue) =>
+            inlineValue ?? (index + 1 < tokens.Count ? tokens[++index] : null);
+
+        // Applies a flag the importer understands: mapped flags, warnings, and the ignorable
+        // tables. Returns false for anything unknown so the caller can surface it in warnings.
+        bool TryApplyFlag(string flag, string? inlineValue)
         {
-            var token = tokens[index];
-            var value = index + 1 < tokens.Count ? tokens[index + 1] : null;
-
-            switch (token)
+            switch (flag)
             {
                 case "-X":
                 case "--request":
-                    if (value is null) return CurlImportResult.Failure("cURL request method is missing.");
-                    method = ParseMethod(value);
-                    index++;
-                    break;
+                    var requestMethod = TakeValue(inlineValue);
+                    if (requestMethod is null) { error = "cURL request method is missing."; return true; }
+                    method = ParseMethod(requestMethod);
+                    return true;
 
                 case "-H":
                 case "--header":
-                    if (value is null) return CurlImportResult.Failure("cURL header value is missing.");
-                    AddHeader(headers, value);
-                    index++;
-                    break;
+                    var header = TakeValue(inlineValue);
+                    if (header is null) { error = "cURL header value is missing."; return true; }
+                    AddHeader(headers, header);
+                    return true;
 
                 case "-d":
                 case "--data":
                 case "--data-raw":
                 case "--data-binary":
+                case "--data-ascii":
                 case "--data-urlencode":
-                    if (value is null) return CurlImportResult.Failure("cURL body value is missing.");
-                    bodyParts.Add(value);
-                    if (method == ApiRequestMethod.Get)
-                    {
-                        method = ApiRequestMethod.Post;
-                    }
-                    index++;
-                    break;
+                    var data = TakeValue(inlineValue);
+                    if (data is null) { error = "cURL body value is missing."; return true; }
+                    bodyParts.Add(data);
+                    if (method == ApiRequestMethod.Get) method = ApiRequestMethod.Post;
+                    return true;
+
+                case "--json":
+                    // curl ≥7.82: --json is --data plus JSON content headers.
+                    var json = TakeValue(inlineValue);
+                    if (json is null) { error = "cURL body value is missing."; return true; }
+                    bodyParts.Add(json);
+                    if (method == ApiRequestMethod.Get) method = ApiRequestMethod.Post;
+                    SetHeader(headers, "Content-Type", "application/json");
+                    SetHeader(headers, "Accept", "application/json");
+                    return true;
+
+                case "-F":
+                case "--form":
+                case "--form-string":
+                    var field = TakeValue(inlineValue);
+                    if (field is null) { error = "cURL form field value is missing."; return true; }
+                    AddFormField(formFields, field, literal: flag == "--form-string", warnings);
+                    if (method == ApiRequestMethod.Get) method = ApiRequestMethod.Post;
+                    return true;
+
+                case "-b":
+                case "--cookie":
+                    var cookie = TakeValue(inlineValue);
+                    if (cookie is null) { error = "cURL cookie value is missing."; return true; }
+                    // Multiple -b flags merge into one Cookie header, matching curl's "; " join.
+                    var existingCookie = headers.LastOrDefault(h => h.Key.Equals("Cookie", StringComparison.OrdinalIgnoreCase));
+                    if (existingCookie is not null) existingCookie.Value = $"{existingCookie.Value}; {cookie}";
+                    else headers.Add(new KeyValuePair<string> { Key = "Cookie", Value = cookie, IsEnabled = true });
+                    return true;
+
+                case "-A":
+                case "--user-agent":
+                    var agent = TakeValue(inlineValue);
+                    if (agent is null) { error = "cURL user-agent value is missing."; return true; }
+                    SetHeader(headers, "User-Agent", agent);
+                    return true;
+
+                case "-e":
+                case "--referer":
+                    var referer = TakeValue(inlineValue);
+                    if (referer is null) { error = "cURL referer value is missing."; return true; }
+                    SetHeader(headers, "Referer", referer);
+                    return true;
 
                 case "--url":
-                    if (value is null) return CurlImportResult.Failure("cURL URL is missing.");
-                    url = value;
-                    index++;
-                    break;
+                    var target = TakeValue(inlineValue);
+                    if (target is null) { error = "cURL URL is missing."; return true; }
+                    url = target;
+                    return true;
 
                 case "-I":
                 case "--head":
                     method = ApiRequestMethod.Head;
-                    break;
+                    return true;
 
                 case "-u":
                 case "--user":
                     // `curl -u alice:secret` is Basic auth — common in API docs, and silently
                     // dropping it produced an imported request that 401s for no visible reason.
-                    if (value is null) return CurlImportResult.Failure("cURL user value is missing.");
-                    basicUser = value;
-                    index++;
-                    break;
+                    var user = TakeValue(inlineValue);
+                    if (user is null) { error = "cURL user value is missing."; return true; }
+                    basicUser = user;
+                    return true;
+
+                case "-k":
+                case "--insecure":
+                    const string insecureWarning =
+                        "Command uses -k/--insecure; the app's global SSL verification setting still applies.";
+                    if (!warnings.Contains(insecureWarning)) warnings.Add(insecureWarning);
+                    return true;
 
                 default:
-                    if (!token.StartsWith('-') && LooksLikeUrl(token))
+                    if (IgnorableValueFlags.Contains(flag))
                     {
-                        url = token;
+                        TakeValue(inlineValue);
+                        return true;
                     }
-                    break;
+
+                    if (IgnorableFlags.Contains(flag))
+                    {
+                        return true;
+                    }
+
+                    return false;
+            }
+        }
+
+        for (index = 0; index < tokens.Count; index++)
+        {
+            var token = tokens[index];
+
+            if (endOfOptions)
+            {
+                if (LooksLikeUrl(token)) url = token;
+                continue;
+            }
+
+            if (token == "--")
+            {
+                endOfOptions = true;
+                continue;
+            }
+
+            if (!token.StartsWith('-'))
+            {
+                if (LooksLikeUrl(token)) url = token;
+                continue;
+            }
+
+            // Combined short flags (-sL, -fsSLk) and attached values (-XPOST, -d{..}): walk the
+            // chars; a value-taking short swallows the remainder of the token as its value.
+            if (token.Length > 2 && token[1] != '-')
+            {
+                for (var pos = 1; pos < token.Length; pos++)
+                {
+                    var shortFlag = string.Concat('-', token[pos]);
+                    if (ShortFlagTakesValue(token[pos]))
+                    {
+                        var rest = pos + 1 < token.Length ? token[(pos + 1)..] : null;
+                        if (!TryApplyFlag(shortFlag, rest ?? TakeValue(null)))
+                        {
+                            warnings.Add($"Ignored cURL flag: {shortFlag}");
+                        }
+                        break;
+                    }
+
+                    if (!TryApplyFlag(shortFlag, null))
+                    {
+                        warnings.Add($"Ignored cURL flag: {shortFlag}");
+                    }
+                }
+
+                if (error is not null) return (null, error);
+                continue;
+            }
+
+            var flag = token;
+            string? inlineValue = null;
+            if (token.StartsWith("--", StringComparison.Ordinal))
+            {
+                var separator = token.IndexOf('=', StringComparison.Ordinal);
+                if (separator >= 2)
+                {
+                    flag = token[..separator];
+                    inlineValue = token[(separator + 1)..];
+                }
+            }
+
+            if (TryApplyFlag(flag, inlineValue))
+            {
+                if (error is not null) return (null, error);
+                continue;
+            }
+
+            warnings.Add($"Ignored cURL flag: {flag}");
+            // An unrecognized flag may take a value — swallow the next token only when it can't
+            // be anything else (never another flag, never the request URL).
+            if (inlineValue is null
+                && index + 1 < tokens.Count
+                && !tokens[index + 1].StartsWith('-')
+                && !LooksLikeUrl(tokens[index + 1]))
+            {
+                index++;
             }
         }
 
         if (string.IsNullOrWhiteSpace(url))
         {
-            return CurlImportResult.Failure("Could not find a URL in the cURL command.");
+            return (null, "Could not find a URL in the cURL command.");
         }
 
         var request = new HttpRequestEntry
@@ -144,7 +325,12 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
             UpdatedAt = DateTimeOffset.UtcNow,
         };
 
-        if (bodyParts.Count > 0)
+        if (formFields.Count > 0)
+        {
+            request.Body.Mode = RequestBodyMode.FormData;
+            request.Body.FormData = formFields;
+        }
+        else if (bodyParts.Count > 0)
         {
             request.Body.RawContent = string.Join("&", bodyParts);
             request.Body.Mode = LooksLikeJson(request.Body.RawContent) ? RequestBodyMode.Json : RequestBodyMode.Text;
@@ -164,8 +350,331 @@ public sealed partial class ApiClientWorkflowService(IVariableSubstitutionServic
             };
         }
 
-        return CurlImportResult.Success(request);
+        return (request, null);
     }
+
+    // Flags the importer understands but cannot honor consume their value silently so the
+    // value never masquerades as a URL; anything not listed warns instead.
+    private static readonly HashSet<string> IgnorableValueFlags = new(StringComparer.Ordinal)
+    {
+        "-x", "--proxy", "-U", "--proxy-user", "-o", "--output",
+        "-m", "--max-time", "--connect-timeout", "--expect100-timeout", "--keepalive-time",
+        "--retry", "--retry-delay", "--retry-max-time", "--max-redirs",
+        "--resolve", "--connect-to", "--cacert", "--capath", "--proxy-cacert",
+        "--limit-rate", "-y", "--speed-time", "-Y", "--speed-limit", "--max-filesize",
+        "--noproxy", "--unix-socket", "-w", "--write-out", "-D", "--dump-header",
+        "-c", "--cookie-jar", "-C", "--continue-at", "-z", "--time-cond",
+        "-r", "--range", "--ciphers", "--curves", "--tls-max", "--tls13-ciphers",
+        "--interface", "--local-port", "-t", "--telnet-option", "-P", "--ftp-port", "-Q", "--quote",
+    };
+
+    private static readonly HashSet<string> IgnorableFlags = new(StringComparer.Ordinal)
+    {
+        "-s", "--silent", "-S", "--show-error", "-v", "--verbose", "-i", "--include",
+        "-L", "--location", "-g", "--globoff", "-N", "--no-buffer", "--no-keepalive",
+        "--compressed", "-4", "--ipv4", "-6", "--ipv6",
+        "-0", "--http1.0", "--http1.1", "--http2", "--http2-prior-knowledge", "--http3",
+        "-f", "--fail", "--fail-with-body", "-q", "--disable", "--raw", "--path-as-is",
+        "--ssl", "--ssl-reqd", "--no-alpn", "--no-npn",
+        "--tlsv1", "--tlsv1.0", "--tlsv1.1", "--tlsv1.2", "--tlsv1.3",
+        "-p", "--proxytunnel", "--basic", "--anyauth", "-j", "--junk-session-cookies",
+        "-O", "--remote-name", "-J", "--remote-header-name", "-R", "--remote-time",
+        "-#", "--progress-bar", "--no-progress-meter", "-M", "--manual",
+        "-l", "--list-only", "-B", "--use-ascii", "--disable-eprt", "--disable-epsv",
+    };
+
+    // Short flags that consume a value — when unpacking combined flags (-sLk) or attached
+    // values (-XPOST), the token remainder after one of these is that flag's value. Flags
+    // the table doesn't know (-T, -K, -E) still warn but get their value consumed correctly.
+    private static bool ShortFlagTakesValue(char c) => c is
+        'X' or 'H' or 'd' or 'F' or 'u' or 'b' or 'A' or 'e' or
+        'x' or 'o' or 'm' or 'w' or 'c' or 'D' or 'C' or 'z' or 'r' or
+        'E' or 'K' or 'T' or 'U' or 'y' or 'Y' or 't' or 'P' or 'Q';
+
+    /// <summary>
+    /// Splits the raw paste into one group per command. A segment starts a new command only
+    /// when its first token is a standalone <c>curl</c>; every other segment continues the
+    /// previous one (forgiving multi-line pastes without continuation characters). When no
+    /// <c>curl</c> token appears at all, the whole paste is a single command.
+    /// </summary>
+    private static List<string> SplitCommandGroups(string command, List<string> warnings)
+    {
+        var segments = SplitSegments(StripLineContinuations(command))
+            .Select(static segment => segment.Trim())
+            .Where(static segment => segment.Length > 0)
+            .ToList();
+        if (segments.Count == 0)
+        {
+            return [];
+        }
+
+        var anyCurl = segments.Any(StartsWithCurlToken);
+        var groups = new List<string>();
+        foreach (var segment in segments)
+        {
+            if (anyCurl && StartsWithCurlToken(segment))
+            {
+                groups.Add(segment);
+            }
+            else if (groups.Count > 0)
+            {
+                groups[^1] = $"{groups[^1]} {segment}";
+            }
+            else if (anyCurl)
+            {
+                // Shell noise ahead of the first curl (echo, comments) — dropped, but told.
+                warnings.Add($"Ignored input that is not a cURL command: {TruncateForWarning(segment)}");
+            }
+            else
+            {
+                groups.Add(segment);
+            }
+        }
+
+        return groups;
+    }
+
+    private static bool StartsWithCurlToken(string segment)
+    {
+        var firstSpace = segment.IndexOf(' ', StringComparison.Ordinal);
+        var firstTab = segment.IndexOf('\t', StringComparison.Ordinal);
+        var end = (firstSpace, firstTab) switch
+        {
+            (< 0, < 0) => segment.Length,
+            (< 0, var tab) => tab,
+            (var space, < 0) => space,
+            (var space, var tab) => Math.Min(space, tab),
+        };
+        return IsCurlToken(segment[..end]);
+    }
+
+    private static bool IsCurlToken(string token) =>
+        token.Equals("curl", StringComparison.OrdinalIgnoreCase) ||
+        token.Equals("curl.exe", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Quote-aware split on command separators: newlines, <c>;</c>, and <c>&&</c>. A lone
+    /// <c>&amp;</c> stays (URLs carry it), and nothing inside quotes splits.
+    /// </summary>
+    private static List<string> SplitSegments(string command)
+    {
+        var segments = new List<string>();
+        var builder = new StringBuilder();
+        var quote = '\0';
+        var escape = false;
+
+        for (var i = 0; i < command.Length; i++)
+        {
+            var character = command[i];
+            if (escape)
+            {
+                builder.Append(character);
+                escape = false;
+                continue;
+            }
+
+            if (character == '\\' && quote != '\'')
+            {
+                builder.Append(character);
+                escape = true;
+                continue;
+            }
+
+            if ((character == '\'' || character == '"') && quote == '\0')
+            {
+                quote = character;
+                builder.Append(character);
+                continue;
+            }
+
+            if (character == quote)
+            {
+                quote = '\0';
+                builder.Append(character);
+                continue;
+            }
+
+            if (quote == '\0')
+            {
+                if (character == '\n' || character == '\r' || character == ';')
+                {
+                    FlushSegment(segments, builder);
+                    continue;
+                }
+
+                if (character == '&' && i + 1 < command.Length && command[i + 1] == '&')
+                {
+                    FlushSegment(segments, builder);
+                    i++; // consume the second '&'
+                    continue;
+                }
+            }
+
+            builder.Append(character);
+        }
+
+        FlushSegment(segments, builder);
+        return segments;
+    }
+
+    private static void FlushSegment(List<string> segments, StringBuilder builder)
+    {
+        if (builder.Length == 0)
+        {
+            return;
+        }
+
+        segments.Add(builder.ToString());
+        builder.Clear();
+    }
+
+    /// <summary>
+    /// Joins shell line continuations before tokenizing: <c>\</c>-newline (bash, also inside
+    /// double quotes) and <c>^</c>-newline (cmd.exe, never inside quotes — <c>^</c> is not a
+    /// cmd escape inside a quoted string, so stripping it there would corrupt the value).
+    /// </summary>
+    private static string StripLineContinuations(string command)
+    {
+        var builder = new StringBuilder(command.Length);
+        var quote = '\0';
+
+        for (var i = 0; i < command.Length; i++)
+        {
+            var character = command[i];
+
+            if (character == '\\' && quote != '\'')
+            {
+                if (i + 1 < command.Length && IsNewline(command[i + 1]))
+                {
+                    i = SkipNewline(command, i + 1);
+                    continue;
+                }
+
+                // Keep the escape verbatim for the tokenizer (it consumes '\X' as literal X);
+                // copying both chars also keeps quote tracking honest for sequences like \".
+                builder.Append(character);
+                if (i + 1 < command.Length)
+                {
+                    builder.Append(command[++i]);
+                }
+                continue;
+            }
+
+            if (character == '^' && quote == '\0'
+                && i + 1 < command.Length && IsNewline(command[i + 1]))
+            {
+                i = SkipNewline(command, i + 1);
+                continue;
+            }
+
+            if ((character == '\'' || character == '"') && quote == '\0')
+            {
+                quote = character;
+                builder.Append(character);
+                continue;
+            }
+
+            if (character == quote)
+            {
+                quote = '\0';
+                builder.Append(character);
+                continue;
+            }
+
+            builder.Append(character);
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool IsNewline(char character) => character is '\n' or '\r';
+
+    /// <summary>Returns the index of the last character of the newline starting at <paramref name="index"/>.</summary>
+    private static int SkipNewline(string value, int index) =>
+        value[index] == '\r' && index + 1 < value.Length && value[index + 1] == '\n'
+            ? index + 1
+            : index;
+
+    /// <summary><c>--next</c> splits one curl invocation into independent request sections.</summary>
+    private static IEnumerable<List<string>> SplitOnNextSeparator(List<string> tokens)
+    {
+        var current = new List<string>();
+        foreach (var token in tokens)
+        {
+            if (token == "--next")
+            {
+                if (current.Count > 0)
+                {
+                    yield return current;
+                    current = [];
+                }
+                continue;
+            }
+
+            current.Add(token);
+        }
+
+        if (current.Count > 0)
+        {
+            yield return current;
+        }
+    }
+
+    private static void AddFormField(List<FormDataField> fields, string field, bool literal, List<string> warnings)
+    {
+        var separator = field.IndexOf('=', StringComparison.Ordinal);
+        if (separator <= 0)
+        {
+            warnings.Add($"Ignored -F/--form field without a 'name=value' shape: {TruncateForWarning(field)}");
+            return;
+        }
+
+        var value = field[(separator + 1)..];
+        // curl: @path sends a real file part, <path sends file contents; --form-string never interprets either.
+        var isFile = !literal
+            && (value.StartsWith('@') || value.StartsWith('<'));
+        fields.Add(new FormDataField
+        {
+            Key = field[..separator],
+            Value = isFile ? value[1..] : value,
+            IsEnabled = true,
+            IsFile = isFile,
+        });
+    }
+
+    /// <summary>Sets a header value, replacing an existing header of the same name (last wins).</summary>
+    private static void SetHeader(List<KeyValuePair<string>> headers, string key, string value)
+    {
+        var existing = headers.LastOrDefault(h => h.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            existing.Value = value;
+            return;
+        }
+
+        headers.Add(new KeyValuePair<string> { Key = key, Value = value, IsEnabled = true });
+    }
+
+    /// <summary>Appends " (2)", " (3)", … to names that repeat within one imported batch.</summary>
+    private static void DeduplicateRequestNames(List<HttpRequestEntry> requests)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var request in requests)
+        {
+            var baseName = request.Name;
+            var name = baseName;
+            var suffix = 2;
+            while (!seen.Add(name))
+            {
+                name = $"{baseName} ({suffix++})";
+            }
+
+            request.Name = name;
+        }
+    }
+
+    private static string TruncateForWarning(string value) =>
+        value.Length <= 80 ? value : string.Concat(value.AsSpan(0, 80), "…");
 
     public async Task<IReadOnlyList<VariableInspectionItem>> InspectVariablesAsync(
         HttpRequestEntry request,

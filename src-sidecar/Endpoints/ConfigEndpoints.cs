@@ -398,14 +398,31 @@ public static class ConfigEndpoints
         return Results.Ok(collections);
     }
 
-    internal static IResult GetCollectionsStore(CollectionRepository repo, DemoModeService demo)
+    internal static async Task<IResult> GetCollectionsStore(
+        CollectionRepository repo,
+        DemoModeService demo,
+        LinkedCollectionRootRepository linkedRoots,
+        LinkedCollectionFileService linkedFiles,
+        CancellationToken cancellationToken)
     {
         var collections = repo.Collections.ToList();
         if (demo.IsDemoMode)
         {
             collections.Insert(0, DemoApiCollectionFactory.CreateDemoCollection());
         }
-        return Results.Ok(new CollectionsStoreResponse { SchemaVersion = 1, Collections = collections, ConcurrencyToken = repo.GetConcurrencyToken() });
+
+        // Demo mode keeps no linked roots (they touch real disk) — an empty array, never an error.
+        var linked = demo.IsDemoMode
+            ? []
+            : await LinkedRootsEndpoints.BuildRootSummariesAsync(linkedRoots, linkedFiles, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new CollectionsStoreResponse
+        {
+            SchemaVersion = 1,
+            Collections = collections,
+            ConcurrencyToken = repo.GetConcurrencyToken(),
+            LinkedRoots = linked,
+        });
     }
 
     /// <summary>Where the collections store lives on disk — surfaced in Settings → API Client
@@ -422,11 +439,30 @@ public static class ConfigEndpoints
         ImportCollectionRequest req,
         CollectionImportService importer,
         DemoModeService demo,
+        LinkedCollectionRootRepository linkedRoots,
+        LinkedCollectionFileService linkedFiles,
         CancellationToken cancellationToken)
     {
         if (demo.IsDemoMode)
         {
             return ApiErrors.BadRequest("Import is disabled in demo mode.");
+        }
+
+        // An explicit linkedRootId routes the import into that root's .swebkit-api tree instead of
+        // the internal collections.json store.
+        string? linkedApiRootPath = null;
+        if (!string.IsNullOrWhiteSpace(req.LinkedRootId))
+        {
+            var linkedRoot = linkedRoots.Roots.FirstOrDefault(r => r.Id == req.LinkedRootId);
+            if (linkedRoot is null)
+            {
+                return ApiErrors.NotFound("Linked root not found.");
+            }
+
+            // The import target must exist on disk before files are written into it — EnsureRootAsync
+            // resolves the .swebkit-api path and creates the tree when the root was registered
+            // against a folder that never had one.
+            linkedApiRootPath = await linkedFiles.EnsureRootAsync(linkedRoot.Path, linkedRoot.Name, cancellationToken).ConfigureAwait(false);
         }
 
         if (!string.IsNullOrWhiteSpace(req.FolderPath))
@@ -437,7 +473,10 @@ public static class ConfigEndpoints
                 return validation;
             }
 
-            var result = await importer.ImportBrunoFolderAsync(Path.GetFullPath(req.FolderPath!), cancellationToken).ConfigureAwait(false);
+            var fullPath = Path.GetFullPath(req.FolderPath!);
+            var result = linkedApiRootPath is not null
+                ? await importer.ImportBrunoFolderToLinkedRootAsync(fullPath, linkedApiRootPath, cancellationToken).ConfigureAwait(false)
+                : await importer.ImportBrunoFolderAsync(fullPath, cancellationToken).ConfigureAwait(false);
             return Results.Ok(result);
         }
 
@@ -446,7 +485,9 @@ public static class ConfigEndpoints
             try
             {
                 var payload = Convert.FromBase64String(req.PayloadBase64);
-                var result = await importer.ImportCollectionAsync(payload, cancellationToken).ConfigureAwait(false);
+                var result = linkedApiRootPath is not null
+                    ? await importer.ImportCollectionToLinkedRootAsync(payload, linkedApiRootPath, cancellationToken).ConfigureAwait(false)
+                    : await importer.ImportCollectionAsync(payload, cancellationToken).ConfigureAwait(false);
                 return Results.Ok(result);
             }
             catch (FormatException)
@@ -497,6 +538,9 @@ public static class ConfigEndpoints
     {
         public string? FolderPath { get; set; }
         public string? PayloadBase64 { get; set; }
+        /// <summary>When set, the import writes into that linked root's on-disk tree instead of
+        /// the internal collections.json store.</summary>
+        public string? LinkedRootId { get; set; }
     }
 
     internal static async Task<IResult> SaveUserSettingsAsync(UserSettingsRepository repo, UserSettings settings)

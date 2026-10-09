@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Terminal, X, AlertCircle, CheckCircle } from "lucide-react";
+import { Terminal, X, AlertCircle } from "lucide-react";
 import { useDemoMode } from "@/lib/hooks";
 import { useNotification } from "@/components/layout/notification-context";
 import { importCurlRequest } from "@/lib/api/apiClient";
 import { collectFolderPaths } from "@/lib/collection-tree-utils";
+import { MethodBadge } from "./method-badge";
 import type { ApiCollection, HttpRequestEntry } from "@/lib/types";
 
 const NEW_COLLECTION = "__new__";
@@ -33,7 +34,8 @@ export function CurlImportDialog({
     const isDemo = demoMode?.isDemoMode ?? false;
 
     const [command, setCommand] = useState("");
-    const [parsed, setParsed] = useState<HttpRequestEntry | null>(null);
+    const [parsed, setParsed] = useState<HttpRequestEntry[]>([]);
+    const [parseWarnings, setParseWarnings] = useState<string[]>([]);
     const [parseError, setParseError] = useState<string | null>(null);
     const [parsing, setParsing] = useState(false);
     const [importing, setImporting] = useState(false);
@@ -72,8 +74,11 @@ export function CurlImportDialog({
         if (!trimmed || isDemo) return;
         const timer = setTimeout(async () => {
             try {
-                const request = await importCurlRequest(trimmed);
-                if (parseRun.current === run) setParsed(request);
+                const result = await importCurlRequest(trimmed);
+                if (parseRun.current === run) {
+                    setParsed(result.requests);
+                    setParseWarnings(result.warnings);
+                }
             } catch (err) {
                 if (parseRun.current === run) {
                     setParseError(
@@ -94,31 +99,60 @@ export function CurlImportDialog({
             ? newCollectionName.trim()
             : collectionChoice;
     const canImport =
-        Boolean(parsed) &&
+        parsed.length > 0 &&
         !parsing &&
         resolvedCollectionRef.length > 0 &&
         !importing &&
         !isDemo;
 
+    // Requests import one at a time through the same `onImport` path a single
+    // paste used — sequentially, because each call ends in a whole-store PUT and
+    // parallel saves would race. A failure doesn't abort the batch; failed
+    // requests stay in the preview so the user can retry just those.
     const handleImport = async () => {
-        if (!parsed || !canImport) return;
+        if (parsed.length === 0 || !canImport) return;
         setImporting(true);
-        try {
-            await onImport(
-                parsed,
-                resolvedCollectionRef,
-                folderPath.trim() || null,
-            );
-            notify("success", "cURL imported", `Created "${parsed.name}".`);
-            onClose();
-        } catch (err) {
-            notify(
-                "error",
-                "cURL import failed",
-                err instanceof Error ? err.message : String(err),
-            );
-            setImporting(false);
+        const destination = folderPath.trim() || null;
+        const failed: { request: HttpRequestEntry; error: string }[] = [];
+        let imported = 0;
+        for (const request of parsed) {
+            try {
+                await onImport(request, resolvedCollectionRef, destination);
+                imported++;
+            } catch (err) {
+                failed.push({
+                    request,
+                    error: err instanceof Error ? err.message : String(err),
+                });
+            }
         }
+        setImporting(false);
+
+        if (failed.length === 0) {
+            notify(
+                "success",
+                "cURL imported",
+                parsed.length === 1
+                    ? `Created "${parsed[0].name}".`
+                    : `Created ${parsed.length} requests.`,
+            );
+            onClose();
+            return;
+        }
+
+        if (imported > 0) {
+            notify(
+                "info",
+                "cURL partially imported",
+                `Imported ${imported} of ${parsed.length} requests.`,
+            );
+        }
+        notify(
+            "error",
+            "cURL import failed",
+            `Couldn't import: ${failed.map((f) => `"${f.request.name}"`).join(", ")} — ${failed[0].error}`,
+        );
+        setParsed(failed.map((f) => f.request));
     };
 
     return (
@@ -167,7 +201,8 @@ export function CurlImportDialog({
                             value={command}
                             onChange={(e) => {
                                 setCommand(e.target.value);
-                                setParsed(null);
+                                setParsed([]);
+                                setParseWarnings([]);
                                 setParseError(null);
                                 setParsing(Boolean(e.target.value.trim()));
                             }}
@@ -180,6 +215,12 @@ export function CurlImportDialog({
                             className="w-full resize-y rounded border bg-background px-2 py-1.5 font-mono text-xs disabled:opacity-50"
                             data-testid="curl-import-input"
                         />
+                        <p className="text-xs text-muted-foreground">
+                            Paste one or more curl commands — multi-line,{" "}
+                            <code>^</code> or <code>\</code> continuations,{" "}
+                            <code>-F</code>, <code>-u</code>, <code>-b</code>{" "}
+                            supported.
+                        </p>
                         {parsing && (
                             <p
                                 className="text-xs text-muted-foreground"
@@ -197,19 +238,42 @@ export function CurlImportDialog({
                                 <span>{parseError}</span>
                             </div>
                         )}
-                        {parsed && (
-                            <div
-                                className="flex items-center gap-2 rounded border bg-muted/50 px-3 py-2 text-xs"
+                        {parsed.length > 0 && (
+                            <ul
+                                className="space-y-1 rounded border bg-muted/50 px-2 py-1.5 text-xs"
                                 data-testid="curl-import-preview"
                             >
-                                <CheckCircle className="h-4 w-4 shrink-0 text-success" />
-                                <span className="font-mono font-medium">
-                                    {parsed.method}
-                                </span>
-                                <span className="truncate font-mono text-muted-foreground">
-                                    {parsed.url}
-                                </span>
-                            </div>
+                                {parsed.map((request, i) => (
+                                    <li
+                                        key={request.id || i}
+                                        className="flex items-center gap-2 px-1 py-0.5"
+                                        data-testid={`curl-import-preview-item-${i}`}
+                                    >
+                                        <MethodBadge
+                                            method={request.method}
+                                            variant="chip"
+                                        />
+                                        <span className="truncate font-mono text-muted-foreground">
+                                            {request.url}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        {parseWarnings.length > 0 && (
+                            <ul
+                                className="space-y-0.5 rounded border border-warning bg-warning/10 px-3 py-2 text-xs text-warning"
+                                data-testid="curl-import-warnings"
+                            >
+                                {parseWarnings.map((warning, i) => (
+                                    <li
+                                        key={i}
+                                        data-testid={`curl-import-warning-${i}`}
+                                    >
+                                        {warning}
+                                    </li>
+                                ))}
+                            </ul>
                         )}
                     </div>
 
@@ -293,14 +357,18 @@ export function CurlImportDialog({
                         title={
                             isDemo
                                 ? "Import is not available in demo mode"
-                                : !parsed
+                                : parsed.length === 0
                                   ? "Paste a valid cURL command first"
                                   : undefined
                         }
                         className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
                         data-testid="curl-import-submit"
                     >
-                        {importing ? "Importing…" : "Import"}
+                        {importing
+                            ? "Importing…"
+                            : parsed.length > 1
+                              ? `Import ${parsed.length} requests`
+                              : "Import request"}
                     </button>
                 </div>
             </div>

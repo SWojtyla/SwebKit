@@ -287,10 +287,8 @@ builder.Services.AddSingleton<SwebKit.Core.Configuration.AgentFeedbackRepository
 // Agent action confirm-before-execute flow (ai-augmented-app technical-plan.md Module 3). Wired
 // here as infrastructure even though nothing in the sidecar can propose an action yet — the API
 // Client propose tools (ApiClientTools.cs) land in Module 4, now that this exists for them to
-// target. IApiClientAgentService needs the linked-collection chain;
-// LinkedCollectionRootRepository's LoadAsync() is
-// deliberately not called at sidecar startup below (linked collections aren't a sidecar feature
-// yet), so it stays empty and ApiClientAgentService correctly sees local collections only.
+// target. IApiClientAgentService needs the linked-collection chain; LinkedCollectionRootRepository's
+// LoadAsync() is called at sidecar startup below, so agent tools see linked collections too.
 builder.Services.AddSingleton<SwebKit.Core.Services.LinkedGitService>();
 builder.Services.AddSingleton<SwebKit.Core.Services.LinkedCollectionFileService>();
 builder.Services.AddSingleton<SwebKit.Core.Configuration.LinkedCollectionRootRepository>();
@@ -494,6 +492,9 @@ if (RedisCredentialMigration.MigrateCaches(profileRepository.Config.RedisConfig,
     await profileRepository.TrySaveAsync();
 await app.Services.GetRequiredService<EnvironmentRepository>().LoadAsync();
 await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
+// Linked collection roots (api-client-workspace Slice B) — loaded so /api/linked-roots and the
+// agent's ApiClientAgentService both see the registered on-disk roots.
+await app.Services.GetRequiredService<LinkedCollectionRootRepository>().LoadAsync();
 await userSettingsRepository.LoadAsync();
 await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
 // Force-instantiate now so its constructor subscribes to MonitoringAlertEvaluationService.AlertFired
@@ -524,6 +525,7 @@ app.MapAksEndpoints();
 // ── API Client ───────────────────────────────────────────────────────────────
 
 app.MapApiClientEndpoints();
+app.MapLinkedRootsEndpoints();
 
 // ── SQL ───────────────────────────────────────────────────────────────────────
 

@@ -409,7 +409,7 @@ test.describe("API Client", () => {
             );
 
         // Configure a Key Vault in Settings so the picker has something to list.
-        await page.goto("/settings");
+        await page.goto("/settings?tab=api-client");
         await expect(page.getByTestId("key-vaults-section")).toBeVisible();
         const existingVaultCount = await page
             .locator('[data-testid^="kv-name-"]')
@@ -483,7 +483,7 @@ test.describe("API Client", () => {
         await expect(page.getByTestId("env-var-vault-0")).toHaveCount(0);
 
         // Removing the vault in Settings takes it out of the list.
-        await page.goto("/settings");
+        await page.goto("/settings?tab=api-client");
         await expect(page.getByTestId("key-vaults-section")).toBeVisible();
         const countBeforeRemove = await page
             .locator('[data-testid^="kv-name-"]')
@@ -1073,9 +1073,9 @@ test.describe("API Client", () => {
 
         // Debounced parse shows the resolved method + URL before committing.
         await expect(page.getByTestId("curl-import-preview")).toBeVisible();
-        await expect(page.getByTestId("curl-import-preview")).toContainText(
-            "Post",
-        );
+        await expect(
+            page.getByTestId("curl-import-preview-item-0"),
+        ).toContainText("POST");
 
         await page
             .getByTestId("curl-import-collection")
@@ -1109,6 +1109,48 @@ test.describe("API Client", () => {
         ).toBeVisible();
         await expect(page.getByTestId("request-url-input")).toHaveValue(
             `${sidecarBaseUrl}/health`,
+        );
+    });
+
+    test("imports multiple cURL commands from a single paste", async ({
+        page,
+    }) => {
+        await page.getByTestId("curl-import-button").click();
+        await expect(page.getByTestId("curl-import-dialog")).toBeVisible();
+
+        await page
+            .getByTestId("curl-import-input")
+            .fill(
+                `curl '${sidecarBaseUrl}/health'\n` +
+                    `curl -X POST '${sidecarBaseUrl}/health' -H 'Content-Type: application/json' --data-raw '{"a":1}'`,
+            );
+
+        // Each pasted command resolves into its own preview row before committing.
+        await expect(
+            page.getByTestId("curl-import-preview-item-0"),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId("curl-import-preview-item-1"),
+        ).toBeVisible();
+        await expect(page.getByTestId("curl-import-submit")).toHaveText(
+            "Import 2 requests",
+        );
+
+        await page
+            .getByTestId("curl-import-collection")
+            .selectOption("__new__");
+        await page.getByTestId("curl-import-new-collection").fill("Curl Multi");
+
+        await page.getByTestId("curl-import-submit").click();
+
+        // One new collection, both requests inside it.
+        await expect(
+            page
+                .getByTestId(/collection-root-/)
+                .filter({ hasText: "Curl Multi" }),
+        ).toBeVisible();
+        await expect(page.getByTestId(/collection-node-Request-/)).toHaveCount(
+            2,
         );
     });
 

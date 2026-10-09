@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useQuery } from "@tanstack/react-query";
 import {
     Plus,
     Folder,
@@ -15,6 +16,9 @@ import {
     Download,
     GripVertical,
     Terminal,
+    FolderOpen,
+    Copy,
+    Check,
 } from "lucide-react";
 import type {
     ApiCollection,
@@ -38,6 +42,14 @@ import {
     CollectionImportDialog,
 } from "./CollectionImportDialog";
 import { CurlImportDialog } from "./CurlImportDialog";
+import { useNotification } from "@/components/layout/notification-context";
+import { getCollectionsLocation } from "@/lib/api/apiClient";
+import { revealInExplorer, writeClipboard } from "@/lib/tauri-bridge";
+
+/// `isTauri` in tauri-bridge is module-private; the same probe is duplicated
+/// in transport.ts/update-check.ts, so a local copy is the established pattern.
+const RUNS_IN_TAURI =
+    typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 interface CollectionTreeProps {
     collections: ApiCollection[];
@@ -112,6 +124,8 @@ export function CollectionTree({
     );
     const [showImportDialog, setShowImportDialog] = useState(false);
     const [showCurlImport, setShowCurlImport] = useState(false);
+    const [storeCopied, setStoreCopied] = useState(false);
+    const { notify } = useNotification();
     const [draggingRow, setDraggingRow] = useState<FlatRow | null>(null);
     const [dragOver, setDragOver] = useState<{
         index: number;
@@ -119,6 +133,51 @@ export function CollectionTree({
     } | null>(null);
     const renameInputRef = useRef<HTMLInputElement | null>(null);
     const listRef = useRef<HTMLDivElement | null>(null);
+
+    // Same query key as Settings → API Client, so the path resolves once app-wide.
+    const storeLocation = useQuery({
+        queryKey: ["collections-location"],
+        queryFn: getCollectionsLocation,
+        staleTime: Infinity,
+    });
+    const storePath = storeLocation.data?.path ?? null;
+    const storeBasename =
+        storePath?.split(/[\\/]/).filter(Boolean).pop() ?? null;
+
+    const handleCopyStorePath = async () => {
+        if (!storePath) return;
+        try {
+            await writeClipboard(storePath);
+            setStoreCopied(true);
+            setTimeout(() => setStoreCopied(false), 2000);
+        } catch (err) {
+            notify(
+                "error",
+                "Couldn't copy path",
+                err instanceof Error ? err.message : String(err),
+            );
+        }
+    };
+
+    const handleRevealStore = async () => {
+        if (!storePath) return;
+        try {
+            const revealed = await revealInExplorer(storePath);
+            if (!revealed) {
+                notify(
+                    "info",
+                    "Reveal unavailable",
+                    "Revealing files needs the desktop app.",
+                );
+            }
+        } catch (err) {
+            notify(
+                "error",
+                "Couldn't reveal in explorer",
+                err instanceof Error ? err.message : String(err),
+            );
+        }
+    };
 
     const knownNodeIds = useRef<Set<string>>(new Set());
     useEffect(() => {
@@ -689,11 +748,11 @@ export function CollectionTree({
                         />
                         <button
                             onClick={() => setShowCurlImport(true)}
-                            className="rounded p-1 hover:bg-accent"
+                            className="flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs hover:bg-accent"
                             title="Import from cURL"
                             data-testid="curl-import-button"
                         >
-                            <Terminal className="h-4 w-4" />
+                            <Terminal className="h-3.5 w-3.5" /> cURL
                         </button>
                     </div>
                 </div>
@@ -774,6 +833,44 @@ export function CollectionTree({
                                 );
                             })}
                         </div>
+                    )}
+                </div>
+
+                {/* Store footer — names the file every save lands in. */}
+                <div
+                    className="flex items-center gap-1 border-t px-2 py-1 text-[11px] text-muted-foreground"
+                    data-testid="collection-store-footer"
+                    title={storePath ?? undefined}
+                >
+                    <span className="min-w-0 flex-1 truncate">
+                        Internal store
+                        {storeBasename ? ` · ${storeBasename}` : ""}
+                    </span>
+                    {RUNS_IN_TAURI && storePath && (
+                        <button
+                            onClick={() => void handleRevealStore()}
+                            className="shrink-0 rounded p-0.5 hover:bg-accent"
+                            title="Reveal in explorer"
+                            aria-label="Reveal in explorer"
+                            data-testid="collection-store-reveal"
+                        >
+                            <FolderOpen className="h-3 w-3" />
+                        </button>
+                    )}
+                    {storePath && (
+                        <button
+                            onClick={() => void handleCopyStorePath()}
+                            className="shrink-0 rounded p-0.5 hover:bg-accent"
+                            title="Copy path"
+                            aria-label="Copy path"
+                            data-testid="collection-store-copy"
+                        >
+                            {storeCopied ? (
+                                <Check className="h-3 w-3 text-success" />
+                            ) : (
+                                <Copy className="h-3 w-3" />
+                            )}
+                        </button>
                     )}
                 </div>
             </div>

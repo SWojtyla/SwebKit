@@ -240,6 +240,28 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         await WriteJsonAtomicAsync(environmentFilePath, file, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Deletes a linked environment file (root-level or collection-scoped — the scope lives in the
+    /// path, so the caller resolves it from <see cref="LinkedCollectionRootLoadResult.EnvironmentFiles"/>).
+    /// </summary>
+    public Task DeleteEnvironmentAsync(string apiRootPath, string environmentFilePath, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!environmentFilePath.EndsWith(EnvironmentFileExtension, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Not a linked environment file path.", nameof(environmentFilePath));
+        }
+
+        if (!File.Exists(environmentFilePath))
+        {
+            throw new FileNotFoundException($"Could not locate the linked environment on disk: {environmentFilePath}");
+        }
+
+        EnsureWithinApiRoot(apiRootPath, environmentFilePath);
+        File.Delete(environmentFilePath);
+        return Task.CompletedTask;
+    }
+
     private static string GetUniqueEnvironmentFilePath(string environmentsPath, string slug)
     {
         var candidate = Path.Combine(environmentsPath, $"{slug}{EnvironmentFileExtension}");
@@ -254,14 +276,37 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         }
     }
 
-    public async Task<LinkedRequestSaveResult> SaveRequestAsync(
+    public Task<LinkedRequestSaveResult> SaveRequestAsync(
         string apiRootPath,
         ApiCollection collection,
         HttpRequestEntry request,
         string? expectedContentStamp = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        SaveRequestCoreAsync(apiRootPath, collection, request, parentFolder: null, expectedContentStamp, cancellationToken);
+
+    /// <summary>
+    /// Same as <see cref="SaveRequestAsync"/>, but a request with no existing file on disk is
+    /// written under <paramref name="parentFolder"/>'s directory instead of the collection root —
+    /// the "new request inside folder" path the sidecar's create-request endpoint needs.
+    /// </summary>
+    public Task<LinkedRequestSaveResult> SaveRequestToFolderAsync(
+        string apiRootPath,
+        ApiCollection collection,
+        ApiCollectionNode parentFolder,
+        HttpRequestEntry request,
+        string? expectedContentStamp = null,
+        CancellationToken cancellationToken = default) =>
+        SaveRequestCoreAsync(apiRootPath, collection, request, parentFolder, expectedContentStamp, cancellationToken);
+
+    private async Task<LinkedRequestSaveResult> SaveRequestCoreAsync(
+        string apiRootPath,
+        ApiCollection collection,
+        HttpRequestEntry request,
+        ApiCollectionNode? parentFolder,
+        string? expectedContentStamp,
+        CancellationToken cancellationToken)
     {
-        var requestPath = GetRequestFilePath(apiRootPath, collection, request);
+        var requestPath = GetRequestFilePath(apiRootPath, collection, request, parentFolder);
         Directory.CreateDirectory(Path.GetDirectoryName(requestPath)!);
 
         if (!string.IsNullOrWhiteSpace(expectedContentStamp) && File.Exists(requestPath))
@@ -552,6 +597,57 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
     }
 
     /// <summary>
+    /// Persists an explicit sibling order for a collection's top level (<paramref name="parentFolderId"/>
+    /// null) or a nested folder — the "reorder without moving" counterpart of
+    /// <see cref="MoveNodeAsync"/>. Each id in <paramref name="orderedChildIds"/> must resolve to a
+    /// direct on-disk child of the target parent (request file or folder directory).
+    /// </summary>
+    public async Task SetChildOrderAsync(
+        string apiRootPath,
+        ApiCollection collection,
+        string? parentFolderId,
+        IReadOnlyList<string> orderedChildIds,
+        CancellationToken cancellationToken = default)
+    {
+        var collectionDirectory = ResolveExistingCollectionDirectory(apiRootPath, collection);
+        var parentDirectory = parentFolderId is null
+            ? collectionDirectory
+            : FindFolderDirectory(collectionDirectory, parentFolderId)
+                ?? throw new DirectoryNotFoundException($"Could not locate the linked folder on disk (id: {parentFolderId}).");
+
+        var order = new List<string>(orderedChildIds.Count);
+        foreach (var childId in orderedChildIds)
+        {
+            var requestFile = FindRequestFile(collectionDirectory, childId);
+            var childPath = requestFile ?? FindFolderDirectory(collectionDirectory, childId);
+            if (childPath is null ||
+                !string.Equals(Path.GetDirectoryName(childPath), parentDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new FileNotFoundException($"Could not locate a linked child node under the target folder (id: {childId}).");
+            }
+
+            order.Add(Path.GetFileName(childPath));
+        }
+
+        if (string.Equals(parentDirectory, collectionDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            var manifestPath = Path.Combine(collectionDirectory, CollectionManifestFileName);
+            var manifest = await ReadJsonOrDefaultAsync<SwebKitCollectionManifest>(manifestPath, [], cancellationToken).ConfigureAwait(false) ?? new SwebKitCollectionManifest();
+            manifest.ChildOrder = order;
+            EnsureWithinApiRoot(apiRootPath, manifestPath);
+            await WriteJsonAtomicAsync(manifestPath, manifest, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            var manifestPath = Path.Combine(parentDirectory, FolderManifestFileName);
+            var manifest = await ReadJsonOrDefaultAsync<SwebKitFolderManifest>(manifestPath, [], cancellationToken).ConfigureAwait(false) ?? new SwebKitFolderManifest();
+            manifest.ChildOrder = order;
+            EnsureWithinApiRoot(apiRootPath, manifestPath);
+            await WriteJsonAtomicAsync(manifestPath, manifest, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Persists the explicit sibling order for <paramref name="parentDirectory"/> by resolving each
     /// in-memory child to its on-disk base name. The just-moved node is resolved via
     /// <paramref name="movedBaseName"/> (its <see cref="StableId"/> may have changed with the move);
@@ -650,6 +746,20 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
             Diagnostics = diagnostics,
             GitStatus = gitStatus,
         };
+
+    /// <summary>
+    /// Resolves the <c>.swebkit-api</c> root for a configured path exactly the way
+    /// <see cref="LoadRootAsync"/> does — without loading any collections. Used by the sidecar for
+    /// summary metadata on roots it must not fully load (e.g. disabled ones).
+    /// </summary>
+    public static string GetApiRootPath(string configuredPath) => ResolveApiRootPath(configuredPath);
+
+    /// <summary>
+    /// Resolves the on-disk directory of a loaded linked collection (its <see cref="ApiCollection.Id"/>
+    /// is a <see cref="StableId"/> of that directory). Throws when the directory is gone.
+    /// </summary>
+    public static string GetCollectionDirectory(string apiRootPath, ApiCollection collection) =>
+        ResolveExistingCollectionDirectory(apiRootPath, collection);
 
     private static string ResolveApiRootPath(string configuredPath)
     {
@@ -891,12 +1001,25 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         }
     }
 
-    private static string GetRequestFilePath(string apiRootPath, ApiCollection collection, HttpRequestEntry request)
+    private static string GetRequestFilePath(string apiRootPath, ApiCollection collection, HttpRequestEntry request, ApiCollectionNode? parentFolder)
     {
         var collectionsPath = Path.Combine(apiRootPath, "collections");
         var collectionDirectory = FindCollectionDirectory(apiRootPath, collection)
             ?? Path.Combine(collectionsPath, Slugify(collection.Name));
-        return FindRequestFile(collectionDirectory, request.Id) ?? Path.Combine(collectionDirectory, $"{Slugify(request.Name)}{RequestFileExtension}");
+        var existing = FindRequestFile(collectionDirectory, request.Id);
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        var parentDirectory = parentFolder is null
+            ? collectionDirectory
+            : FindFolderDirectory(collectionDirectory, parentFolder.Id)
+                ?? throw new DirectoryNotFoundException($"Could not locate the linked parent folder on disk (id: {parentFolder.Id}).");
+
+        // A fresh request never overwrites a same-named file — slug collisions get a -2/-3 suffix,
+        // matching how WriteCollectionToLinkedRootAsync names imported requests.
+        return GetUniqueRequestFilePath(parentDirectory, Slugify(request.Name));
     }
 
     private static string? FindCollectionDirectory(string apiRootPath, ApiCollection collection)

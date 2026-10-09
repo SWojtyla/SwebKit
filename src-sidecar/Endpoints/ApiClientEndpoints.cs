@@ -138,8 +138,8 @@ public static class ApiClientEndpoints
     internal static IResult ImportCurl(ImportCurlRequest req, ApiClientWorkflowService workflow)
     {
         var result = workflow.ImportCurl(req.Command ?? string.Empty);
-        return result.IsSuccess && result.Request is not null
-            ? Results.Ok(result.Request)
+        return result.IsSuccess
+            ? Results.Ok(new ImportCurlResponse(result.Requests, result.Warnings))
             : ApiErrors.BadRequest(result.ErrorMessage ?? "Could not parse the cURL command.");
     }
 
@@ -319,6 +319,9 @@ public sealed record SaveCredentialRequest(string Key, string? Secret);
 public sealed record PreviewCredentialRequest(string Key);
 
 public sealed record ImportCurlRequest(string? Command);
+
+/// <summary>One parsed request per pasted <c>curl</c> invocation, plus non-fatal parser notes.</summary>
+public sealed record ImportCurlResponse(IReadOnlyList<HttpRequestEntry> Requests, IReadOnlyList<string> Warnings);
 
 public sealed record KeyVaultPreviewResponse(
     string Status,

@@ -621,6 +621,94 @@ pub async fn list_dir(path: String, roots: State<'_, AllowedRoots>) -> Result<Ve
     Ok(names)
 }
 
+// ── File manager ─────────────────────────────────────────────────────────────
+
+/// Tauri command: reveal a file or folder in the OS file manager.
+///
+/// Deliberately *not* gated by `AllowedRoots` — this only asks the OS file
+/// manager to open a window (read-only navigation), and call sites pass paths
+/// the sidecar itself reported (the collections.json location, linked-root
+/// paths) that legitimately live outside any user-picked root.
+#[tauri::command]
+pub fn reveal_in_explorer(path: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("Path is empty".to_string());
+    }
+    let metadata =
+        std::fs::metadata(&path).map_err(|e| format!("Path does not exist: {e}"))?;
+    let (program, args) = reveal_args(Path::new(&path), metadata.is_dir())?;
+    let mut cmd = hidden_command(&program);
+    #[cfg(windows)]
+    for arg in &args {
+        // explorer.exe parses its own command line (it never calls
+        // CommandLineToArgvW), so `arg()`'s auto-quoting would mangle
+        // `/select,"<dir with space>"` — the fragments arrive pre-quoted from
+        // `reveal_args` and go on the command line verbatim.
+        cmd.raw_arg(arg);
+    }
+    #[cfg(not(windows))]
+    cmd.args(&args);
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to launch file manager: {e}"))?;
+    // explorer.exe exits 1 even on success, and `open`/`xdg-open` return
+    // immediately — the launcher's exit status is meaningless, so it's never
+    // asserted on. The child is still reaped on a thread so repeated reveals
+    // can't pile up zombies (Unix) or leaked process handles (Windows).
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
+/// Builds `(program, args)` for the OS file-manager call. Returns data rather
+/// than mutating a `Command` so argument construction is unit-testable —
+/// same convention as `build_port_forward_args`.
+///
+/// On Windows the returned args are raw command-line fragments (pre-quoted) for
+/// `raw_arg`, not `Command::arg` inputs — see `reveal_in_explorer`.
+#[cfg(windows)]
+fn reveal_args(target: &Path, is_dir: bool) -> Result<(String, Vec<String>), String> {
+    let p = target.to_string_lossy();
+    // `explorer /select,"<file>"` selects a file in its parent folder;
+    // `explorer "<dir>"` opens the folder itself.
+    let arg = if is_dir {
+        format!("\"{p}\"")
+    } else {
+        format!("/select,\"{p}\"")
+    };
+    Ok(("explorer".to_string(), vec![arg]))
+}
+
+/// macOS: `open -R <file>` reveals a file in Finder; `open <dir>` opens it.
+#[cfg(target_os = "macos")]
+fn reveal_args(target: &Path, is_dir: bool) -> Result<(String, Vec<String>), String> {
+    let mut args = Vec::new();
+    if !is_dir {
+        args.push("-R".to_string());
+    }
+    args.push(target.to_string_lossy().to_string());
+    Ok(("open".to_string(), args))
+}
+
+/// Linux/BSD: `xdg-open <dir>` — there is no cross-desktop "select this file"
+/// flag, so a file resolves to its parent directory.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn reveal_args(target: &Path, is_dir: bool) -> Result<(String, Vec<String>), String> {
+    let dir = if is_dir {
+        target.to_path_buf()
+    } else {
+        // `absolute` (not `canonicalize`) resolves `file.txt` -> `<cwd>/file.txt`
+        // without touching the filesystem again, so `.parent()` has something to
+        // return even for a bare filename.
+        let abs = std::path::absolute(target).map_err(|e| format!("Invalid path: {e}"))?;
+        abs.parent()
+            .ok_or_else(|| "Cannot determine parent directory".to_string())?
+            .to_path_buf()
+    };
+    Ok(("xdg-open".to_string(), vec![dir.to_string_lossy().to_string()]))
+}
+
 // ── Notifications ────────────────────────────────────────────────────────────
 
 /// Tauri command: show an OS-level notification
@@ -702,5 +790,58 @@ mod port_forward_tests {
 
         assert!(!args.contains(&"--context".to_string()));
         assert!(!args.contains(&"--kubeconfig".to_string()));
+    }
+}
+
+#[cfg(test)]
+mod reveal_tests {
+    use super::{reveal_args, reveal_in_explorer};
+    use std::path::Path;
+
+    #[test]
+    fn empty_path_is_rejected() {
+        assert!(reveal_in_explorer("   ".to_string()).is_err());
+    }
+
+    #[test]
+    fn missing_path_is_rejected() {
+        let err = reveal_in_explorer("swebkit-no-such-path-9f3b2d".to_string()).unwrap_err();
+        assert!(err.contains("does not exist"), "unexpected error: {err}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_file_uses_quoted_select_fragment() {
+        let (program, args) = reveal_args(Path::new(r"C:\work dir\file.txt"), false).unwrap();
+        assert_eq!(program, "explorer");
+        assert_eq!(args, vec![r#"/select,"C:\work dir\file.txt""#.to_string()]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_dir_is_quoted_without_select() {
+        let (program, args) = reveal_args(Path::new(r"C:\work dir"), true).unwrap();
+        assert_eq!(program, "explorer");
+        assert_eq!(args, vec![r#""C:\work dir""#.to_string()]);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_file_uses_dash_r_dir_omits_it() {
+        let (program, args) = reveal_args(Path::new("/Users/me/f.txt"), false).unwrap();
+        assert_eq!(program, "open");
+        assert_eq!(args, vec!["-R".to_string(), "/Users/me/f.txt".to_string()]);
+        let (_, dir_args) = reveal_args(Path::new("/Users/me/dir"), true).unwrap();
+        assert_eq!(dir_args, vec!["/Users/me/dir".to_string()]);
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn linux_file_opens_parent_dir_opens_itself() {
+        let (program, args) = reveal_args(Path::new("/tmp/f.txt"), false).unwrap();
+        assert_eq!(program, "xdg-open");
+        assert_eq!(args, vec!["/tmp".to_string()]);
+        let (_, dir_args) = reveal_args(Path::new("/tmp/dir"), true).unwrap();
+        assert_eq!(dir_args, vec!["/tmp/dir".to_string()]);
     }
 }
