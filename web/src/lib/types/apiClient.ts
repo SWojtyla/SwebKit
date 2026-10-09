@@ -10,6 +10,21 @@ export interface ApiEnvironment {
     variables: EnvironmentVariable[];
     createdAt: string;
     updatedAt: string;
+    /**
+     * Frontend-assigned provenance — set when environments from linked roots are
+     * merged into the workspace list. Never persisted; strip it before sending an
+     * environment back to any endpoint (`origin.kind === "linked"` envs route to
+     * `/api/linked-roots/{rootId}/environments`, not the internal PUT).
+     */
+    origin?: ApiEnvironmentOrigin;
+}
+
+export interface ApiEnvironmentOrigin {
+    kind: "internal" | "linked";
+    /** Owning linked root — present when `kind === "linked"`. */
+    rootId?: string;
+    /** The `.swebenv.json` this environment was read from (linked only). */
+    filePath?: string;
 }
 
 export interface EnvironmentVariable {
@@ -73,6 +88,21 @@ export interface ApiCollection {
     defaultAuth: AuthConfig | null;
     createdAt: string;
     updatedAt: string;
+    /**
+     * Frontend-assigned provenance — set while flattening the store response into
+     * the workspace tree (`internal`, the synthetic `demo` collection, or a
+     * collection living under a linked root). Never persisted; strip it before any
+     * whole-store PUT.
+     */
+    origin?: ApiCollectionOrigin;
+}
+
+export interface ApiCollectionOrigin {
+    kind: "internal" | "linked" | "demo";
+    /** Owning linked root — present when `kind === "linked"`. */
+    rootId?: string;
+    rootName?: string;
+    rootPath?: string;
 }
 
 export interface ApiCollectionNode {
@@ -89,6 +119,72 @@ export interface CollectionsStoreResponse {
     schemaVersion: number;
     collections: ApiCollection[];
     concurrencyToken: string | null;
+    /**
+     * Linked collection roots — folders on disk holding a `.swebkit-api/` tree.
+     * Empty in demo mode; disabled roots appear but carry no collections. Absent
+     * from the whole-store PUT response, so clients merging `setQueryData` writes
+     * must preserve the previous array.
+     */
+    linkedRoots?: LinkedRootInfo[];
+}
+
+// ── Linked collection roots (Slice B — /api/linked-roots) ────────────────────
+
+/** Wire shape of one linked root — `LinkedCollectionRootSummary` on the backend. */
+export interface LinkedRootInfo {
+    id: string;
+    name: string;
+    path: string;
+    /** `<path>/.swebkit-api` — where the collections/environments trees live. */
+    apiRootPath: string;
+    isEnabled: boolean;
+    isGitRepository: boolean;
+    repositoryRoot: string | null;
+    branch: string | null;
+    changedFileCount: number;
+    isValid: boolean;
+    diagnostics: string[];
+    collections: ApiCollection[];
+    environments: ApiEnvironment[];
+    requestFiles: LinkedRequestFileState[];
+    environmentFiles: LinkedEnvironmentFileState[];
+    brunoSyncFolderPath?: string | null;
+    brunoSyncEnabled?: boolean;
+}
+
+/** Per-request file bookkeeping — the content stamp drives save-conflict detection. */
+export interface LinkedRequestFileState {
+    requestId: string;
+    requestFilePath: string;
+    contentStamp: string;
+}
+
+export interface LinkedEnvironmentFileState {
+    environmentId: string;
+    environmentFilePath: string;
+}
+
+/** `LinkedCollectionMutationResult` — create-collection response. */
+export interface LinkedCollectionMutationResult {
+    root: LinkedRootInfo;
+    collectionId: string;
+}
+
+/** `LinkedRequestMutationResult` — create/save-request response. `requestId` is
+ *  the request node's tree id (the file's stable id), `contentStamp` the stamp to
+ *  send on the next save. */
+export interface LinkedRequestMutationResult {
+    root: LinkedRootInfo;
+    requestId: string;
+    requestFilePath: string;
+    contentStamp: string;
+}
+
+/** The 409 body `PUT .../requests/{id}` returns when the file changed on disk. */
+export interface LinkedRequestConflict {
+    error?: string;
+    currentContentStamp: string | null;
+    requestFilePath: string | null;
 }
 
 export interface CollectionImportResult {

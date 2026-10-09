@@ -91,6 +91,9 @@ export async function getOAuth2Result(
 export async function importCollection(payload: {
     folderPath?: string | null;
     payloadBase64?: string | null;
+    /** Routes the import into that linked root's `.swebkit-api` tree instead of
+     *  the internal collections.json store. */
+    linkedRootId?: string | null;
 }): Promise<CollectionImportResult> {
     return apiSend<CollectionImportResult>(
         "/api/config/collections/import",

@@ -45,6 +45,12 @@ export class ApiError extends Error {
         public readonly kind?: string,
         public readonly detail?: string,
         public readonly hint?: string,
+        /**
+         * The parsed error body when the server sent JSON — lets callers read
+         * fields beyond message/kind/detail/hint (e.g. the `currentContentStamp`
+         * a 409 linked-request save conflict carries).
+         */
+        public readonly payload?: unknown,
     ) {
         super(message);
         this.name = "ApiError";
@@ -73,6 +79,7 @@ function toApiError(
                         ? parsed.detail
                         : undefined,
                     typeof parsed?.hint === "string" ? parsed.hint : undefined,
+                    parsed,
                 );
             }
         } catch {

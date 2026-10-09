@@ -19,6 +19,7 @@ import { CollectionVariableEditor } from "./CollectionVariableEditor";
 import { RequestTabStrip } from "./RequestTabStrip";
 import { CollectionExportDialog } from "./CollectionExportDialog";
 import { GitDrawer } from "./GitDrawer";
+import { apiSubpathWithin } from "@/lib/linked-root-utils";
 import { ResizablePanels } from "@/components/ui/ResizablePanels";
 
 export function ApiClientPage() {
@@ -153,7 +154,15 @@ function ApiClientPageContent() {
                 {ctx.selectedCollection && (
                     <button
                         onClick={() => ctx.setShowColVarEditor(true)}
-                        className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                        disabled={
+                            ctx.selectedCollection?.origin?.kind === "linked"
+                        }
+                        title={
+                            ctx.selectedCollection?.origin?.kind === "linked"
+                                ? "Collection variables can't be edited on linked roots yet"
+                                : undefined
+                        }
+                        className="rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
                         data-testid="col-vars-button"
                     >
                         Collection Variables
@@ -172,7 +181,12 @@ function ApiClientPageContent() {
                 )}
                 <div className="ml-auto" />
                 <button
-                    onClick={() => ctx.setShowGitPanel(!ctx.showGitPanel)}
+                    onClick={() => {
+                        // Opening from the toolbar means "last used repo", not a
+                        // linked root's — clear any badge-pinned selection.
+                        ctx.setGitInitialRepo(null);
+                        ctx.setShowGitPanel(!ctx.showGitPanel);
+                    }}
                     className={`flex items-center gap-1 rounded border px-2 py-1 text-xs ${ctx.showGitPanel ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
                     data-testid="api-client-git-toggle"
                 >
@@ -269,6 +283,7 @@ function ApiClientPageContent() {
                 >
                     <CollectionTree
                         collections={ctx.collections}
+                        linkedRoots={ctx.linkedRoots}
                         selectedNodeId={ctx.selectedNodeId}
                         selectedCollectionId={ctx.selectedCollectionId}
                         onSelectNode={ctx.handleSelectNode}
@@ -281,6 +296,20 @@ function ApiClientPageContent() {
                         onMoveCollection={ctx.handleMoveCollection}
                         onExportCollection={ctx.setExportCollectionId}
                         onImportCurl={ctx.handleImportCurlRequest}
+                        onLinkFolder={ctx.handleLinkFolder}
+                        onReloadRoot={ctx.handleReloadRoot}
+                        onRemoveRoot={ctx.handleRemoveRoot}
+                        onRevealPath={ctx.handleRevealPath}
+                        onOpenGit={(root) => {
+                            if (!root.repositoryRoot) return;
+                            ctx.handleOpenGit({
+                                path: root.repositoryRoot,
+                                apiSubpath: apiSubpathWithin(
+                                    root.repositoryRoot,
+                                    root.apiRootPath,
+                                ),
+                            });
+                        }}
                     />
 
                     {/* No `border-r` here — RequestEditor already carries one, and the
@@ -345,7 +374,10 @@ function ApiClientPageContent() {
             {/* Git drawer — sits inside the page content area rather than covering the
           app titlebar and status bar as the previous fixed overlay did. */}
             {ctx.showGitPanel && (
-                <GitDrawer onClose={() => ctx.setShowGitPanel(false)} />
+                <GitDrawer
+                    initialRepo={ctx.gitInitialRepo}
+                    onClose={() => ctx.setShowGitPanel(false)}
+                />
             )}
         </div>
     );

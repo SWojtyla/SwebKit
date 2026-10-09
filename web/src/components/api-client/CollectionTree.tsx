@@ -19,17 +19,24 @@ import {
     FolderOpen,
     Copy,
     Check,
+    GitBranch,
+    Link2,
+    Unlink,
+    RefreshCw,
+    AlertTriangle,
 } from "lucide-react";
 import type {
     ApiCollection,
     ApiCollectionNode,
     HttpRequestEntry,
+    LinkedRootInfo,
 } from "@/lib/types";
 import {
     DEMO_COLLECTION_ID,
     resolveDropTarget,
     filterNodes,
     flattenTree,
+    sectionRow,
     collectExpandedFolderIds,
     type FlatRow,
     type MoveNodeTarget,
@@ -42,6 +49,8 @@ import {
     CollectionImportDialog,
 } from "./CollectionImportDialog";
 import { CurlImportDialog } from "./CurlImportDialog";
+import { ConfirmDialog } from "./Dialogs";
+import { useDemoMode } from "@/lib/hooks";
 import { useNotification } from "@/components/layout/notification-context";
 import { getCollectionsLocation } from "@/lib/api/apiClient";
 import { revealInExplorer, writeClipboard } from "@/lib/tauri-bridge";
@@ -53,10 +62,13 @@ const RUNS_IN_TAURI =
 
 interface CollectionTreeProps {
     collections: ApiCollection[];
+    /** Enabled/disabled linked roots — each renders its own section below the internal store. */
+    linkedRoots: LinkedRootInfo[];
     selectedNodeId: string | null;
     selectedCollectionId: string | null;
     onSelectNode: (node: ApiCollectionNode, collectionId: string) => void;
-    onAddCollection: () => void;
+    /** `linkedRootId` creates inside that root's directory; omitted → internal store. */
+    onAddCollection: (linkedRootId?: string) => void;
     onAddRequest: (collectionId: string, parentId?: string) => void;
     onAddFolder: (collectionId: string, parentId?: string) => void;
     onDeleteNode: (nodeId: string, collectionId: string) => void;
@@ -82,6 +94,16 @@ interface CollectionTreeProps {
         collectionIdOrName: string,
         folderPath: string | null,
     ) => Promise<void> | void;
+    /** Pick a folder and register it as a linked collection root. */
+    onLinkFolder: () => void;
+    /** Re-scan a linked root's `.swebkit-api` tree. */
+    onReloadRoot: (rootId: string) => void;
+    /** Unregister a linked root — files stay on disk. */
+    onRemoveRoot: (rootId: string) => void;
+    /** Reveal a file or folder in the OS explorer. */
+    onRevealPath: (path: string) => void;
+    /** Open the Git drawer for the repository backing this linked root. */
+    onOpenGit: (root: LinkedRootInfo) => void;
 }
 
 interface ContextMenuState {
@@ -95,6 +117,7 @@ interface ContextMenuState {
 
 export function CollectionTree({
     collections,
+    linkedRoots,
     selectedNodeId,
     selectedCollectionId,
     onSelectNode,
@@ -107,6 +130,11 @@ export function CollectionTree({
     onMoveCollection,
     onExportCollection,
     onImportCurl,
+    onLinkFolder,
+    onReloadRoot,
+    onRemoveRoot,
+    onRevealPath,
+    onOpenGit,
 }: CollectionTreeProps) {
     const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
         const ids = new Set(collections.map((c) => c.id));
@@ -125,6 +153,10 @@ export function CollectionTree({
     const [showImportDialog, setShowImportDialog] = useState(false);
     const [showCurlImport, setShowCurlImport] = useState(false);
     const [storeCopied, setStoreCopied] = useState(false);
+    const [removeRootTarget, setRemoveRootTarget] =
+        useState<LinkedRootInfo | null>(null);
+    const { data: demoMode } = useDemoMode();
+    const isDemo = demoMode?.isDemoMode ?? false;
     const { notify } = useNotification();
     const [draggingRow, setDraggingRow] = useState<FlatRow | null>(null);
     const [dragOver, setDragOver] = useState<{
@@ -295,9 +327,49 @@ export function CollectionTree({
         });
     };
 
+    // Origin lookups for drop rules — collections carry their `origin` tag from
+    // the page-context merge.
+    const collectionById = useMemo(
+        () => new Map(collections.map((c) => [c.id, c])),
+        [collections],
+    );
+    const rootById = useMemo(
+        () => new Map(linkedRoots.map((r) => [r.id, r])),
+        [linkedRoots],
+    );
+
+    /**
+     * The one place cross-origin drop rules live: a linked node can reorder and
+     * move inside its own collection only; nothing internal ever lands inside a
+     * linked collection; collection-root drags reorder the internal list only.
+     */
+    const originsCompatible = (a: FlatRow, b: FlatRow): boolean => {
+        if (a.kind === "section" || b.kind === "section") return false;
+        const originOf = (collectionId: string) =>
+            collectionById.get(collectionId)?.origin?.kind ?? "internal";
+        if (a.isCollection) {
+            return (
+                originOf(a.collectionId) !== "linked" &&
+                originOf(b.collectionId) !== "linked"
+            );
+        }
+        const src = originOf(a.collectionId);
+        const dst = originOf(b.collectionId);
+        if (src === "linked") return a.collectionId === b.collectionId;
+        return dst !== "linked";
+    };
+
     const canDragRow = (row: FlatRow) => {
         if (search) return false;
+        if (row.kind === "section") return false;
         if (row.isCollection && row.id === DEMO_COLLECTION_ID) return false;
+        // A linked collection root is a directory on disk — it does not take
+        // part in the internal list's ordering, so it is not a drag source.
+        if (
+            row.isCollection &&
+            collectionById.get(row.id)?.origin?.kind === "linked"
+        )
+            return false;
         return true;
     };
 
@@ -339,7 +411,7 @@ export function CollectionTree({
             e.clientY,
             rect,
         );
-        if (!resolved) {
+        if (!resolved || !originsCompatible(draggingRow, targetRow)) {
             setDragOver(null);
             return;
         }
@@ -363,7 +435,7 @@ export function CollectionTree({
             e.clientY,
             rect,
         );
-        if (!resolved) return;
+        if (!resolved || !originsCompatible(draggingRow, targetRow)) return;
         if (resolved.kind === "collection") {
             onMoveCollection(draggingRow.id, resolved.target);
         } else {
@@ -411,6 +483,7 @@ export function CollectionTree({
             direction === "up" ? sourceIndex - 1 : sourceIndex + 1;
         if (targetIndex < 0 || targetIndex >= flatRows.length) return;
         const targetRow = flatRows[targetIndex];
+        if (!originsCompatible(sourceRow, targetRow)) return;
         if (sourceRow.isCollection) {
             if (!targetRow.isCollection) return;
             const placement = direction === "up" ? "before" : "after";
@@ -440,10 +513,47 @@ export function CollectionTree({
         }
     }, [contextMenu]);
 
-    const filteredCollections = useMemo(
-        () =>
-            search
-                ? collections
+    /**
+     * The visible collection list split into sections: "Internal store" first,
+     * then one section per linked root (demo mode shows only the internal one).
+     * Each section renders a header row — a layout row, not a tree node.
+     */
+    const sections = useMemo(() => {
+        const result: {
+            rootId: string | null;
+            collections: ApiCollection[];
+        }[] = [
+            {
+                rootId: null,
+                collections: collections.filter(
+                    (c) => c.origin?.kind !== "linked",
+                ),
+            },
+        ];
+        if (!isDemo) {
+            for (const r of linkedRoots) {
+                result.push({
+                    rootId: r.id,
+                    collections: collections.filter(
+                        (c) =>
+                            c.origin?.kind === "linked" &&
+                            c.origin.rootId === r.id,
+                    ),
+                });
+            }
+        }
+        return result;
+    }, [collections, linkedRoots, isDemo]);
+
+    // While searching, every folder that survived `filterNodes` is guaranteed to
+    // contain a match — render all of them expanded regardless of the user's
+    // persisted collapse state, so a match inside a collapsed folder is never
+    // silently hidden.
+    const flatRows = useMemo(() => {
+        const rows: FlatRow[] = [];
+        for (const sec of sections) {
+            const filtered = search
+                ? sec.collections
                       .map((c) => ({
                           ...c,
                           nodes: filterNodes(c.nodes, search),
@@ -455,18 +565,18 @@ export function CollectionTree({
                                   .includes(search.toLowerCase()) ||
                               c.nodes.length > 0,
                       )
-                : collections,
-        [collections, search],
-    );
-
-    // While searching, every folder that survived `filterNodes` is guaranteed to
-    // contain a match — render all of them expanded regardless of the user's
-    // persisted collapse state, so a match inside a collapsed folder is never
-    // silently hidden.
-    const flatRows = useMemo(
-        () => flattenTree(filteredCollections, expandedIds, Boolean(search)),
-        [filteredCollections, expandedIds, search],
-    );
+                : sec.collections;
+            // The section header renders even with no collections — the linked
+            // root's own actions live there. While searching, a section with no
+            // matches collapses away instead of heading an empty group.
+            if (search && filtered.length === 0) continue;
+            rows.push(
+                sectionRow(`section-${sec.rootId ?? "internal"}`, sec.rootId),
+            );
+            rows.push(...flattenTree(filtered, expandedIds, Boolean(search)));
+        }
+        return rows;
+    }, [sections, expandedIds, search]);
 
     const virtualizer = useVirtualizer({
         count: flatRows.length,
@@ -539,7 +649,197 @@ export function CollectionTree({
         }
     };
 
+    // Section rows stay in the arrow-key flow (a dead keypress while focus hops
+    // over a header feels broken) but own no tree node — Enter is inert,
+    // Alt+Arrow cannot move them, and they are never drag sources or targets.
+    const sectionKeyDown = (
+        e: React.KeyboardEvent<HTMLDivElement>,
+        rowIndex: number,
+    ) => {
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            focusRowByFlatIndex(rowIndex + 1);
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            focusRowByFlatIndex(rowIndex - 1);
+        } else if (e.key === "Enter" || e.key === " " || e.altKey) {
+            e.preventDefault();
+        }
+    };
+
+    const renderSectionRow = (row: FlatRow, rowIndex: number) => {
+        const rowProps = {
+            "data-tree-index": rowIndex,
+            role: "group" as const,
+            tabIndex: 0,
+            onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) =>
+                sectionKeyDown(e, rowIndex),
+            className:
+                "mt-1 flex items-center gap-1 border-t px-2 py-1 text-[11px] text-muted-foreground outline-none focus-visible:bg-accent",
+        };
+
+        // The internal-store section header carries the A3 store path,
+        // reveal and copy affordances that used to live in the tree footer.
+        if (row.sectionRootId == null) {
+            return (
+                <div
+                    {...rowProps}
+                    data-testid="collection-store-footer"
+                    aria-label="Internal store"
+                    title={storePath ?? undefined}
+                >
+                    <span className="min-w-0 flex-1 truncate font-medium">
+                        Internal store
+                        {storeBasename ? ` · ${storeBasename}` : ""}
+                    </span>
+                    {RUNS_IN_TAURI && storePath && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                void handleRevealStore();
+                            }}
+                            className="shrink-0 rounded p-0.5 hover:bg-accent"
+                            title="Reveal in explorer"
+                            aria-label="Reveal in explorer"
+                            data-testid="collection-store-reveal"
+                        >
+                            <FolderOpen className="h-3 w-3" />
+                        </button>
+                    )}
+                    {storePath && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                void handleCopyStorePath();
+                            }}
+                            className="shrink-0 rounded p-0.5 hover:bg-accent"
+                            title="Copy path"
+                            aria-label="Copy path"
+                            data-testid="collection-store-copy"
+                        >
+                            {storeCopied ? (
+                                <Check className="h-3 w-3 text-success" />
+                            ) : (
+                                <Copy className="h-3 w-3" />
+                            )}
+                        </button>
+                    )}
+                </div>
+            );
+        }
+
+        const root = rootById.get(row.sectionRootId);
+        if (!root) return null;
+        const pathTail =
+            root.path.split(/[\\/]/).filter(Boolean).slice(-2).join("/") ||
+            root.path;
+        return (
+            <div
+                {...rowProps}
+                data-testid={`linked-root-${root.id}`}
+                aria-label={`Linked collection root ${root.name}`}
+                title={root.path}
+            >
+                <span className="min-w-0 flex-1 truncate font-medium">
+                    {root.name}
+                    <span className="font-normal opacity-70">
+                        {" "}
+                        · {pathTail}
+                    </span>
+                    {!root.isEnabled && (
+                        <span className="opacity-70"> · disabled</span>
+                    )}
+                </span>
+                {!root.isValid && (
+                    <span
+                        className="flex shrink-0 items-center"
+                        style={{ color: "var(--warning)" }}
+                        title={
+                            root.diagnostics.join("\n") ||
+                            "This root failed to load"
+                        }
+                        data-testid={`linked-root-invalid-${root.id}`}
+                    >
+                        <AlertTriangle className="h-3 w-3" />
+                    </span>
+                )}
+                {root.isGitRepository && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenGit(root);
+                        }}
+                        className="flex shrink-0 items-center gap-0.5 rounded border px-1 py-0.5 hover:bg-accent"
+                        title={`Open ${root.repositoryRoot ?? root.path} in the Git drawer`}
+                        data-testid={`linked-root-git-${root.id}`}
+                    >
+                        <GitBranch className="h-3 w-3" />
+                        <span className="max-w-20 truncate">
+                            {root.branch ?? "?"}
+                        </span>
+                        {root.changedFileCount > 0 && (
+                            <span className="opacity-70">
+                                ·{root.changedFileCount}
+                            </span>
+                        )}
+                    </button>
+                )}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onAddCollection(root.id);
+                    }}
+                    className="shrink-0 rounded p-0.5 hover:bg-accent"
+                    title="New collection in this root"
+                    aria-label="New collection in this root"
+                    data-testid={`linked-root-add-collection-${root.id}`}
+                >
+                    <Plus className="h-3 w-3" />
+                </button>
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onReloadRoot(root.id);
+                    }}
+                    className="shrink-0 rounded p-0.5 hover:bg-accent"
+                    title="Reload from disk"
+                    aria-label="Reload from disk"
+                    data-testid={`linked-root-reload-${root.id}`}
+                >
+                    <RefreshCw className="h-3 w-3" />
+                </button>
+                {RUNS_IN_TAURI && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onRevealPath(root.path);
+                        }}
+                        className="shrink-0 rounded p-0.5 hover:bg-accent"
+                        title="Reveal folder in explorer"
+                        aria-label="Reveal folder in explorer"
+                        data-testid={`linked-root-reveal-${root.id}`}
+                    >
+                        <FolderOpen className="h-3 w-3" />
+                    </button>
+                )}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setRemoveRootTarget(root);
+                    }}
+                    className="shrink-0 rounded p-0.5 hover:bg-accent"
+                    title="Unregister — files stay on disk"
+                    aria-label="Unregister — files stay on disk"
+                    data-testid={`linked-root-remove-${root.id}`}
+                >
+                    <Unlink className="h-3 w-3" />
+                </button>
+            </div>
+        );
+    };
+
     const renderRow = (row: FlatRow, rowIndex: number) => {
+        if (row.kind === "section") return renderSectionRow(row, rowIndex);
         const { node, collectionId, depth, isCollection } = row;
         // Matches `flattenTree`'s own forced-expand-during-search rule so the
         // chevron never shows "collapsed" for a folder whose matching children
@@ -715,10 +1015,20 @@ export function CollectionTree({
                             data-testid="add-collection-button"
                             className="rounded p-1 hover:bg-accent"
                             title="Add collection"
-                            onClick={onAddCollection}
+                            onClick={() => onAddCollection()}
                         >
                             <Plus className="h-4 w-4" />
                         </button>
+                        {!isDemo && (
+                            <button
+                                data-testid="link-folder-button"
+                                className="rounded p-1 hover:bg-accent"
+                                title="Link a folder as a collection root"
+                                onClick={onLinkFolder}
+                            >
+                                <Link2 className="h-4 w-4" />
+                            </button>
+                        )}
                         <button
                             data-testid="add-request-button"
                             className="rounded p-1 hover:bg-accent disabled:opacity-40"
@@ -835,44 +1145,6 @@ export function CollectionTree({
                         </div>
                     )}
                 </div>
-
-                {/* Store footer — names the file every save lands in. */}
-                <div
-                    className="flex items-center gap-1 border-t px-2 py-1 text-[11px] text-muted-foreground"
-                    data-testid="collection-store-footer"
-                    title={storePath ?? undefined}
-                >
-                    <span className="min-w-0 flex-1 truncate">
-                        Internal store
-                        {storeBasename ? ` · ${storeBasename}` : ""}
-                    </span>
-                    {RUNS_IN_TAURI && storePath && (
-                        <button
-                            onClick={() => void handleRevealStore()}
-                            className="shrink-0 rounded p-0.5 hover:bg-accent"
-                            title="Reveal in explorer"
-                            aria-label="Reveal in explorer"
-                            data-testid="collection-store-reveal"
-                        >
-                            <FolderOpen className="h-3 w-3" />
-                        </button>
-                    )}
-                    {storePath && (
-                        <button
-                            onClick={() => void handleCopyStorePath()}
-                            className="shrink-0 rounded p-0.5 hover:bg-accent"
-                            title="Copy path"
-                            aria-label="Copy path"
-                            data-testid="collection-store-copy"
-                        >
-                            {storeCopied ? (
-                                <Check className="h-3 w-3 text-success" />
-                            ) : (
-                                <Copy className="h-3 w-3" />
-                            )}
-                        </button>
-                    )}
-                </div>
             </div>
 
             {/* Context menu */}
@@ -956,6 +1228,39 @@ export function CollectionTree({
                             <Download className="h-3.5 w-3.5" /> Export
                         </button>
                     )}
+                    {contextMenu.nodeType === "Request" &&
+                        (() => {
+                            const collection = collections.find(
+                                (c) => c.id === contextMenu.collectionId,
+                            );
+                            const rootId = collection?.origin?.rootId;
+                            if (!rootId) return null;
+                            const node = findNodeInCollections(
+                                collections,
+                                contextMenu.nodeId,
+                            );
+                            const filePath = rootById
+                                .get(rootId)
+                                ?.requestFiles.find(
+                                    (f) =>
+                                        f.requestId === contextMenu.nodeId ||
+                                        f.requestId === node?.request?.id,
+                                )?.requestFilePath;
+                            if (!filePath) return null;
+                            return (
+                                <button
+                                    className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
+                                    onClick={() => {
+                                        onRevealPath(filePath);
+                                        setContextMenu(null);
+                                    }}
+                                    data-testid="ctx-reveal-in-explorer"
+                                >
+                                    <FolderOpen className="h-3.5 w-3.5" />{" "}
+                                    Reveal in explorer
+                                </button>
+                            );
+                        })()}
                     <button
                         className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10"
                         onClick={() => {
@@ -983,6 +1288,17 @@ export function CollectionTree({
                     defaultCollectionId={selectedCollectionId}
                     onImport={onImportCurl}
                     onClose={() => setShowCurlImport(false)}
+                />
+            )}
+            {removeRootTarget && (
+                <ConfirmDialog
+                    message={`Remove linked root "${removeRootTarget.name}"? Unregister — files stay on disk.`}
+                    confirmText="Unregister"
+                    onConfirm={() => {
+                        onRemoveRoot(removeRootTarget.id);
+                        setRemoveRootTarget(null);
+                    }}
+                    onCancel={() => setRemoveRootTarget(null)}
                 />
             )}
         </>

@@ -8,7 +8,7 @@ import {
     AlertCircle,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useImportCollection, useDemoMode } from "@/lib/hooks";
+import { useImportCollection, useDemoMode, useLinkedRoots } from "@/lib/hooks";
 import { useNotification } from "@/components/layout/notification-context";
 import {
     pickFileWithContent,
@@ -28,9 +28,12 @@ export function CollectionImportDialog({
     const { notify } = useNotification();
     const importMutation = useImportCollection();
     const { data: demoMode } = useDemoMode();
+    const { data: linkedRoots = [] } = useLinkedRoots();
     const [tab, setTab] = useState<"file" | "bruno">("file");
     const [result, setResult] = useState<CollectionImportResult | null>(null);
     const [error, setError] = useState<string | null>(null);
+    /** "" = internal store; otherwise a linked root id. Disabled roots are excluded. */
+    const [destination, setDestination] = useState<string>("");
 
     // Same query key as Settings → API Client, so the path resolves once app-wide.
     const location = useQuery({
@@ -40,6 +43,8 @@ export function CollectionImportDialog({
     });
 
     const isDemo = demoMode?.isDemoMode ?? false;
+    const enabledRoots = linkedRoots.filter((r) => r.isEnabled);
+    const selectedRoot = enabledRoots.find((r) => r.id === destination) ?? null;
 
     const doImport = (payload: {
         folderPath?: string | null;
@@ -55,35 +60,38 @@ export function CollectionImportDialog({
         }
         setError(null);
         setResult(null);
-        importMutation.mutate(payload, {
-            onSuccess: (data) => {
-                if (
-                    data.collections.length === 0 &&
-                    data.environments.length === 0
-                ) {
+        importMutation.mutate(
+            { ...payload, linkedRootId: selectedRoot?.id ?? null },
+            {
+                onSuccess: (data) => {
+                    if (
+                        data.collections.length === 0 &&
+                        data.environments.length === 0
+                    ) {
+                        const message =
+                            data.warnings.length > 0
+                                ? data.warnings.join(" ")
+                                : "The file did not contain any collections or environments to import.";
+                        setError(message);
+                        setResult(null);
+                        notify("error", "Import failed", message);
+                        return;
+                    }
+                    setResult(data);
+                    notify(
+                        "success",
+                        "Import complete",
+                        `Imported ${data.collections.length} collection(s), ${data.environments.length} environment(s) into ${selectedRoot?.name ?? "internal store"}.`,
+                    );
+                },
+                onError: (err) => {
                     const message =
-                        data.warnings.length > 0
-                            ? data.warnings.join(" ")
-                            : "The file did not contain any collections or environments to import.";
+                        err instanceof Error ? err.message : "Import failed";
                     setError(message);
-                    setResult(null);
                     notify("error", "Import failed", message);
-                    return;
-                }
-                setResult(data);
-                notify(
-                    "success",
-                    "Import complete",
-                    `Imported ${data.collections.length} collection(s), ${data.environments.length} environment(s).`,
-                );
+                },
             },
-            onError: (err) => {
-                const message =
-                    err instanceof Error ? err.message : "Import failed";
-                setError(message);
-                notify("error", "Import failed", message);
-            },
-        });
+        );
     };
 
     const handleFileImport = async () => {
@@ -126,6 +134,26 @@ export function CollectionImportDialog({
                 </div>
 
                 <div className="p-4 space-y-4">
+                    {!isDemo && enabledRoots.length > 0 && (
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className="shrink-0 text-muted-foreground">
+                                Destination
+                            </span>
+                            <select
+                                value={destination}
+                                onChange={(e) => setDestination(e.target.value)}
+                                className="min-w-0 flex-1 rounded border bg-background px-2 py-1"
+                                data-testid="collection-import-destination-select"
+                            >
+                                <option value="">Internal store</option>
+                                {enabledRoots.map((r) => (
+                                    <option key={r.id} value={r.id}>
+                                        {r.name} — {r.path}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                     <div className="flex rounded border p-1">
                         <button
                             className={`flex-1 rounded px-2 py-1 text-xs ${tab === "file" ? "bg-accent font-medium" : ""}`}
@@ -156,8 +184,9 @@ export function CollectionImportDialog({
                                 v2.1 JSON file.
                             </p>
                             <p className="text-xs">
-                                Imports a one-time copy into the internal store
-                                (collections.json).
+                                {selectedRoot
+                                    ? `Imports a one-time copy into "${selectedRoot.name}" — files land in ${selectedRoot.apiRootPath}.`
+                                    : "Imports a one-time copy into the internal store (collections.json)."}
                             </p>
                             <button
                                 onClick={handleFileImport}
@@ -185,8 +214,9 @@ export function CollectionImportDialog({
                                 files).
                             </p>
                             <p className="text-xs">
-                                Reads .bru files into the internal store; the
-                                Bruno folder is not modified or linked.
+                                {selectedRoot
+                                    ? `Reads .bru files into "${selectedRoot.name}"; the Bruno folder is not modified or linked.`
+                                    : "Reads .bru files into the internal store; the Bruno folder is not modified or linked."}
                             </p>
                             <button
                                 onClick={handleBrunoImport}
@@ -251,13 +281,16 @@ export function CollectionImportDialog({
                             </div>
                             <p
                                 className="text-xs text-muted-foreground"
-                                title={location.data?.directory ?? undefined}
+                                title={
+                                    selectedRoot?.path ??
+                                    location.data?.directory ??
+                                    undefined
+                                }
                                 data-testid="collection-import-destination"
                             >
-                                Saved to internal store
-                                {location.data?.directory
-                                    ? ` — ${location.data.directory}`
-                                    : ""}
+                                {selectedRoot
+                                    ? `Imported into ${selectedRoot.name} — ${selectedRoot.path}`
+                                    : `Saved to internal store${location.data?.directory ? ` — ${location.data.directory}` : ""}`}
                             </p>
                             {result.warnings.length > 0 && (
                                 <div

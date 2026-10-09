@@ -12,7 +12,29 @@ import type {
     ApiClientExecutionResponse,
     ApiEnvironment,
     CollectionVariable,
+    LinkedRootInfo,
 } from "@/lib/types";
+
+/** The repo the Git drawer should open on — set when a linked-root Git badge is clicked. */
+export interface GitInitialRepo {
+    path: string;
+    apiSubpath: string | null;
+}
+
+/** Linked-request save conflict: which file, and the stamp the retry should send. */
+export interface LinkedConflictState {
+    rootId: string;
+    collectionId: string;
+    requestId: string;
+    currentContentStamp: string | null;
+    requestFilePath: string | null;
+}
+
+export interface ConflictState {
+    message: string;
+    /** Present when the conflict is a linked `.swebreq.json` disk edit rather than a whole-store 409. */
+    linked?: LinkedConflictState;
+}
 
 export interface TabState {
     draft: HttpRequestEntry;
@@ -78,7 +100,8 @@ export interface ApiClientPageContextValue {
 
     variableScope: Record<string, string | null>;
 
-    handleAddCollection: () => void;
+    /** `linkedRootId` creates the collection inside that root's `.swebkit-api` tree. */
+    handleAddCollection: (linkedRootId?: string) => void;
     handleAddRequest: (collectionId: string, parentId?: string) => void;
     handleAddFolder: (collectionId: string, parentId?: string) => void;
     handleDeleteNode: (nodeId: string, collectionId: string) => void;
@@ -105,7 +128,7 @@ export interface ApiClientPageContextValue {
         folderPath: string | null,
     ) => Promise<void>;
 
-    conflict: { message: string } | null;
+    conflict: ConflictState | null;
     dismissConflict: () => void;
     handleReloadConflict: () => Promise<void>;
     handleOverwriteConflict: () => Promise<void>;
@@ -124,6 +147,22 @@ export interface ApiClientPageContextValue {
     exportCollection: ApiCollection | null;
     showGitPanel: boolean;
     setShowGitPanel: (v: boolean) => void;
+    /** Repo the Git drawer selects on open (set by a linked-root Git badge). */
+    gitInitialRepo: GitInitialRepo | null;
+    setGitInitialRepo: (v: GitInitialRepo | null) => void;
+
+    // ── Linked collection roots ─────────────────────────────────────────
+    linkedRoots: LinkedRootInfo[];
+    /** Pick a folder and register it as a linked collection root. */
+    handleLinkFolder: () => void;
+    /** Re-scan a root's `.swebkit-api` tree (after external edits). */
+    handleReloadRoot: (rootId: string) => void;
+    /** Unregister a root — the files stay on disk. */
+    handleRemoveRoot: (rootId: string) => void;
+    /** Reveal a file or directory in the OS explorer. */
+    handleRevealPath: (path: string) => void;
+    /** Open the Git drawer pinned to the repository backing a linked root. */
+    handleOpenGit: (repo: GitInitialRepo) => void;
 
     nameDialog: NameDialogState | null;
     setNameDialog: (v: NameDialogState | null) => void;

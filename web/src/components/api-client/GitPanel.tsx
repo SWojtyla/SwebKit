@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
     GitBranch as GitBranchIcon,
     RefreshCw,
@@ -45,6 +45,8 @@ import {
     type GitRepoState,
 } from "@/lib/stores/git-repo-preferences";
 import { useNotification } from "@/components/layout/notification-context";
+import { useLinkedRoots } from "@/lib/hooks";
+import { samePath } from "@/lib/linked-root-utils";
 import { NameDialog, ConfirmDialog } from "./Dialogs";
 import { GitFileList } from "./GitFileList";
 import { GitDiffPane } from "./GitDiffPane";
@@ -57,8 +59,15 @@ type Unavailable =
     | { kind: "git-missing" }
     | { kind: "error"; message: string };
 
-export function GitPanel() {
+export function GitPanel({
+    initialRepo,
+}: {
+    /** Select/add this repository on open — a linked root's backing repo when the
+     *  drawer was opened from its Git badge. */
+    initialRepo?: { path: string; apiSubpath: string | null } | null;
+}) {
     const { notify } = useNotification();
+    const { data: linkedRoots = [] } = useLinkedRoots();
 
     const [repoState, setRepoState] = useState<GitRepoState>(() =>
         loadGitRepoState(),
@@ -86,11 +95,36 @@ export function GitPanel() {
     const repo = selectedRepo(repoState);
     const repoPath = repo?.path ?? null;
     const subpath = repo?.apiSubpath ?? null;
+    // The selected repo backing a linked collection root means app saves DO land
+    // in it — the honesty note below says which of the two cases the user is in.
+    const backingRoot = repoPath
+        ? linkedRoots.find((r) => samePath(r.repositoryRoot, repoPath))
+        : undefined;
 
     const persist = useCallback((next: GitRepoState) => {
         setRepoState(next);
         saveGitRepoState(next);
     }, []);
+
+    // A drawer opened from a linked root's Git badge lands on that backing repo:
+    // register it through the normal preferences flow so the same selection
+    // survives the next open. Runs once — a change to initialRepo mid-session
+    // means a new mount (the drawer unmounts on close).
+    const appliedInitialRepo = useRef(false);
+    useEffect(() => {
+        if (appliedInitialRepo.current || !initialRepo?.path) return;
+        appliedInitialRepo.current = true;
+        setRepoState((prev) => {
+            let next = addRepo(prev, initialRepo.path);
+            next = setApiSubpath(
+                next,
+                initialRepo.path,
+                initialRepo.apiSubpath,
+            );
+            saveGitRepoState(next);
+            return next;
+        });
+    }, [initialRepo]);
 
     // A path persisted from a previous session is not in the in-memory AllowedRoots
     // yet; ask Rust to re-admit it from its own grant list (DEC-G3).
@@ -478,11 +512,19 @@ export function GitPanel() {
                     >
                         <Info className="mt-0.5 h-3 w-3 shrink-0" />
                         <span>
-                            SwebKit stores collections in the internal app store
-                            — nothing saved in the app lands in this repository.
-                            To have API files here, export a collection into it
-                            (linked <code>.swebkit-api</code> roots are coming
-                            soon).
+                            {backingRoot ? (
+                                <>
+                                    This repository backs the linked collection
+                                    root &quot;{backingRoot.name}&quot; — app
+                                    saves land here.
+                                </>
+                            ) : (
+                                <>
+                                    This repo is not a linked collection root —
+                                    nothing the app saves lands here. Link it as
+                                    a collection root to sync.
+                                </>
+                            )}
                         </span>
                     </p>
                 </div>

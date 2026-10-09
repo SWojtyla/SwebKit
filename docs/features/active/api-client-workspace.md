@@ -45,19 +45,12 @@ Make the API Client a Bruno-grade daily driver. Two slices:
 
 ## Slice A scope
 
-- **cURL parser** (`ApiClientWorkflowService.ImportCurl` + endpoint):
-    - Multi-command paste (several `curl` invocations separated by newlines /
-      `&&` / `;`) → multiple requests.
-    - `^` line continuations (cmd.exe paste) normalized like `\`.
-    - `-F/--form` → `RequestBodyMode.FormData` with `FormDataField` entries
-      (`name=value`, `name=@path` → `IsFile`).
-    - `-b/--cookie`, `-A/--user-agent`, `-e/--referer` → headers.
-    - `-k/--insecure` → warning (app-level SSL verify still applies).
-    - Common ignorable flags consume their values silently; unknown `-` flags →
-      `warnings[]` entry instead of silent drop.
-    - **Breaking response shape**: `{ requests: HttpRequestEntry[], warnings:
+- **cURL parser** (`ApiClientWorkflowService.ImportCurl` + endpoint): - Multi-command paste (several `curl` invocations separated by newlines /
+  `&&` / `;`) → multiple requests. - `^` line continuations (cmd.exe paste) normalized like `\`. - `-F/--form` → `RequestBodyMode.FormData` with `FormDataField` entries
+  (`name=value`, `name=@path` → `IsFile`). - `-b/--cookie`, `-A/--user-agent`, `-e/--referer` → headers. - `-k/--insecure` → warning (app-level SSL verify still applies). - Common ignorable flags consume their values silently; unknown `-` flags →
+  `warnings[]` entry instead of silent drop. - **Breaking response shape**: `{ requests: HttpRequestEntry[], warnings:
 string[] }` (was `HttpRequestEntry`). `importCurlRequest` in
-      `web/src/lib/api/apiClient.ts` and all callers/tests updated.
+  `web/src/lib/api/apiClient.ts` and all callers/tests updated.
 - **Reveal in explorer**: Rust `reveal_in_explorer(path)` (Windows
   `explorer /select`, macOS `open -R`, Linux `xdg-open` parent) +
   `revealInExplorer()` in `tauri-bridge.ts`.
@@ -170,23 +163,24 @@ rootName?; rootPath? }` — assigned by the frontend when flattening
 
 ### Slice A
 
-- [ ] cURL parser: multi-command, `^` continuations, `-F`, `-b/-A/-e` headers, warnings
-- [ ] `import-curl` endpoint → `{ requests[], warnings[] }` + tests
-- [ ] `reveal_in_explorer` Tauri command + `revealInExplorer` bridge
-- [ ] Import dialog: destination + where-it-landed summary + collision warnings
-- [ ] cURL dialog: multi preview, warnings, open-as-tab
-- [ ] CollectionTree footer: store path + reveal + labeled import buttons
-- [ ] GitPanel honesty banner; Settings reveal button
-- [ ] e2e updates
+- [x] cURL parser: multi-command, `^` continuations, `-F`, `-b/-A/-e` headers, warnings
+- [x] `import-curl` endpoint → `{ requests[], warnings[] }` + tests
+- [x] `reveal_in_explorer` Tauri command + `revealInExplorer` bridge
+- [x] Import dialog: destination + where-it-landed summary + collision warnings
+- [x] cURL dialog: multi preview, warnings
+- [x] CollectionTree footer: store path + reveal + labeled import buttons
+- [x] GitPanel honesty banner; Settings reveal button
+- [x] e2e updates (multi-cURL paste test; key-vaults settings deep-link fix)
 
 ### Slice B
 
 - [x] `LinkedCollectionRootRepository.LoadAsync()` at sidecar startup
 - [x] `linkedRoots` in `/api/config/collections/store`
 - [x] `LinkedRootsEndpoints.cs` + import `linkedRootId` routing + tests
-- [ ] Frontend: types/origin, tree sections, mutation routing, save conflict,
+- [x] Frontend: types/origin, tree sections, mutation routing, save conflict,
       env routing, import destination, git-drawer integration
-- [ ] e2e: link a temp root, CRUD round-trip, conflict path, import-to-root
+- [x] e2e: link a temp root, CRUD round-trip, conflict path (file-on-disk
+      verification incl. rename-new-file + 409 reload banner)
 
 ## Test plan
 
@@ -215,3 +209,20 @@ rootName?; rootPath? }` — assigned by the frontend when flattening
 - Import into a linked root writes `.swebreq.json` (not `.bru`) — the linked
   root is SwebKit's format; Bruno write-back is a separate sync feature.
 
+## Validation results
+
+- Vitest: 816/816 · `tsc -b` clean · eslint 0 errors (1 pre-existing TanStack
+  Virtual warning in CollectionTree).
+- Core cURL parser tests: 22 green. Sidecar linked-roots endpoint tests green.
+- Playwright: `api-client.spec.ts` + `api-client-credentials.spec.ts` 44/44;
+  `api-client-linked.spec.ts` 3/3 (real `.swebkit-api` temp dirs, file-on-disk
+  assertions incl. rename-creates-new-file and 409 conflict → Reload).
+- e2e caught and fixed: linked rename overwrote the file in place (payload
+  carried old `Request.Id` → resolved as existing file → create+delete emptied
+  the collection); autosave could re-conflict after Reload (stale cached stamp —
+  now `refetchQueries(["collections"])` before the draft swap).
+- Aikido: Slice A findings = 2 known false positives (`Command::new` helper,
+  `window.open` compare/reveal URL); Slice B findings = 4 test-file path
+  reads inside `mkdtempSync` dirs (e2e reading its own artifacts).
+- Known flakes under load: nested-folder drop + env-delete timeouts; both pass
+  in isolation.
