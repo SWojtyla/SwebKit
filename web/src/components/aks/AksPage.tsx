@@ -107,6 +107,13 @@ function AksPageContent() {
                       lastRestartReason: ws.selectedPod.lastRestartReason,
                   }
                 : null,
+            // Pods whose logs the user is watching in the log viewer — the agent
+            // answers "what do these logs say" far better when it can read them.
+            logPods: ws.multiLogPods.map((k) => ({
+                context: k.context ?? ws.defaultContext,
+                namespace: k.ns,
+                name: k.name,
+            })),
         }),
         [
             ws.defaultContext,
@@ -115,6 +122,7 @@ function AksPageContent() {
             ws.activeTab,
             ws.allPods,
             ws.selectedPod,
+            ws.multiLogPods,
         ],
     );
 
