@@ -3,8 +3,8 @@
     One-click SwebKit (Tauri) dev launcher with hot reload.
 
 .DESCRIPTION
-    Starts the three dev tiers — .NET sidecar (http://127.0.0.1:5199), Vite
-    (http://localhost:1420) and the Tauri window — as hidden background
+    Starts the three dev tiers - .NET sidecar (http://127.0.0.1:5199), Vite
+    (http://localhost:1420) and the Tauri window - as hidden background
     processes, then streams their startup output into this console so the run
     is visibly progressing.
 
@@ -12,7 +12,7 @@
     "already running" when the port answers with a SwebKit-shaped response (a
     foreign app listening on 5199/1420 no longer fools the health check). When
     the default port is held by something else, a free OS-assigned port is
-    picked and the choice is wired everywhere it has to agree — vite --port,
+    picked and the choice is wired everywhere it has to agree - vite --port,
     the sidecar's --urls, VITE_SIDECAR_URL for the browser build, tauri dev's
     devUrl override, and SWEBKIT_DEV_SIDECAR_PORT for the desktop app.
 
@@ -20,7 +20,7 @@
     and this launcher exits once the app is up. Everything a tier prints also
     lands in scripts\logs\{sidecar,vite,tauri}.log (+ .err.log), each tier's
     PID goes to scripts\logs\<name>.pid, and the chosen ports are recorded in
-    scripts\logs\dev-ports.json — so scripts\tauri\stop-dev.cmd can shut the
+    scripts\logs\dev-ports.json - so scripts\tauri\stop-dev.cmd can shut the
     whole stack down regardless of which ports ended up in use.
 
     This is the *debug* path: the sidecar runs from source via `dotnet run` and
@@ -39,7 +39,7 @@
     Don't open the Vite URL in the default browser once it is up.
 
 .PARAMETER NoTauri
-    Don't build/launch the desktop app — sidecar + Vite only. Useful for pure
+    Don't build/launch the desktop app - sidecar + Vite only. Useful for pure
     frontend work (no Rust toolchain wait).
 
 .EXAMPLE
@@ -66,7 +66,7 @@ $logDir = Get-LogDirectory
 $portsFile = Join-Path $logDir 'dev-ports.json'
 
 # Per-file read cursors so Write-LogDelta only prints what a tier logged since
-# the last poll — the launcher console becomes the live view of all three tiers.
+# the last poll - the launcher console becomes the live view of all three tiers.
 $script:logCursors = @{}
 
 function Write-LogDelta {
@@ -106,7 +106,7 @@ function Write-LogDelta {
     }
 }
 
-# Identity probes — "something answers on the port" is not enough. A foreign app
+# Identity probes - "something answers on the port" is not enough. A foreign app
 # returning HTTP 200 on 1420 used to count as "vite already running", and the
 # Tauri window then loaded the wrong app. Each tier must prove it is SwebKit.
 function Test-SwebKitSidecar {
@@ -188,7 +188,7 @@ function Start-Tier {
         [hashtable]$Environment = @{}
     )
 
-    # Fresh logs each run — stale output from a previous session reads like the
+    # Fresh logs each run - stale output from a previous session reads like the
     # current one and is the classic "looks like nothing happens" red herring.
     foreach ($file in @($Log, $ErrLog)) {
         if (Test-Path $file) { Remove-Item $file -Force }
@@ -218,7 +218,7 @@ function Start-Tier {
 
 # Polls the tier's identity check while streaming its log into this console, so
 # a long `dotnet run` build or vite warmup is visible instead of a silent wait.
-# Returns $false (never throws) if the process died or the timeout expired —
+# Returns $false (never throws) if the process died or the timeout expired -
 # the caller decides whether that is fatal.
 function Wait-Tier {
     param(
@@ -236,7 +236,7 @@ function Wait-Tier {
             return $true
         }
         if ($Tier.Process.HasExited) {
-            Write-Host "[fail]  $($Tier.Name) exited early (code $($Tier.Process.ExitCode)) — see $($Tier.Log) / $($Tier.ErrLog)" -ForegroundColor Red
+            Write-Host "[fail]  $($Tier.Name) exited early (code $($Tier.Process.ExitCode)) - see $($Tier.Log) / $($Tier.ErrLog)" -ForegroundColor Red
             return $false
         }
         if (((Get-Date) - $lastBeat).TotalSeconds -ge 15) {
@@ -245,7 +245,7 @@ function Wait-Tier {
         }
         Start-Sleep -Milliseconds 800
     }
-    Write-Warning "$($Tier.Name) did not come up within ${TimeoutSec}s — see $($Tier.Log)"
+    Write-Warning "$($Tier.Name) did not come up within ${TimeoutSec}s - see $($Tier.Log)"
     return $false
 }
 
@@ -257,13 +257,17 @@ Assert-Tool -Name 'dotnet' -InstallHint 'Install the .NET 10 SDK (see global.jso
 Assert-Tool -Name 'node'   -InstallHint 'Install Node.js 20+ from https://nodejs.org/.'
 Assert-Tool -Name 'npm'    -InstallHint 'Install Node.js 20+ from https://nodejs.org/.'
 
-# `dotnet` on PATH is not enough — global.json can still reject every installed
+# `dotnet` on PATH is not enough - global.json can still reject every installed
 # SDK ("A compatible .NET SDK was not found"), which otherwise only surfaces as
 # an opaque 'sidecar exited early'. Resolve the SDK now, from the repo root, so
 # the real error prints before anything is spawned.
 Push-Location $repoRoot
 try {
-    $sdkVersion = dotnet --version 2>&1
+    # Stop lifted around the call: in 5.1 `2>&1` under Stop throws on the first
+    # stderr line, which would replace the readable SDK error with a stack trace.
+    $ErrorActionPreference = 'Continue'
+    $sdkVersion = (dotnet --version 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) {
         throw "No compatible .NET SDK for this repo (global.json):`n$sdkVersion"
     }
@@ -278,7 +282,7 @@ if (-not (Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir -Forc
 $gitkeep = Join-Path $binDir '.gitkeep'
 if (-not (Test-Path $gitkeep)) { New-Item -ItemType File -Path $gitkeep -Force | Out-Null }
 
-# Ports recorded by a previous (possibly relocated) run — lets tiers started
+# Ports recorded by a previous (possibly relocated) run - lets tiers started
 # then be detected as "already running" now.
 $previousPorts = @{ sidecar = 0; vite = 0 }
 if (Test-Path $portsFile) {
@@ -328,17 +332,15 @@ if (-not $needsInstall -and (Test-Path $repoLock)) {
 }
 if ($needsInstall) {
     Write-Step 'Frontend dependencies out of date - running npm install...'
-    Push-Location $webDir
     try {
-        npm install
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "npm install failed (exit $LASTEXITCODE) - the frontend may not start"
-        }
+        Invoke-Native -FilePath 'npm' -Arguments @('install') -WorkingDirectory $webDir
     }
-    finally { Pop-Location }
+    catch {
+        Write-Warning "$($_.Exception.Message) - the frontend may not start"
+    }
 }
 
-# 2. Vite — VITE_SIDECAR_URL is baked into the bundle vite serves, so it must
+# 2. Vite - VITE_SIDECAR_URL is baked into the bundle vite serves, so it must
 #    reflect the sidecar port that actually got chosen above (not the 5199
 #    default baked into transport.ts).
 $viteTier = @{
@@ -376,7 +378,7 @@ $viteUp = if ($viteTier.Process) { Wait-Tier -Tier $viteTier } else { $true }
 ConvertTo-Json | Set-Content -Path $portsFile
 
 if (-not $sidecarUp -or -not $viteUp) {
-    Write-Warning 'One or more tiers failed to start — fix the errors above and rerun.'
+    Write-Warning 'One or more tiers failed to start - fix the errors above and rerun.'
     Write-Host "        Logs: $logDir" -ForegroundColor DarkGray
     exit 1
 }
@@ -395,7 +397,7 @@ else {
     $tauriErrLog = Join-Path $logDir 'tauri.err.log'
 
     $tauriArgs = @((Get-TauriCli), 'dev')
-    # devUrl is hardcoded to :1420 in tauri.conf.json — point it at the port
+    # devUrl is hardcoded to :1420 in tauri.conf.json - point it at the port
     # Vite actually got. --config accepts a JSON file, which sidesteps quoting
     # a JSON blob as a process argument.
     $tauriConfig = Join-Path $logDir 'tauri-dev-config.json'
@@ -410,7 +412,7 @@ else {
         -Environment @{ SWEBKIT_DEV_SIDECAR_PORT = "$($sidecarTier.Port)" }
 
     # The Rust build is the long pole on a cold cache (minutes). Stream the
-    # build output until the app exe actually exists as a running process —
+    # build output until the app exe actually exists as a running process -
     # that is the moment the window is really up, unlike a wall-clock guess.
     $appExe = Join-Path $repoRoot 'src-tauri\target\debug\swebkit.exe'
     $deadline = (Get-Date).AddMinutes(10)
@@ -422,7 +424,7 @@ else {
         Where-Object { try { $_.Path -eq $appExe } catch { $false } }
         if ($appRunning) { $tauriOk = $true; break }
         if ($tauriProcess.HasExited) {
-            Write-Host "[fail]  tauri dev exited (code $($tauriProcess.ExitCode)) — see $tauriLog / $tauriErrLog" -ForegroundColor Red
+            Write-Host "[fail]  tauri dev exited (code $($tauriProcess.ExitCode)) - see $tauriLog / $tauriErrLog" -ForegroundColor Red
             break
         }
         if (((Get-Date) - $lastBeat).TotalSeconds -ge 15) {
@@ -435,7 +437,7 @@ else {
         Write-Host '[ok]    Tauri window is running' -ForegroundColor Green
     }
     elseif (-not $tauriProcess.HasExited) {
-        Write-Warning "tauri dev still building after 10min — it will keep going; follow $tauriLog"
+        Write-Warning "tauri dev still building after 10min - it will keep going; follow $tauriLog"
         $tauriOk = $true
     }
 }

@@ -5,7 +5,7 @@
 #
 # Nothing here has side effects on import; it only defines functions. The two
 # build steps live here (rather than being copy-pasted per script) because
-# build-msi.ps1 and test-frontend.ps1 must produce *identical* artifacts — the
+# build-msi.ps1 and test-frontend.ps1 must produce *identical* artifacts - the
 # whole point of test-frontend.ps1 is that what you test is what the MSI ships.
 
 # No Set-StrictMode here on purpose: dot-sourcing runs in the *caller's* scope, so
@@ -53,7 +53,21 @@ function Invoke-Native {
         # Out-Host, not bare invocation: a native command's stdout would otherwise
         # land in the *pipeline* of whichever function called this, so a helper
         # that returns a path (Publish-Sidecar) would return the build log too.
-        & $FilePath @Arguments | Out-Host
+        #
+        # The exit code is the only success signal. Windows PowerShell 5.1 turns
+        # native stderr into ErrorRecords in non-console hosts (the VS Code
+        # PowerShell extension, ISE), and under the caller's
+        # ErrorActionPreference=Stop the first stderr line - vite's chunk-size
+        # warning, every cargo "Compiling" line - would abort a healthy build.
+        # So stderr is merged into stdout as plain text with Stop lifted locally.
+        $previousPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            & $FilePath @Arguments 2>&1 | ForEach-Object {
+                if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_ }
+            } | Out-Host
+        }
+        finally { $ErrorActionPreference = $previousPreference }
         if ($LASTEXITCODE -ne 0) {
             throw "$FilePath $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
         }
@@ -157,7 +171,7 @@ function Build-Frontend {
 .DESCRIPTION
     That folder is gitignored and starts empty. tauri.conf.json bundles it as a
     resource, so if it is stale or empty the installer still builds fine and the
-    installed app dies at startup with "Sidecar binary not found" — hence the
+    installed app dies at startup with "Sidecar binary not found" - hence the
     explicit existence check at the end.
 
     Self-contained by default: end users are not expected to have the .NET
