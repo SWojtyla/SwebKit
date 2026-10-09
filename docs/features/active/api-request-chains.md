@@ -1,8 +1,9 @@
 # API Request Chains
 
-**State**: In Progress
+**State**: Done
 **Owner**: Devin (agent-driven)
 **Depends on**: api-client-request-runs (merged, PR #121)
+**Shipped on**: feat/api-request-chains (`db49456d` UI, `73c146d4` backend)
 
 ## Problem
 
@@ -137,9 +138,29 @@ so the feature is exercisable in demo mode.
 
 - Core: plan expansion (order, dep topo-sort, cross-collection dep, cycle,
   disabled step skipped, cap on expanded count), overlay precedence
-  (bag > scoped env > global env > collection vars), repo CRUD.
+  (bag > scoped env > global env > collection vars), repo CRUD. — **19 tests**
 - Sidecar: endpoints (404s, linked-root refusal in demo, plan errors
-  serialized), SSE field extensions.
+  serialized), SSE field extensions. — **20 tests**
 - Web (vitest): editor reducer, context-menu add-to-chain, drawer badges.
+  — **14 tests**
 - Playwright: build chain → run → assert step order + captured var visible in
-  step 2's sent request.
+  step 2's sent request. — **3/3 green** (`e2e/api-chains.spec.ts`)
+
+## Validation results
+
+- `dotnet build SwebKit.slnx` — 0 warnings / 0 errors
+- Core 1029 · Sidecar 925 · vitest 890 · tsc/eslint clean · Playwright 3/3
+- Aikido scan not run (no MCP server configured in this environment).
+
+## Implementation decisions (post-spec)
+
+- Team-pack key is `apiChains` (camelCase of `TeamPack.ApiChains`),
+  `?sections=apiChains` accepted — not `chains` as sketched above.
+- Save is verbatim-permissive: only `name` required, step ids back-filled;
+  broken refs surface as plan errors (spec's "surfaces at plan time" wins).
+- Dedupe applies to *dependency expansions* across steps; two explicit steps
+  pointing at the same request both execute — chains are ordered sequences.
+- `scope:"run"` is reported on captures in *all* run modes, not only chain —
+  the overlay bag exists for every `RunAsync` call.
+- Demo chain is read-only (PUT/DELETE → 400), prepended to the list in demo
+  mode via `DemoApiCollectionFactory.DemoChainId`.
