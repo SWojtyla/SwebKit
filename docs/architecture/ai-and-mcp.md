@@ -193,7 +193,9 @@ Profile-configured `ExtraMcpServers` are appended to `session/new → mcpServers
 
 ### Phase 2a — Standalone MCP exposure ✅ shipped
 
-The bridge is a real MCP server on the sidecar's HTTP port — any client that speaks streamable HTTP can attach while the app runs. Because the sidecar binds **loopback only** (`127.0.0.1:5199` dev; ephemeral port under Tauri), no external auth layer is needed; a non-loopback deployment would have to rethink this.
+The bridge is a real MCP server on the sidecar's HTTP port — any client that speaks streamable HTTP can attach while the app runs. Because the sidecar binds **loopback only** (`127.0.0.1:5199` dev; under Tauri it prefers the same stable `5199` and only falls back to an OS-assigned port when that's taken), no external auth layer is needed; a non-loopback deployment would have to rethink this.
+
+**Port discovery:** after binding, the sidecar writes `%LOCALAPPDATA%\SwebKit\sidecar-endpoint.json` (`{"url","port","pid","mcpEndpoint","startedUtc"}`) — the contract for finding the real port when `5199` was taken. It's removed on graceful shutdown; on a crash the `pid` field lets consumers tell a stale file from a live instance.
 
 **Safety default:** without `?tools=` the endpoint advertises and executes **read-only tools only** — `propose_*` mutations are hidden from `tools/list` and blocked with `{"error":"tool_read_only", …}` on call. `?mode=full` opts into the complete surface for clients where registering pending proposals (which still need UI confirmation) is desired. With `?tools=` present, allowlist semantics take over and `mode` is ignored.
 

@@ -27,7 +27,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Configure Kestrel to use a fixed dev port by default.
 // Allow override via --urls or ASPNETCORE_URLS (used by Tauri and Playwright tests).
-builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://127.0.0.1:5199");
+// A port-0 request — what the release-mode Tauri spawn passes — resolves to the stable
+// port when it's free so external MCP clients can hardcode the sidecar URL.
+builder.WebHost.UseUrls(SwebKit.Sidecar.Services.SidecarBindUrls.Resolve(builder.Configuration["urls"]));
 
 // Structured file logging + crash handlers — wired as early as possible so no other
 // startup work can throw/log before this is in place. In a windowless release build the
@@ -565,5 +567,10 @@ app.MapWorkspaceTopologyEndpoints();
 // ── Observability ───────────────────────────────────────────────────────────
 
 app.MapObservabilityEndpoints();
+
+// Publish the bound address for external MCP clients — the file is the contract for
+// "what port is the sidecar on" whenever it isn't the stable one (see SidecarEndpointFile).
+app.Lifetime.ApplicationStarted.Register(() => SwebKit.Sidecar.Services.SidecarEndpointFile.Write(app.Services));
+app.Lifetime.ApplicationStopped.Register(SwebKit.Sidecar.Services.SidecarEndpointFile.Delete);
 
 app.Run();

@@ -60,6 +60,9 @@ public static class AppDataPaths
     public static string SqlQueriesJson => Path.Combine(Root, "sql-queries.json");
     public static string PerformanceBaselineLog => Path.Combine(LocalRoot, "logs", "performance-baseline.log");
     public static string LogsDirectory => Path.Combine(LocalRoot, "logs");
+    /// <summary>Runtime discovery file external MCP clients read to find the sidecar's bound
+    /// address — machine-local like logs, since it describes a process on this machine only.</summary>
+    public static string SidecarEndpointJson => Path.Combine(LocalRoot, "sidecar-endpoint.json");
 
     public static string FeatureLogFile(string feature, DateOnly date) =>
         Path.Combine(LogsDirectory, $"{feature}-{date:yyyy-MM-dd}.log");
