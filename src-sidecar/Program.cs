@@ -341,6 +341,13 @@ builder.Services.AddSingleton<IAuthHeaderBuilder, SidecarAuthHeaderBuilder>();
 builder.Services.AddSingleton<OAuth2PkceFlowService>();
 builder.Services.AddSingleton<IPostRequestCaptureExecutor, PostRequestCaptureExecutor>();
 builder.Services.AddSingleton<IHttpRequestExecutor, HttpRequestExecutor>();
+// Request runs (api-client-request-runs): plan builder + run loop behind POST /api/api-client/run.
+// Stateless — every step re-executes through IHttpRequestExecutor, so a singleton is safe. The
+// CollectionRepository probe lets BuildPlan distinguish "dep lives in another internal
+// collection" (cross_collection_dependency) from "dep doesn't exist anywhere" (missing_dependency).
+builder.Services.AddSingleton<ApiClientRunService>(sp => new ApiClientRunService(
+    sp.GetRequiredService<IHttpRequestExecutor>(),
+    sp.GetRequiredService<CollectionRepository>()));
 
 // CORS for the Tauri WebView only — this sidecar listens on 127.0.0.1 and would
 // otherwise be reachable by *any* website open in the user's regular browser

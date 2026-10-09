@@ -55,6 +55,9 @@ public sealed class HttpRequestEntry
     public AuthConfig? Auth { get; set; }
     public List<CaptureRule> CaptureRules { get; set; } = [];
 
+    /// <summary>Same-collection request IDs that must run before this request when executing a dependency chain.</summary>
+    public List<string> DependsOnRequestIds { get; set; } = [];
+
     // ─── GraphQL fields ──────────────────────────────────────────────────────
     /// <summary>GraphQL query or mutation document. Used when <see cref="Method"/> is <see cref="ApiRequestMethod.GraphQl"/>.</summary>
     public string? GraphQlQuery { get; set; }

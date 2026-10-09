@@ -9,6 +9,8 @@ import type {
     AgentChatMode,
     AgentChatScope,
     AgentStreamEvent,
+    ApiRunEvent,
+    ApiRunRequest,
 } from "../types";
 
 let SIDECAR_BASE_URL = (() => {
@@ -244,6 +246,82 @@ export async function streamAgentChat(
             onEvent(JSON.parse(json) as AgentStreamEvent);
         }
     }
+}
+
+/** Reads one SSE `data:` payload out of a raw record; null for comments/keep-alives. */
+function sseDataPayload(record: string): string | null {
+    const dataLine = record
+        .split("\n")
+        .find((line) => line.startsWith("data:"));
+    if (!dataLine) return null;
+    const json = dataLine.slice("data:".length).trim();
+    return json || null;
+}
+
+/**
+ * POSTs a request-run plan (`mode`: dependency chain, subtree, or explicit
+ * selection) to `/api/api-client/run` and invokes `onEvent` for each
+ * {@link ApiRunEvent} as it streams in — same fetch-reader pattern as
+ * {@link streamAgentChat}, since `EventSource` cannot send a JSON body.
+ *
+ * Chunks are buffered and split on the SSE record separator (`\n\n`), so a
+ * `data:` line split across two network reads is reassembled before parsing.
+ * A trailing record without a closing separator is flushed when the stream
+ * ends rather than being dropped.
+ *
+ * Rejects when the initial request fails — including the plan-time 400s the
+ * endpoint returns before the stream opens (`dependency_cycle`,
+ * `missing_dependency`, `cross_collection_dependency`, `unknown_request`,
+ * `too_many_steps`, `empty_plan`) — surfacing the server's `detail`/`hint`
+ * fields through the usual {@link ApiError}. Aborting `signal` cancels the
+ * fetch mid-stream; the reader rejects with `AbortError`, which callers map to
+ * a cancelled run rather than an error.
+ */
+export async function streamApiRun(
+    req: ApiRunRequest,
+    onEvent: (event: ApiRunEvent) => void,
+    signal?: AbortSignal,
+): Promise<void> {
+    const res = await fetch(`${SIDECAR_BASE_URL}/api/api-client/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+        signal,
+    });
+
+    if (!res.ok || !res.body) {
+        const text = await res.text().catch(() => "");
+        throw toApiError(res.status, res.statusText, text);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    const emitRecord = (record: string) => {
+        const json = sseDataPayload(record);
+        if (!json) return;
+        onEvent(JSON.parse(json) as ApiRunEvent);
+    };
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let separatorIndex: number;
+        while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
+            const record = buffer.slice(0, separatorIndex);
+            buffer = buffer.slice(separatorIndex + 2);
+            emitRecord(record);
+        }
+    }
+
+    // Flush the streaming decoder's multi-byte tail, then deliver any record
+    // the server left unterminated right before the stream ended.
+    buffer += decoder.decode();
+    const tail = buffer.trim();
+    if (tail) emitRecord(tail);
 }
 
 export function apiUpload<T>(

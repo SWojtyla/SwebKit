@@ -1,4 +1,5 @@
 using SwebKit.Sidecar.Services;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Json.Path;
 using SwebKit.Core.Abstractions;
@@ -56,6 +57,18 @@ public static class ApiClientEndpoints
             var result = await executor.ExecuteAsync(req.Request, collection, activeEnvironment, globalEnvironment, ct);
             return Results.Ok(Map(result));
         });
+
+        // Request runs (api-client-request-runs): dependency chains + batch runs streamed as SSE.
+        app.MapPost("/api/api-client/run", (
+            ApiRunRequest req,
+            HttpContext httpContext,
+            ApiClientRunService runs,
+            CollectionRepository collections,
+            EnvironmentRepository environments,
+            LinkedCollectionRootRepository linkedRoots,
+            LinkedCollectionFileService linkedFiles,
+            DemoModeService demo) =>
+            RunRequestsAsync(req, httpContext, runs, collections, environments, linkedRoots, linkedFiles, demo));
 
         app.MapPost("/api/api-client/preview-keyvault-secret", (
             PreviewKeyVaultSecretRequest req,
@@ -247,6 +260,187 @@ public static class ApiClientEndpoints
         if (string.IsNullOrEmpty(value)) return string.Empty;
         var dots = Math.Clamp(value.Length, 4, 16);
         return new string('•', dots);
+    }
+
+    /// <summary>
+    /// Wire options for run SSE frames and plan-error payloads: camelCase with nulls dropped —
+    /// <c>stepFailed</c>'s optional <c>status</c>/<c>response</c> and the plan error's optional
+    /// <c>requestId</c>/<c>cycle</c>/<c>max</c> must not serialize as <c>null</c> noise.
+    /// </summary>
+    private static readonly JsonSerializerOptions RunEventJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+    };
+
+    /// <summary>
+    /// <c>POST /api/api-client/run</c> — streams <see cref="ApiRunEvent"/>s as
+    /// <c>data: {json}\n\n</c> frames (the same write pattern as the agent chat stream). Every
+    /// pre-flight failure — resolution, environments, <see cref="ApiClientRunService.BuildPlan"/>
+    /// — answers as a JSON error before the first SSE byte, so a client never has to re-classify
+    /// a mid-stream error frame. Plan errors pass their structured payload through untouched
+    /// (<c>{"error":"dependency_cycle","cycle":[...]}</c> etc.) rather than being flattened into
+    /// the plain <c>{error: message}</c> envelope.
+    /// </summary>
+    internal static async Task RunRequestsAsync(
+        ApiRunRequest req,
+        HttpContext httpContext,
+        ApiClientRunService runs,
+        CollectionRepository collections,
+        EnvironmentRepository environments,
+        LinkedCollectionRootRepository linkedRoots,
+        LinkedCollectionFileService linkedFiles,
+        DemoModeService demo)
+    {
+        var ct = httpContext.RequestAborted;
+
+        var resolved = await ResolveRunCollectionAsync(req, collections, environments, linkedRoots, linkedFiles, demo, ct).ConfigureAwait(false);
+        if (resolved.Collection is null)
+        {
+            await WriteRunJsonAsync(httpContext, resolved.ErrorStatus, resolved.ErrorPayload!).ConfigureAwait(false);
+            return;
+        }
+        var collection = resolved.Collection;
+
+        // Same environment lookups as /execute — for a linked-root collection the source list is
+        // the root's on-disk environments, otherwise the internal repository's.
+        ApiEnvironment? activeEnvironment = null;
+        if (!string.IsNullOrWhiteSpace(req.ActiveEnvironmentId))
+        {
+            activeEnvironment = resolved.Environments.FirstOrDefault(e => e.Id == req.ActiveEnvironmentId);
+            if (activeEnvironment is null)
+            {
+                await WriteRunJsonAsync(httpContext, StatusCodes.Status404NotFound, new { error = "Environment not found" }).ConfigureAwait(false);
+                return;
+            }
+        }
+
+        ApiEnvironment? globalEnvironment = null;
+        if (!string.IsNullOrWhiteSpace(req.GlobalEnvironmentId))
+        {
+            globalEnvironment = resolved.Environments.FirstOrDefault(e => e.Id == req.GlobalEnvironmentId);
+            if (globalEnvironment is null)
+            {
+                await WriteRunJsonAsync(httpContext, StatusCodes.Status404NotFound, new { error = "Global environment not found" }).ConfigureAwait(false);
+                return;
+            }
+        }
+
+        var planResult = runs.BuildPlan(collection, req);
+        if (planResult.Plan is null)
+        {
+            // The run service already shaped the failure for the wire ({error:"dependency_cycle",
+            // cycle:[...]}, missing dep, too_many_steps, empty_plan) — pass it through untouched
+            // instead of flattening it into the plain {error: message} envelope.
+            var payload = (object?)planResult.Error ?? new { error = "empty_plan" };
+            await WriteRunJsonAsync(httpContext, StatusCodes.Status400BadRequest, payload).ConfigureAwait(false);
+            return;
+        }
+        var plan = planResult.Plan;
+
+        httpContext.Response.ContentType = "text/event-stream; charset=utf-8";
+        httpContext.Response.Headers.CacheControl = "no-cache";
+        // Disables response buffering on proxies that respect it (same header the agent chat
+        // stream sends); a no-op on the direct localhost connection this app runs over.
+        httpContext.Response.Headers["X-Accel-Buffering"] = "no";
+
+        try
+        {
+            await foreach (var evt in runs.RunAsync(plan, collection, activeEnvironment, globalEnvironment, req, ct).ConfigureAwait(false))
+            {
+                // Runtime-type serialization — ApiRunEvent is a flat record whose response member
+                // already carries the /execute wire shape (ApiRunStepResponse).
+                var json = JsonSerializer.Serialize(evt, evt.GetType(), RunEventJsonOptions);
+                // Deliberately not the request token: the terminal 'aborted'/'done' frame is
+                // emitted *because* cancellation fired — passing the token here would eat exactly
+                // the event that explains how the run ended.
+                await httpContext.Response.WriteAsync($"data: {json}\n\n").ConfigureAwait(false);
+                await httpContext.Response.Body.FlushAsync().ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Client disconnected mid-run — nobody left to answer; the stream just ends.
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            // Dead socket — same end state as a disconnect.
+        }
+    }
+
+    /// <summary>The collection a run targets plus the environment list its ids resolve against.</summary>
+    private sealed record RunCollectionResolution(
+        ApiCollection? Collection,
+        IReadOnlyList<ApiEnvironment> Environments,
+        int ErrorStatus,
+        object? ErrorPayload)
+    {
+        public static RunCollectionResolution Found(ApiCollection collection, IReadOnlyList<ApiEnvironment> environments) =>
+            new(collection, environments, 0, null);
+
+        public static RunCollectionResolution Fail(int status, string error) =>
+            new(null, [], status, new { error });
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="ResolveCollectionAsync"/> — internal repository first, the demo
+    /// collection when demo mode is on — plus the linked-root branch keyed by
+    /// <see cref="ApiRunRequest.LinkedRootId"/>. Linked roots stay disabled in demo mode, matching
+    /// the rest of the linked-roots surface.
+    /// </summary>
+    private static async Task<RunCollectionResolution> ResolveRunCollectionAsync(
+        ApiRunRequest req,
+        CollectionRepository collections,
+        EnvironmentRepository environments,
+        LinkedCollectionRootRepository linkedRoots,
+        LinkedCollectionFileService linkedFiles,
+        DemoModeService demo,
+        CancellationToken ct)
+    {
+        // A run plans against a persisted tree — collectionId is required (unlike /execute,
+        // which can run a transient request against an empty collection shell).
+        if (string.IsNullOrWhiteSpace(req.CollectionId))
+            return RunCollectionResolution.Fail(StatusCodes.Status400BadRequest, "collectionId is required.");
+
+        if (!string.IsNullOrWhiteSpace(req.LinkedRootId))
+        {
+            if (demo.IsDemoMode)
+                return RunCollectionResolution.Fail(StatusCodes.Status400BadRequest, "Linked roots are disabled in demo mode.");
+
+            var root = linkedRoots.Roots.FirstOrDefault(r => r.Id == req.LinkedRootId);
+            if (root is null)
+                return RunCollectionResolution.Fail(StatusCodes.Status404NotFound, "Linked root not found.");
+
+            if (!root.IsEnabled)
+                return RunCollectionResolution.Fail(StatusCodes.Status400BadRequest, "Linked root is disabled. Enable it before running requests from it.");
+
+            LinkedCollectionRootLoadResult loaded;
+            try
+            {
+                loaded = await linkedFiles.LoadRootAsync(root, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return RunCollectionResolution.Fail(StatusCodes.Status400BadRequest, $"Linked root could not be loaded: {ex.Message}");
+            }
+
+            var linkedCollection = loaded.Collections.FirstOrDefault(c => c.Id == req.CollectionId);
+            return linkedCollection is null
+                ? RunCollectionResolution.Fail(StatusCodes.Status404NotFound, $"Collection '{req.CollectionId}' not found in the linked root.")
+                : RunCollectionResolution.Found(linkedCollection, loaded.Environments);
+        }
+
+        var resolved = await ResolveCollectionAsync(req.CollectionId, collections, demo).ConfigureAwait(false);
+        return resolved is null
+            ? RunCollectionResolution.Fail(StatusCodes.Status404NotFound, "Collection not found")
+            : RunCollectionResolution.Found(resolved, environments.Environments);
+    }
+
+    /// <summary>Writes a pre-stream error body — JSON, not SSE, since the stream never opened.</summary>
+    private static Task WriteRunJsonAsync(HttpContext context, int statusCode, object payload)
+    {
+        context.Response.StatusCode = statusCode;
+        return context.Response.WriteAsJsonAsync(payload, RunEventJsonOptions, "application/json; charset=utf-8", CancellationToken.None);
     }
 
     private static async Task<ApiCollection?> ResolveCollectionAsync(string? collectionId, CollectionRepository collections, DemoModeService demo)

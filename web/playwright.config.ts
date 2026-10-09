@@ -29,6 +29,19 @@ export default defineConfig({
         baseURL: `http://localhost:${vitePort}`,
         trace: "on-first-retry",
         screenshot: "only-on-failure",
+        launchOptions: {
+            // Windows treats an occluded/backgrounded headless window as
+            // throttleable — Chromium then suspends network IO mid-request
+            // (net::ERR_NETWORK_IO_SUSPENDED), which stalls long-lived SSE
+            // fetch streams like /api/api-client/run. These flags keep the
+            // renderer and its network activity unthrottled for the whole run.
+            args: [
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+                "--disable-background-timer-throttling",
+                "--disable-features=CalculateNativeWinOcclusion",
+            ],
+        },
     },
 
     projects: [

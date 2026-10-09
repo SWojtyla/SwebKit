@@ -24,6 +24,8 @@ import {
     Unlink,
     RefreshCw,
     AlertTriangle,
+    Play,
+    ListOrdered,
 } from "lucide-react";
 import type {
     ApiCollection,
@@ -44,6 +46,12 @@ import {
     type DragData,
 } from "@/lib/collection-tree-utils";
 import { MethodBadge } from "./method-badge";
+import {
+    orderIdsByTreeOrder,
+    runnableSelection,
+    toggleMultiSelect,
+    type TreeMultiSelection,
+} from "@/lib/api-run-utils";
 import {
     CollectionImportButton,
     CollectionImportDialog,
@@ -104,6 +112,12 @@ interface CollectionTreeProps {
     onRevealPath: (path: string) => void;
     /** Open the Git drawer for the repository backing this linked root. */
     onOpenGit: (root: LinkedRootInfo) => void;
+    /** "Run in order" on a folder/collection — subtree run in tree order.
+     *  `nodeId` is the folder id, or the collection id for a whole-collection run. */
+    onRunSubtree: (collectionId: string, nodeId: string) => void;
+    /** "Run selection" — a ctrl/cmd+click multi-selection of request nodes,
+     *  run in tree order (the parent re-sorts by the collection tree). */
+    onRunSelection: (collectionId: string, requestIds: string[]) => void;
 }
 
 interface ContextMenuState {
@@ -135,6 +149,8 @@ export function CollectionTree({
     onRemoveRoot,
     onRevealPath,
     onOpenGit,
+    onRunSubtree,
+    onRunSelection,
 }: CollectionTreeProps) {
     const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
         const ids = new Set(collections.map((c) => c.id));
@@ -163,6 +179,12 @@ export function CollectionTree({
         index: number;
         placement: "before" | "after" | "inside";
     } | null>(null);
+    // Ctrl/Cmd+click multi-selection for "Run selection (N)". Confined to a
+    // single collection — toggling a node elsewhere starts over there — and
+    // cleared by a plain click, Escape, or a started run.
+    const [multiSelect, setMultiSelect] = useState<TreeMultiSelection | null>(
+        null,
+    );
     const renameInputRef = useRef<HTMLInputElement | null>(null);
     const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -644,6 +666,12 @@ export function CollectionTree({
                     focusRowByFlatIndex(rowIndex - 1);
                 }
                 break;
+            case "Escape":
+                if (multiSelect) {
+                    e.preventDefault();
+                    setMultiSelect(null);
+                }
+                break;
             default:
                 break;
         }
@@ -847,6 +875,12 @@ export function CollectionTree({
         const isExpanded = Boolean(search) || expandedIds.has(node.id);
         const isSelected = selectedNodeId === node.id;
         const isRenaming = renamingId === node.id;
+        // Distinct from `isSelected` (the open-tab highlight): multi-select is a
+        // run target, not "which request is open".
+        const isMultiSelected =
+            multiSelect != null &&
+            multiSelect.collectionId === collectionId &&
+            multiSelect.ids.has(node.id);
         const method =
             node.type === "Request" && node.request
                 ? node.request.method
@@ -870,10 +904,15 @@ export function CollectionTree({
                 aria-selected={isSelected}
                 aria-expanded={node.type === "Folder" ? isExpanded : undefined}
                 tabIndex={0}
+                data-multi-selected={isMultiSelected || undefined}
                 className={`group flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-sm ${
                     isSelected
                         ? "bg-primary text-primary-foreground"
                         : "hover:bg-accent"
+                } ${
+                    isMultiSelected
+                        ? "tree-node-selected ring-1 ring-inset ring-primary/70 bg-accent/40"
+                        : ""
                 } ${isCollection ? "font-medium" : ""} ${
                     isDragging ? "tree-dragging" : ""
                 } ${
@@ -891,6 +930,16 @@ export function CollectionTree({
                 // click-then-Alt+Arrow keyboard reordering.
                 onClick={(e) => {
                     e.currentTarget.focus();
+                    if (e.ctrlKey || e.metaKey) {
+                        // Toggle into/out of the run multi-selection — does not
+                        // open the node in a tab.
+                        e.preventDefault();
+                        setMultiSelect((prev) =>
+                            toggleMultiSelect(prev, node.id, collectionId),
+                        );
+                        return;
+                    }
+                    if (multiSelect) setMultiSelect(null);
                     onSelectNode(node, collectionId);
                 }}
                 onDoubleClick={(e) => {
@@ -1258,6 +1307,60 @@ export function CollectionTree({
                                 >
                                     <FolderOpen className="h-3.5 w-3.5" />{" "}
                                     Reveal in explorer
+                                </button>
+                            );
+                        })()}
+                    {(contextMenu.isCollection ||
+                        contextMenu.nodeType === "Folder") && (
+                        <button
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
+                            onClick={() => {
+                                onRunSubtree(
+                                    contextMenu.collectionId,
+                                    contextMenu.nodeId,
+                                );
+                                setContextMenu(null);
+                            }}
+                            data-testid="ctx-run-in-order"
+                        >
+                            <ListOrdered className="h-3.5 w-3.5" /> Run in order
+                        </button>
+                    )}
+                    {multiSelect &&
+                        multiSelect.ids.size >= 2 &&
+                        multiSelect.collectionId === contextMenu.collectionId &&
+                        (() => {
+                            const collection = collections.find(
+                                (c) => c.id === multiSelect.collectionId,
+                            );
+                            const ids = collection
+                                ? runnableSelection(collection, multiSelect.ids)
+                                : null;
+                            return (
+                                <button
+                                    className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
+                                    disabled={!ids}
+                                    title={
+                                        ids
+                                            ? "Run the selected requests in tree order"
+                                            : "Run selection works on request nodes only — deselect folders and collections"
+                                    }
+                                    onClick={() => {
+                                        if (!collection || !ids) return;
+                                        onRunSelection(
+                                            collection.id,
+                                            orderIdsByTreeOrder(
+                                                collection,
+                                                ids,
+                                            ),
+                                        );
+                                        setMultiSelect(null);
+                                        setContextMenu(null);
+                                    }}
+                                    data-testid="ctx-run-selection"
+                                >
+                                    <Play className="h-3.5 w-3.5" /> Run
+                                    selection ({multiSelect.ids.size})
                                 </button>
                             );
                         })()}

@@ -18,6 +18,8 @@ import {
     useLinkedRoots,
     useLinkedRootActions,
     useDemoMode,
+    useApiRun,
+    type ApiRunCallbacks,
 } from "@/lib/hooks";
 import type { ResponseHistoryEntry } from "./ResponseViewer";
 import type { RequestTab } from "./RequestTabStrip";
@@ -58,6 +60,12 @@ import {
 } from "@/lib/linked-root-utils";
 import { pickNeighborTabId } from "@/lib/request-tab-utils";
 import { describeApiError } from "@/lib/api";
+import {
+    DEFAULT_RUN_OPTIONS,
+    lastResponseOf,
+    type ApiRunOptions,
+    type ApiRunState,
+} from "@/lib/api-run-utils";
 import type {
     ApiCollection,
     ApiCollectionNode,
@@ -68,6 +76,7 @@ import type {
     CollectionVariable,
     AuthConfig,
     CollectionsStoreResponse,
+    ApiRunRequest,
 } from "@/lib/types";
 
 function newId() {
@@ -423,6 +432,18 @@ export function ApiClientPageProvider({
     const [confirmDialog, setConfirmDialog] =
         useState<ConfirmDialogState | null>(null);
 
+    // ── Request runs ────────────────────────────────────────────────
+    // One run at a time — `useApiRun.start` aborts whatever was in flight. The
+    // drawer's open flag lives here (not inside the hook's state) so closing it
+    // never implies the run stopped.
+    // Destructured rather than kept as one object — `{state,start,abort}` is a
+    // fresh identity every render, and it's in the page-context memo's deps:
+    // keeping it whole would re-render every context consumer on each keystroke.
+    const { state: runState, start: startRun, abort: abortRun } = useApiRun();
+    const [runDrawerOpen, setRunDrawerOpen] = useState(false);
+    const [runOptions, setRunOptions] =
+        useState<ApiRunOptions>(DEFAULT_RUN_OPTIONS);
+
     // Refs mirror the per-keystroke tab state so handlers living in the *page*
     // context (delete-node, conflict resolution, select-node) can read it without
     // depending on it — otherwise their identity, and the whole page-context
@@ -437,6 +458,7 @@ export function ApiClientPageProvider({
     const environmentsRef = useRef(environments);
     const linkedRootsRef = useRef(linkedRoots);
     const selectedNodeIdRef = useRef(selectedNodeId);
+    const runOptionsRef = useRef(runOptions);
     useEffect(() => {
         tabsRef.current = tabs;
         tabStatesRef.current = tabStates;
@@ -445,6 +467,7 @@ export function ApiClientPageProvider({
         environmentsRef.current = environments;
         linkedRootsRef.current = linkedRoots;
         selectedNodeIdRef.current = selectedNodeId;
+        runOptionsRef.current = runOptions;
     });
 
     /**
@@ -1583,6 +1606,252 @@ export function ApiClientPageProvider({
         resolveEnvironmentLayers,
     ]);
 
+    // ── Request runs ────────────────────────────────────────────────────────
+
+    /** Mirror a step's response into the active tab's viewer while the run
+     *  streams — the response pane tracks the run live, not just at the end. */
+    const pushRunResponseToActiveTab = useCallback(
+        (response: ApiClientExecutionResponse | null | undefined) => {
+            if (!response) return;
+            const tabId = activeTabIdRef.current;
+            if (!tabId) return;
+            setTabStates((prev) =>
+                prev[tabId]
+                    ? { ...prev, [tabId]: { ...prev[tabId], response } }
+                    : prev,
+            );
+        },
+        [],
+    );
+
+    /** The SSE callbacks every run entry point shares: live response mirroring,
+     *  a history entry for the final step, and a done/aborted notification.
+     *  `extra` runs after the shared finish work (e.g. clearing `sending`). */
+    const runCallbacks = useCallback(
+        (extra?: (s: ApiRunState) => void): ApiRunCallbacks => ({
+            onEvent: (e) => {
+                if (
+                    (e.type === "stepCompleted" || e.type === "stepFailed") &&
+                    e.response
+                ) {
+                    pushRunResponseToActiveTab(e.response);
+                }
+            },
+            onFinished: (s) => {
+                const last = lastResponseOf(s.steps);
+                if (last) {
+                    const tabId = activeTabIdRef.current;
+                    if (tabId)
+                        setTabStates((prev) =>
+                            prev[tabId]
+                                ? {
+                                      ...prev,
+                                      [tabId]: {
+                                          ...prev[tabId],
+                                          response: last,
+                                          history: appendHistory(
+                                              prev[tabId],
+                                              last,
+                                          ),
+                                      },
+                                  }
+                                : prev,
+                        );
+                }
+                if (s.status === "done") {
+                    const completed = s.summary?.completedSteps ?? 0;
+                    const failed = s.summary?.failedSteps ?? 0;
+                    notify(
+                        failed > 0 ? "info" : "success",
+                        "Run finished",
+                        `${completed} step${completed === 1 ? "" : "s"} completed${failed > 0 ? `, ${failed} failed` : ""}.`,
+                    );
+                } else if (s.status === "aborted") {
+                    notify(
+                        "info",
+                        "Run aborted",
+                        s.abortReason === "stopOnError"
+                            ? "Stopped on the first failed step."
+                            : "Cancelled.",
+                    );
+                }
+                extra?.(s);
+            },
+        }),
+        [pushRunResponseToActiveTab, notify],
+    );
+
+    /** Shared ApiRunRequest fields for a collection: env layers, linked root,
+     *  current run options. Null (plus a notification) when the collection
+     *  vanished between menu open and click. */
+    const buildRunRequest = useCallback(
+        (
+            collectionId: string,
+            extras: Pick<
+                ApiRunRequest,
+                "mode" | "requestId" | "nodeId" | "requestIds"
+            >,
+        ): ApiRunRequest | null => {
+            const collection = collectionsRef.current.find(
+                (c) => c.id === collectionId,
+            );
+            if (!collection) {
+                notify(
+                    "error",
+                    "Couldn't start run",
+                    "The collection no longer exists.",
+                );
+                return null;
+            }
+            const layers = resolveEnvironmentLayers(collectionId);
+            return {
+                collectionId,
+                linkedRootId:
+                    collection.origin?.kind === "linked"
+                        ? collection.origin.rootId
+                        : null,
+                activeEnvironmentId: layers.scoped?.id ?? null,
+                globalEnvironmentId: layers.global?.id ?? null,
+                stopOnError: runOptionsRef.current.stopOnError,
+                delayMs: runOptionsRef.current.delayMs,
+                ...extras,
+            };
+        },
+        [notify, resolveEnvironmentLayers],
+    );
+
+    const handleRunSubtree = useCallback(
+        (collectionId: string, nodeId: string) => {
+            const req = buildRunRequest(collectionId, {
+                mode: "subtree",
+                nodeId,
+            });
+            if (!req) return;
+            setRunDrawerOpen(true);
+            startRun(req, runCallbacks());
+        },
+        [buildRunRequest, startRun, runCallbacks],
+    );
+
+    const handleRunSelection = useCallback(
+        (collectionId: string, requestIds: string[]) => {
+            // The selection carries tree node ids; the run endpoint indexes
+            // requests by entry id (node.request.id) — translate here so an
+            // imported collection whose ids differ still resolves.
+            const collection = collectionsRef.current.find(
+                (c) => c.id === collectionId,
+            );
+            const entryIds = requestIds.map(
+                (id) =>
+                    (collection &&
+                        findRequestNode(collection.nodes, id)?.request?.id) ||
+                    id,
+            );
+            const req = buildRunRequest(collectionId, {
+                mode: "explicit",
+                requestIds: entryIds,
+            });
+            if (!req) return;
+            setRunDrawerOpen(true);
+            startRun(req, runCallbacks());
+        },
+        [buildRunRequest, startRun, runCallbacks],
+    );
+
+    /**
+     * "Send with dependencies" — the split-button sibling of handleSend. Saves
+     * the draft first (the chain resolves deps from the persisted request),
+     * runs the target's pre-request actions, then streams the requestWithDeps
+     * run. `sending` stays set for the whole run so plain Send stays disabled
+     * while the chain executes; the final step's response lands where a plain
+     * Send's would.
+     */
+    const handleSendWithDeps = useCallback(() => {
+        const activeTabId = activeTabIdRef.current;
+        if (!activeTabId) return;
+        const tab = tabsRef.current.find((t) => t.id === activeTabId);
+        if (!tab) return;
+        void (async () => {
+            const saved = await handleSave();
+            if (!saved) return;
+            const draft = tabStatesRef.current[activeTabId]?.draft;
+            if (!draft) return;
+            // The endpoint's plan index is keyed by request *entry* id —
+            // node.id equals it for app-created data but imports may diverge.
+            const collection = collectionsRef.current.find(
+                (c) => c.id === tab.collectionId,
+            );
+            const requestId =
+                (collection &&
+                    findRequestNode(collection.nodes, tab.nodeId)?.request
+                        ?.id) ||
+                tab.nodeId;
+            const req = buildRunRequest(tab.collectionId, {
+                mode: "requestWithDeps",
+                requestId,
+            });
+            if (!req) return;
+            // Same secret resolution as handleSend — the run endpoint executes
+            // server-side but the target's credential still travels resolved.
+            const request = deepClone(draft);
+            if (request.auth?.credentialKey && !request.auth.credentialSecret) {
+                const secret = await getSecret(request.auth.credentialKey);
+                if (secret)
+                    request.auth = {
+                        ...request.auth,
+                        credentialSecret: secret,
+                    };
+            }
+            setTabStates((prev) => ({
+                ...prev,
+                [activeTabId]: {
+                    ...prev[activeTabId],
+                    sending: true,
+                    response: null,
+                },
+            }));
+            await runRequestActions(
+                request.preRequestActions ?? [],
+                { request },
+                (type, title, message) => notify(type, title, message),
+            );
+            setRunDrawerOpen(true);
+            startRun(
+                req,
+                runCallbacks((s) => {
+                    const last = lastResponseOf(s.steps);
+                    setTabStates((prev) =>
+                        prev[activeTabId]
+                            ? {
+                                  ...prev,
+                                  [activeTabId]: {
+                                      ...prev[activeTabId],
+                                      sending: false,
+                                  },
+                              }
+                            : prev,
+                    );
+                    if (last) {
+                        void runRequestActions(
+                            request.postRequestActions ?? [],
+                            { request, response: last },
+                            (type, title, message) =>
+                                notify(type, title, message),
+                        ).catch((err: unknown) =>
+                            notify(
+                                "error",
+                                "Post-request action failed",
+                                err instanceof Error
+                                    ? err.message
+                                    : "Unknown error",
+                            ),
+                        );
+                    }
+                }),
+            );
+        })();
+    }, [handleSave, buildRunRequest, startRun, notify, runCallbacks]);
+
     /** Saves a scrubbed example onto the active request and persists it. */
     const handleSaveExample = useCallback(
         async (name: string, response: ApiClientExecutionResponse) => {
@@ -2272,6 +2541,7 @@ export function ApiClientPageProvider({
             activeCollection,
             handleSave,
             handleSend,
+            handleSendWithDeps,
             handleSaveExample,
         }),
         [
@@ -2287,6 +2557,7 @@ export function ApiClientPageProvider({
             activeCollection,
             handleSave,
             handleSend,
+            handleSendWithDeps,
             handleSaveExample,
         ],
     );
@@ -2373,6 +2644,17 @@ export function ApiClientPageProvider({
 
             // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
             handleSaveCollectionVariables,
+
+            runState,
+            runDrawerOpen,
+            setRunDrawerOpen,
+            abortRun,
+            runOptions,
+            setRunOptions,
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
+            handleRunSubtree,
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
+            handleRunSelection,
         }),
         [
             collections,
@@ -2423,6 +2705,12 @@ export function ApiClientPageProvider({
             nameDialog,
             confirmDialog,
             handleSaveCollectionVariables,
+            runState,
+            runDrawerOpen,
+            abortRun,
+            runOptions,
+            handleRunSubtree,
+            handleRunSelection,
         ],
     );
 

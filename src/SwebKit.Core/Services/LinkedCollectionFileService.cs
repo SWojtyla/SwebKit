@@ -1238,6 +1238,8 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
         public LinkedRequestBodyFile? Body { get; set; }
         public AuthConfig? Auth { get; set; }
         public List<CaptureRule> CaptureRules { get; set; } = [];
+        /// <summary>Written only when non-empty so request files without a chain stay untouched.</summary>
+        public List<string>? DependsOnRequestIds { get; set; }
         public List<ResponseExample> ResponseExamples { get; set; } = [];
         public string? QueryFile { get; set; }
         public string? VariablesFile { get; set; }
@@ -1256,6 +1258,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
                 QueryParams = ParsePairs(Query),
                 Auth = Auth,
                 CaptureRules = CaptureRules,
+                DependsOnRequestIds = DependsOnRequestIds ?? [],
                 ResponseExamples = ResponseExamples,
                 GraphQlQuery = GraphQlQuery,
                 GraphQlVariables = GraphQlVariables,
@@ -1293,6 +1296,7 @@ public sealed partial class LinkedCollectionFileService(LinkedGitService gitServ
                 Body = LinkedRequestBodyFile.FromRequest(request, requestPath),
                 Auth = request.Auth,
                 CaptureRules = request.CaptureRules,
+                DependsOnRequestIds = request.DependsOnRequestIds is { Count: > 0 } deps ? deps : null,
                 ResponseExamples = request.ResponseExamples,
                 QueryFile = request.Method == ApiRequestMethod.GraphQl && !string.IsNullOrWhiteSpace(request.GraphQlQuery)
                     ? $"{GetRequestBaseName(requestPath)}.graphql"

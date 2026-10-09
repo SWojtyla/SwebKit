@@ -319,6 +319,10 @@ public static class LinkedRootsEndpoints
         }
 
         var request = req.Request ?? new HttpRequestEntry();
+        // Top-level dependsOnRequestIds wins over the embedded request's own list — it lets a
+        // dep-only edit skip echoing the full request body (request-runs feature).
+        if (req.DependsOnRequestIds is not null)
+            request.DependsOnRequestIds = req.DependsOnRequestIds;
         request.Id = string.IsNullOrWhiteSpace(request.Id) ? Guid.NewGuid().ToString("N") : request.Id;
         request.Name = req.Name.Trim();
         var now = DateTimeOffset.UtcNow;
@@ -377,6 +381,10 @@ public static class LinkedRootsEndpoints
             return ApiErrors.NotFound($"Request '{requestId}' not found in the linked collection.");
 
         var request = req.Request;
+        // Top-level dependsOnRequestIds wins over the embedded request's own list (request-runs
+        // feature) — null means "leave whatever the body carried".
+        if (req.DependsOnRequestIds is not null)
+            request.DependsOnRequestIds = req.DependsOnRequestIds;
         // The route id is authoritative — in the linked model it is the file's stable id, so it
         // pins the save to the existing .swebreq.json even when the request was renamed.
         request.Id = requestId;
@@ -986,12 +994,19 @@ public sealed class CreateLinkedRequestRequest
     public string? Name { get; set; }
     public string? ParentFolderId { get; set; }
     public HttpRequestEntry? Request { get; set; }
+    /// <summary>Same-collection request ids that must run before this one (request-runs
+    /// <c>dependsOnRequestIds</c>). Also carried by <see cref="HttpRequestEntry"/> itself — a
+    /// non-null value here overrides the embedded list so dep-only edits stay small.</summary>
+    public List<string>? DependsOnRequestIds { get; set; }
 }
 
 public sealed class SaveLinkedRequestRequest
 {
     public HttpRequestEntry? Request { get; set; }
     public string? ContentStamp { get; set; }
+    /// <summary>Same-collection request ids that must run before this one (request-runs
+    /// <c>dependsOnRequestIds</c>); overrides the embedded request's list when present.</summary>
+    public List<string>? DependsOnRequestIds { get; set; }
 }
 
 public sealed class MoveLinkedNodeRequest

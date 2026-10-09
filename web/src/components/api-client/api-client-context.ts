@@ -14,6 +14,7 @@ import type {
     CollectionVariable,
     LinkedRootInfo,
 } from "@/lib/types";
+import type { ApiRunOptions, ApiRunState } from "@/lib/api-run-utils";
 
 /** The repo the Git drawer should open on — set when a linked-root Git badge is clicked. */
 export interface GitInitialRepo {
@@ -170,6 +171,21 @@ export interface ApiClientPageContextValue {
     setConfirmDialog: (v: ConfirmDialogState | null) => void;
 
     handleSaveCollectionVariables: (variables: CollectionVariable[]) => void;
+
+    // ── Request runs (dependency chains + ordered batches) ──────────
+    /** Live state of the current/last run — drives the run-results drawer. */
+    runState: ApiRunState;
+    runDrawerOpen: boolean;
+    setRunDrawerOpen: (v: boolean) => void;
+    /** Client-side cancel of an in-flight run. */
+    abortRun: () => void;
+    /** stopOnError/delayMs shared by every run entry point (split button + tree). */
+    runOptions: ApiRunOptions;
+    setRunOptions: (next: ApiRunOptions) => void;
+    /** "Run in order" — every request under the folder/collection, tree order. */
+    handleRunSubtree: (collectionId: string, nodeId: string) => void;
+    /** "Run selection (N)" — explicit ordered request node ids. */
+    handleRunSelection: (collectionId: string, requestIds: string[]) => void;
 }
 
 /**
@@ -194,6 +210,9 @@ export interface ApiClientTabsContextValue {
 
     handleSave: () => Promise<boolean>;
     handleSend: () => Promise<void>;
+    /** The send split-button's second half: run the request's dependency
+     *  chain (requestWithDeps), ending with the open request itself. */
+    handleSendWithDeps: () => void;
     handleSaveExample: (
         name: string,
         response: ApiClientExecutionResponse,

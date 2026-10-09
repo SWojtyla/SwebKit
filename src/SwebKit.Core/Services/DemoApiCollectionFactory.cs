@@ -35,11 +35,14 @@ public static class DemoApiCollectionFactory
         // JSONPlaceholder folder with REST API examples
         nodes.Add(CreateJsonPlaceholderFolder());
 
-        // HTTPBin folder with HTTP testing examples  
+        // HTTPBin folder with HTTP testing examples
         nodes.Add(CreateHttpBinFolder());
 
         // GitHub API folder with real API examples
         nodes.Add(CreateGitHubApiFolder());
+
+        // Request-chain folder demonstrating dependsOnRequestIds + capture rules
+        nodes.Add(CreateRequestChainFolder());
 
         return nodes;
     }
@@ -570,6 +573,91 @@ public static class DemoApiCollectionFactory
                     new KeyValuePair<string> { Key = "Accept", Value = "application/vnd.github+json" },
                     new KeyValuePair<string> { Key = "X-GitHub-Api-Version", Value = "2022-11-28" }
                 },
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            }
+        };
+    }
+
+    #endregion
+
+    #region Request chain (dependsOnRequestIds demo)
+
+    /// <summary>
+    /// A two-step dependency chain: "Get token" captures a uuid into the <c>demoToken</c> collection
+    /// variable and "List orders" depends on it and sends the captured value as a bearer token —
+    /// httpbin echoes the headers back, so the hand-off is visible in the response body.
+    /// </summary>
+    private static ApiCollectionNode CreateRequestChainFolder()
+    {
+        var folder = new ApiCollectionNode
+        {
+            Id = "__demo__chain",
+            Name = "Request chain",
+            Type = ApiCollectionNodeType.Folder,
+            IsExpanded = true,
+            Children = new List<ApiCollectionNode>()
+        };
+
+        folder.Children.Add(CreateChainGetTokenRequest());
+        folder.Children.Add(CreateChainListOrdersRequest());
+
+        return folder;
+    }
+
+    private static ApiCollectionNode CreateChainGetTokenRequest()
+    {
+        return new ApiCollectionNode
+        {
+            Id = "__demo__chain_get_token",
+            Name = "GET /uuid (token)",
+            Type = ApiCollectionNodeType.Request,
+            Request = new HttpRequestEntry
+            {
+                Id = "__demo__chain_get_token",
+                Name = "Get token",
+                Method = ApiRequestMethod.Get,
+                Url = "https://httpbin.org/uuid",
+                Headers = new List<KeyValuePair<string>>
+                {
+                    new KeyValuePair<string> { Key = "Accept", Value = "application/json" }
+                },
+                CaptureRules = new List<CaptureRule>
+                {
+                    new CaptureRule
+                    {
+                        Id = "__demo__chain_capture_token",
+                        TargetVariable = "demoToken",
+                        TargetScope = "collection",
+                        Source = CaptureSource.BodyJsonPath,
+                        JsonPath = "$.uuid",
+                    }
+                },
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            }
+        };
+    }
+
+    private static ApiCollectionNode CreateChainListOrdersRequest()
+    {
+        return new ApiCollectionNode
+        {
+            Id = "__demo__chain_list_orders",
+            Name = "GET /anything/orders",
+            Type = ApiCollectionNodeType.Request,
+            Request = new HttpRequestEntry
+            {
+                Id = "__demo__chain_list_orders",
+                Name = "List orders",
+                Method = ApiRequestMethod.Get,
+                Url = "https://httpbin.org/anything/orders",
+                Headers = new List<KeyValuePair<string>>
+                {
+                    new KeyValuePair<string> { Key = "Accept", Value = "application/json" },
+                    new KeyValuePair<string> { Key = "Authorization", Value = "Bearer {{demoToken}}" }
+                },
+                DependsOnRequestIds = new List<string> { "__demo__chain_get_token" },
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow
             }

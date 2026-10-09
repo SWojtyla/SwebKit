@@ -224,6 +224,14 @@ export interface HttpRequestEntry {
     updatedAt: string;
     preRequestActions: RequestAction[];
     postRequestActions: RequestAction[];
+    /**
+     * "Runs after" — ids of same-collection request nodes that must run before
+     * this one when sent via "Send with dependencies". Ids are tree node ids
+     * (for internal collections these equal `request.id`; for linked requests
+     * they are the file's stable id). Optional for backward compatibility with
+     * collections.json and `.swebreq.json` files written before runs existed.
+     */
+    dependsOnRequestIds?: string[];
 }
 
 export interface RequestBody {
@@ -385,5 +393,77 @@ export interface GraphQlErrorLocation {
     line: number;
     column: number;
 }
+
+// ── Request runs (POST /api/api-client/run — SSE stream) ─────────────────────
+// See docs/features/active/api-client-request-runs.md. One `data:` frame per
+// event, flat JSON with a `type` discriminator.
+
+export type ApiRunMode = "requestWithDeps" | "subtree" | "explicit";
+
+/** Body of `POST /api/api-client/run`. */
+export interface ApiRunRequest {
+    mode: ApiRunMode;
+    collectionId: string;
+    /** Set when the collection lives under a linked root (`collection.origin.rootId`). */
+    linkedRootId?: string | null;
+    /** requestWithDeps: the request node id the chain resolves and ends with. */
+    requestId?: string;
+    /** subtree: folder node id — or the collection id for a whole-collection run. */
+    nodeId?: string;
+    /** explicit: caller-supplied request node ids, run in the given order. */
+    requestIds?: string[];
+    /** The collection-scoped environment layer. */
+    activeEnvironmentId?: string | null;
+    /** The global environment layer, applied underneath the scoped one. */
+    globalEnvironmentId?: string | null;
+    /** Abort the run after the first failed step. */
+    stopOnError: boolean;
+    /** Sleep between steps (server caps at 10s). */
+    delayMs: number;
+}
+
+export interface ApiRunPlanStep {
+    index: number;
+    requestId: string;
+    name: string;
+}
+
+/** One variable captured into scope by a completed step's capture rules. */
+export interface ApiRunCapturedVariable {
+    targetVariable: string;
+    source: string;
+}
+
+export type ApiRunAbortReason = "stopOnError" | "cancelled";
+
+export type ApiRunEvent =
+    | { type: "plan"; runId: string; steps: ApiRunPlanStep[] }
+    | { type: "stepStarted"; index: number; requestId: string; name: string }
+    | {
+          type: "stepCompleted";
+          index: number;
+          requestId: string;
+          status: number;
+          durationMs: number;
+          captured: ApiRunCapturedVariable[];
+          response: ApiClientExecutionResponse;
+      }
+    | {
+          type: "stepFailed";
+          index: number;
+          requestId: string;
+          status?: number | null;
+          /** Null when the step never reached the wire (plan/mid-step abort). */
+          durationMs?: number | null;
+          error: string;
+          response?: ApiClientExecutionResponse | null;
+      }
+    | { type: "aborted"; reason: ApiRunAbortReason; completedSteps: number }
+    | {
+          type: "done";
+          completedSteps: number;
+          failedSteps: number;
+          durationMs: number;
+      };
 
 // ── Service Bus ──────────────────────────────────────────────────────────────

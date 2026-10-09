@@ -19,6 +19,7 @@ import { CollectionVariableEditor } from "./CollectionVariableEditor";
 import { RequestTabStrip } from "./RequestTabStrip";
 import { CollectionExportDialog } from "./CollectionExportDialog";
 import { GitDrawer } from "./GitDrawer";
+import { RunResultsDrawer } from "./RunResultsDrawer";
 import { apiSubpathWithin } from "@/lib/linked-root-utils";
 import { ResizablePanels } from "@/components/ui/ResizablePanels";
 
@@ -300,6 +301,8 @@ function ApiClientPageContent() {
                         onReloadRoot={ctx.handleReloadRoot}
                         onRemoveRoot={ctx.handleRemoveRoot}
                         onRevealPath={ctx.handleRevealPath}
+                        onRunSubtree={ctx.handleRunSubtree}
+                        onRunSelection={ctx.handleRunSelection}
                         onOpenGit={(root) => {
                             if (!root.repositoryRoot) return;
                             ctx.handleOpenGit({
@@ -379,6 +382,16 @@ function ApiClientPageContent() {
                     onClose={() => ctx.setShowGitPanel(false)}
                 />
             )}
+
+            {/* Run results — opens itself when a run starts (every run entry
+          point calls setRunDrawerOpen(true)); closing it does not stop the run. */}
+            {ctx.runDrawerOpen && (
+                <RunResultsDrawer
+                    state={ctx.runState}
+                    onAbort={ctx.abortRun}
+                    onClose={() => ctx.setRunDrawerOpen(false)}
+                />
+            )}
         </div>
     );
 }
@@ -427,6 +440,11 @@ function ActiveEditorPane() {
             variableScope={ctx.variableScope}
             environments={ctx.environments}
             captureWarnings={tabState.response?.captureWarnings ?? []}
+            collection={tabs.activeCollection ?? null}
+            requestNodeId={tabs.activeTab?.nodeId}
+            onSendWithDeps={tabs.handleSendWithDeps}
+            runOptions={ctx.runOptions}
+            onRunOptionsChange={ctx.setRunOptions}
         />
     );
 }
