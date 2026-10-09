@@ -2,12 +2,12 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { ChevronRight, ChevronDown, Mail, MailX, Folder, Search, ArrowUp, ArrowDown } from "lucide-react";
 import { useSbQueues, useSbTopics, useSbSubscriptions } from "@/lib/hooks";
 import { QueryState } from "@/components/shared/QueryState";
-import type { SbEntityInfo } from "@/lib/types";
+import type { SbEntityInfo, SbViewMode } from "@/lib/types";
 
 interface Props {
   nsId: string | null;
   selectedEntity: SbEntityInfo | null;
-  onSelectEntity: (entity: SbEntityInfo, viewMode?: "active" | "dlq") => void;
+  onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
 }
 
 type SortCol = "name" | "active" | "dlq" | "sched";
@@ -20,8 +20,8 @@ function CountBadge({
 }: {
   entity: SbEntityInfo;
   count: number | undefined;
-  mode?: "active" | "dlq";
-  onSelectEntity: (entity: SbEntityInfo, viewMode?: "active" | "dlq") => void;
+  mode?: SbViewMode;
+  onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
 }) {
   const value = count ?? 0;
   if (value > 0 && mode) {
@@ -32,9 +32,11 @@ function CountBadge({
         className={`rounded px-1.5 py-0.5 hover:opacity-80 ${
           mode === "dlq"
             ? "bg-destructive/20 text-destructive"
-            : "bg-secondary text-secondary-foreground"
+            : mode === "scheduled"
+              ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+              : "bg-secondary text-secondary-foreground"
         }`}
-        title={`Open ${mode === "dlq" ? "dead-letter" : "active"} messages`}
+        title={`Open ${mode === "dlq" ? "dead-letter" : mode === "scheduled" ? "scheduled" : "active"} messages`}
       >
         {value}
       </button>
@@ -57,7 +59,7 @@ function EntityStatsBadges({
   dlqRollup,
 }: {
   entity: SbEntityInfo;
-  onSelectEntity: (entity: SbEntityInfo, viewMode?: "active" | "dlq") => void;
+  onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
   /**
    * Rolled-up dead-letter count across a topic's subscriptions. Topics have no active/scheduled
    * count of their own, but a DLQ backlog on a subscription underneath is worth surfacing even
@@ -97,7 +99,7 @@ function EntityStatsBadges({
     <span className="ml-auto flex gap-1 text-xs">
       <CountBadge entity={entity} count={entity.stats.activeMessageCount} mode="active" onSelectEntity={onSelectEntity} />
       <CountBadge entity={entity} count={entity.stats.deadLetterMessageCount} mode="dlq" onSelectEntity={onSelectEntity} />
-      <CountBadge entity={entity} count={entity.stats.scheduledMessageCount} onSelectEntity={onSelectEntity} />
+      <CountBadge entity={entity} count={entity.stats.scheduledMessageCount} mode="scheduled" onSelectEntity={onSelectEntity} />
     </span>
   );
 }
@@ -359,7 +361,7 @@ function TopicRow({
   isExpanded: boolean;
   onToggle: (name: string) => void;
   selectedEntity: SbEntityInfo | null;
-  onSelectEntity: (entity: SbEntityInfo, viewMode?: "active" | "dlq") => void;
+  onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
   treeRef: React.RefObject<HTMLDivElement | null>;
 }) {
   // Only while expanded. This used to fetch unconditionally so the collapsed rollup badge stayed
@@ -462,7 +464,7 @@ function SubscriptionRows({
   isLoading: boolean;
   isError: boolean;
   selectedEntity: SbEntityInfo | null;
-  onSelectEntity: (entity: SbEntityInfo, viewMode?: "active" | "dlq") => void;
+  onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
   treeRef: React.RefObject<HTMLDivElement | null>;
 }) {
   // A fetch failure here must not look like "this topic has no subscriptions" — same class of

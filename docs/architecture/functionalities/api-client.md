@@ -3,7 +3,8 @@
 ## What Is Supported
 
 - **Local collections and requests** — named collections with folder/request hierarchy, persisted through `CollectionRepository` to `collections.json` using atomic write and `.bak` recovery. Every write goes through `useUpdateCollections`, which takes an updater function evaluated against the freshest stored collections and serializes saves on one mutation scope — a `PUT` replaces the whole store, so a save derived from a render snapshot taken before an in-flight save landed would silently discard it.
-- **Git repositories for API files** — user-picked repository folders, persisted per machine with an optional API subpath. The repository is treated as a folder that happens to hold API files; SwebKit does not load collections *from* it (see Current Deferrals).
+- **Linked collection roots** — folders on disk holding a `.swebkit-api/` tree (`swebkit.json` root manifest, collections as directories, `.swebreq.json` per request, `.swebenv.json` environments, `folder.json` ordering) loaded beside local collections and shown as their own tree sections. Mutations route by origin to per-node `/api/linked-roots` endpoints (file-level writes, not the whole-store PUT); request saves carry a content stamp and a mismatch yields a 409 reload/overwrite conflict. A root inside a git repo surfaces its branch and changed-file count and deep-links into the Git panel with the API subpath preconfigured; collection/file imports can target a linked root directly. Roots are never touched in demo mode.
+- **Git repositories for API files** — user-picked repository folders, persisted per machine with an optional API subpath, typically a linked root's repository (see above). Staging and committing are scoped to the configured API subpath.
 - **Safe Git actions** — branch awareness and switching, branch creation, a changed-file list with staged/unstaged/conflicted sections, per-file stage/unstage/revert, in-app original/current diff preview, commit with a preview of the exact staged files, push, pull, and provider-inferred remote compare links for GitHub/Azure DevOps. Staging and committing are scoped to the configured API subpath, and a commit is refused when files outside it are staged.
 - **Workflow trust UI** — commit preview listing the exact staged files, a confirmation naming every file before a revert, and save-conflict actions on the collections file: Reload, Overwrite, Save as copy.
 - **Variable substitution** — `{{token}}` syntax in URL, headers, body, GraphQL query, and GraphQL variables. Environment variables override collection variables on the same key.
@@ -23,7 +24,7 @@
 - **GraphQL** — query and variables editors, operation parsing, schema introspection cache, GraphQL error rendering, and `graphql-ws` subscriptions.
 - **WebSocket** — URL/headers/subprotocol, connection state, bounded virtualized message log, text/binary composer, and saved message templates.
 - **Export/import** — SwebKit-native JSON, Postman v2.1 subset import/export, Bruno export, standalone environment import, and full configuration bundle integration.
-- **cURL portability** — copy selected REST/GraphQL requests as masked cURL commands (a masked `-H`/`-u` auth line or query-param suffix per auth type, matching what `SidecarAuthHeaderBuilder` actually sends — never the real secret; an inherited auth is called out as a comment since resolving the request→folder→collection chain client-side is not implemented) and import cURL commands into the active request target collection.
+- **cURL portability** — copy selected REST/GraphQL requests as masked cURL commands (a masked `-H`/`-u` auth line or query-param suffix per auth type, matching what `SidecarAuthHeaderBuilder` actually sends — never the real secret; an inherited auth is called out as a comment since resolving the request→folder→collection chain client-side is not implemented) and import cURL commands (single or multi-command paste, `^`/`\` continuations, `-F` form fields, cookie/user-agent/referer shortcuts, ignored-flag warnings) into a chosen collection/folder or as a scratch preview.
 - **Variable inspector** — list request tokens with source metadata and masked/resolved values.
 - **Response examples** — save named response examples onto a request, persisted with the collection. `Authorization`, `Set-Cookie` and similar headers are dropped and secret-looking header values redacted before an example is written, because collections can be committed to Git. Saved examples are clickable and shown with a "viewing saved example" banner and a return-to-live action.
 - **Request tabs** — always on. A tab strip keeps several requests open at once, each with its own draft, dirty state, in-flight send and response history.
@@ -32,7 +33,9 @@
 
 - Pre-request scripts, arbitrary code execution, hosted collaboration, mock servers, gRPC, and automatic cookie jar remain out of scope.
 - **OAuth 2 authorization code / PKCE** — the editor can retain imported authorization-code fields, but the sidecar deliberately implements client credentials only; authorization-code requests are sent without an injected token until a Tauri-native browser/callback flow exists.
-- **Linked `.swebkit-api` collection roots** — loading collections and environments directly from a repository with content-stamp conflict detection has no current React equivalent. The app treats a repository as a folder containing API files and scopes Git operations to a configured subpath instead.
+- **Bruno write-back** — linked roots can carry a `BrunoSyncFolderPath`, but mirror-writes to `.bru` files are not implemented; importing a Bruno folder into a linked root stores `.swebreq.json` files.
+- **Linked-root fs-watching** — external edits to a linked root are caught by the content stamp at save time (→ 409 conflict) or by a manual Reload; there is no file-system watcher.
+- **Cross-source moves** — requests cannot be dragged between the internal store and a linked collection (export → import is the path).
 - **Git rebase, stash, merge and conflict resolution** — conflicted files are listed and can be diffed, but not resolved in-app. `pull` and `push` are implemented.
 
 ## Core Runtime Flow
@@ -72,16 +75,16 @@ than inside `ResponseViewer` so it survives a remount and stays scoped per tab.
 
 Shared presentation modules, so no surface invents its own vocabulary:
 
-| Module                                            | Responsibility                                            |
-| ------------------------------------------------- | --------------------------------------------------------- |
-| `components/api-client/method-badge.tsx`          | `METHOD_META`, `MethodBadge`, `statusTone`, `CountBadge`   |
-| `lib/codemirror-theme.ts`                         | `swebkitHighlighting()` — one theme for every editor       |
-| `lib/response-body.ts`                            | language selection and the render-mode size thresholds     |
-| `lib/bodyHighlight.ts`                            | token-based highlighting for the small-body `<pre>` path    |
-| `lib/api-client-format.ts`                        | `formatBytes`, `formatElapsed`                             |
-| `lib/response-example.ts`                         | example construction and header scrubbing                  |
-| `lib/git-remote.ts` / `lib/git-status-format.ts`  | compare-URL inference; file section/action/label rules      |
-| `components/ui/resizable-widths.ts`               | pure `fr` resolution and drag maths                        |
+| Module                                           | Responsibility                                           |
+| ------------------------------------------------ | -------------------------------------------------------- |
+| `components/api-client/method-badge.tsx`         | `METHOD_META`, `MethodBadge`, `statusTone`, `CountBadge` |
+| `lib/codemirror-theme.ts`                        | `swebkitHighlighting()` — one theme for every editor     |
+| `lib/response-body.ts`                           | language selection and the render-mode size thresholds   |
+| `lib/bodyHighlight.ts`                           | token-based highlighting for the small-body `<pre>` path |
+| `lib/api-client-format.ts`                       | `formatBytes`, `formatElapsed`                           |
+| `lib/response-example.ts`                        | example construction and header scrubbing                |
+| `lib/git-remote.ts` / `lib/git-status-format.ts` | compare-URL inference; file section/action/label rules   |
+| `components/ui/resizable-widths.ts`              | pure `fr` resolution and drag maths                      |
 
 ## Send Path
 
@@ -123,21 +126,24 @@ fixed argument array, passes paths after `--`, and validates the repository dire
 
 ## State Persistence
 
-| State                              | Location                                              | Lifetime                                    |
-| ---------------------------------- | ----------------------------------------------------- | ------------------------------------------- |
-| Collections and requests           | `AppData/collections.json`                            | Persistent                                  |
-| Environments and API UI state      | `AppData/environments.json`                           | Persistent                                  |
-| Response examples                  | `HttpRequestEntry.responseExamples`                   | Persistent with the request, secrets scrubbed |
-| Secret values                      | OS keychain via `secrets.rs`                          | Persistent outside repo files               |
-| Granted repository roots           | `<appConfigDir>/granted-roots.json` (Rust-side)       | Persistent — the Git authorization list     |
-| Selected repository + API subpath  | `localStorage: api-client-git-repos`                  | Persistent, machine-local, selection only   |
-| Panel widths                       | `localStorage: panel-widths:api-client-panels`        | Persistent, versioned (reset on version bump) |
-| Response wrap / Git drawer width   | `localStorage: view-pref:*`                           | Persistent                                  |
-| Response history                   | `TabState.history` in `ApiClientPage`                 | Session only, per tab, capped at 20         |
-| Open request tabs                  | `ApiClientPage` state                                 | Session only (not persisted across restart) |
-| WebSocket message log              | `WebSocketPanel` state                                | Session/request only                        |
-| GraphQL subscription messages      | `GraphQlPanel` state                                  | Session/request only                        |
-| Generated sample values            | request scope/preview only                            | Not persisted                               |
+| State                             | Location                                        | Lifetime                                      |
+| --------------------------------- | ----------------------------------------------- | --------------------------------------------- |
+| Collections and requests          | `AppData/collections.json`                      | Persistent                                    |
+| Linked-root collections/requests  | `<root>/.swebkit-api/**` (`.swebreq.json` each) | Persistent — user-owned folder, git-able      |
+| Linked-root environments          | `<root>/.swebkit-api/**` (`.swebenv.json`)      | Persistent — user-owned folder, git-able      |
+| Linked-root registrations         | `AppData/api-linked-roots.json`                 | Persistent                                    |
+| Environments and API UI state     | `AppData/environments.json`                     | Persistent                                    |
+| Response examples                 | `HttpRequestEntry.responseExamples`             | Persistent with the request, secrets scrubbed |
+| Secret values                     | OS keychain via `secrets.rs`                    | Persistent outside repo files                 |
+| Granted repository roots          | `<appConfigDir>/granted-roots.json` (Rust-side) | Persistent — the Git authorization list       |
+| Selected repository + API subpath | `localStorage: api-client-git-repos`            | Persistent, machine-local, selection only     |
+| Panel widths                      | `localStorage: panel-widths:api-client-panels`  | Persistent, versioned (reset on version bump) |
+| Response wrap / Git drawer width  | `localStorage: view-pref:*`                     | Persistent                                    |
+| Response history                  | `TabState.history` in `ApiClientPage`           | Session only, per tab, capped at 20           |
+| Open request tabs                 | `ApiClientPage` state                           | Session only (not persisted across restart)   |
+| WebSocket message log             | `WebSocketPanel` state                          | Session/request only                          |
+| GraphQL subscription messages     | `GraphQlPanel` state                            | Session/request only                          |
+| Generated sample values           | request scope/preview only                      | Not persisted                                 |
 
 ## Security and Safety Notes
 

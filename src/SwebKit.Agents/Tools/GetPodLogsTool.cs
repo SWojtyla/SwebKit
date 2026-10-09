@@ -26,7 +26,11 @@ public sealed class GetPodLogsTool : IAccessAwareTool
 
     public string Description =>
         "Returns the most recent log lines from a Kubernetes pod container. " +
-        "Defaults to the last 100 lines of the first container.";
+        "Defaults to the last 100 lines of the first container. " +
+        "Reading a pod's logs uses the pods/log subresource and does NOT require " +
+        "pods list rights — when a pod name is known (e.g. it is one of the " +
+        "logPods/selectedPod in the user's screen state), call this directly even " +
+        "if list_pods was denied for the namespace.";
 
     public FeatureArea FeatureArea => FeatureArea.Aks;
 

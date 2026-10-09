@@ -8,4 +8,5 @@ Quick-reference files for recurring bugs in this codebase. Add an entry to the r
 | [api-client.md](api-client.md)         | API client: fields that reach the wire without `{{variable}}` substitution or visibility, write-only secret inputs |
 | [azure-sdk.md](azure-sdk.md)           | Azure SDK auth, connection strings, `AsyncPageable` resource management                               |
 | [dotnet-csharp.md](dotnet-csharp.md)   | General .NET / C# traps (`required`, cancellation, nullability)                                       |
+| [scripts-tooling.md](scripts-tooling.md) | `scripts/tauri/` launchers and MSI build: PowerShell 5.1 encoding and native stderr, test files breaking `tsc -b` |
 | [agent-workflow.md](agent-workflow.md) | AI agent workflow mistakes (status drift, missing pitfalls, architecture drift)                       |

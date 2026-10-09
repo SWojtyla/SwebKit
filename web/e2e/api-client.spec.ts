@@ -409,7 +409,8 @@ test.describe("API Client", () => {
             );
 
         // Configure a Key Vault in Settings so the picker has something to list.
-        await page.goto("/settings");
+        // The section lives on the API Client tab — deep-link straight to it.
+        await page.goto("/settings?tab=api-client");
         await expect(page.getByTestId("key-vaults-section")).toBeVisible();
         const existingVaultCount = await page
             .locator('[data-testid^="kv-name-"]')
@@ -483,7 +484,7 @@ test.describe("API Client", () => {
         await expect(page.getByTestId("env-var-vault-0")).toHaveCount(0);
 
         // Removing the vault in Settings takes it out of the list.
-        await page.goto("/settings");
+        await page.goto("/settings?tab=api-client");
         await expect(page.getByTestId("key-vaults-section")).toBeVisible();
         const countBeforeRemove = await page
             .locator('[data-testid^="kv-name-"]')
@@ -1074,7 +1075,7 @@ test.describe("API Client", () => {
         // Debounced parse shows the resolved method + URL before committing.
         await expect(page.getByTestId("curl-import-preview")).toBeVisible();
         await expect(page.getByTestId("curl-import-preview")).toContainText(
-            "Post",
+            "POST",
         );
 
         await page

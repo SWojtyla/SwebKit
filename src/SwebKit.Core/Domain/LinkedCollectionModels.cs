@@ -47,6 +47,32 @@ public sealed class LinkedEnvironmentFileState
     public string EnvironmentFilePath { get; init; } = string.Empty;
 }
 
+/// <summary>
+/// Wire shape of one registered linked root as returned by the collections store's
+/// <c>linkedRoots</c> array and <c>GET /api/linked-roots</c>. Disabled roots are still listed
+/// but carry no collections — they are never loaded from disk.
+/// </summary>
+public sealed class LinkedCollectionRootSummary
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string Path { get; init; } = string.Empty;
+    public string ApiRootPath { get; init; } = string.Empty;
+    public bool IsEnabled { get; init; }
+    public bool IsGitRepository { get; init; }
+    public string? RepositoryRoot { get; init; }
+    public string? Branch { get; init; }
+    public int ChangedFileCount { get; init; }
+    public bool IsValid { get; init; }
+    public IReadOnlyList<string> Diagnostics { get; init; } = [];
+    public IReadOnlyList<ApiCollection> Collections { get; init; } = [];
+    public IReadOnlyList<ApiEnvironment> Environments { get; init; } = [];
+    public IReadOnlyList<LinkedRequestFileState> RequestFiles { get; init; } = [];
+    public IReadOnlyList<LinkedEnvironmentFileState> EnvironmentFiles { get; init; } = [];
+    public string? BrunoSyncFolderPath { get; init; }
+    public bool BrunoSyncEnabled { get; init; }
+}
+
 public sealed class LinkedRequestFileState
 {
     public string RequestId { get; init; } = string.Empty;

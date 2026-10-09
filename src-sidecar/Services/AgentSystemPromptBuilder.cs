@@ -96,7 +96,10 @@ public sealed class AgentSystemPromptBuilder
               - A tool result with "status": "access_denied" means the signed-in identity lacks
                 that permission — do not retry it. Collect each one and close the report with an
                 "Access gaps" section naming the requiredAccess role for each, so the user knows
-                exactly what to request.
+                exactly what to request. A denial applies to that verb on that target only —
+                Kubernetes RBAC is per verb and per namespace, so a denied pod list does NOT prove
+                pod logs or status are denied; when a specific pod is named or visible in the
+                user's screen state, try get_pod_logs/get_pod_status on it directly.
               - Tools may be skipped without running when access is already known to be denied
                 for that connection — such results carry "status": "access_denied" with
                 "cached": true; treat them exactly like a live denial.
@@ -287,7 +290,11 @@ public sealed class AgentSystemPromptBuilder
                   WAF, Application Gateway, and diagnostic-setting logs land).
                 - A tool result with "status": "access_denied" means the signed-in identity lacks
                   that permission — do not retry it; report it as an access gap naming the
-                  requiredAccess role, and keep investigating with what you can reach.
+                  requiredAccess role, and keep investigating with what you can reach. A denial
+                  applies to that verb on that target only — Kubernetes RBAC is per verb and per
+                  namespace, so a denied pod list does NOT prove pod logs or status are denied;
+                  when a specific pod is named or visible in the user's screen state, try
+                  get_pod_logs/get_pod_status on it directly.
                 - Tools may be skipped without running when access is already known to be denied
                   for that connection — such results carry "status": "access_denied" with
                   "cached": true; treat them exactly like a live denial.
@@ -310,7 +317,11 @@ public sealed class AgentSystemPromptBuilder
               WAF, Application Gateway, and diagnostic-setting logs land).
             - A tool result with "status": "access_denied" means the signed-in identity lacks
               that permission — do not retry it; report it as an access gap naming the
-              requiredAccess role, and keep investigating with what you can reach.
+              requiredAccess role, and keep investigating with what you can reach. A denial
+              applies to that verb on that target only — Kubernetes RBAC is per verb and per
+              namespace, so a denied pod list does NOT prove pod logs or status are denied;
+              when a specific pod is named or visible in the user's screen state, try
+              get_pod_logs/get_pod_status on it directly.
             - Tools may be skipped without running when access is already known to be denied
               for that connection — such results carry "status": "access_denied" with
               "cached": true; treat them exactly like a live denial.

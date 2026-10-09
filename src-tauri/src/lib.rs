@@ -13,7 +13,7 @@ use native::{
     write_clipboard, read_clipboard,
     show_notification,
     read_file, write_file, list_dir,
-    restore_allowed_root,
+    restore_allowed_root, reveal_in_explorer,
     AllowedRoots,
 };
 use pod_shell::{start_pod_shell, write_pod_shell, resize_pod_shell, close_pod_shell, PodShellState};
@@ -127,6 +127,7 @@ pub fn run() {
             write_file,
             list_dir,
             restore_allowed_root,
+            reveal_in_explorer,
             save_secret,
             get_secret,
             delete_secret,

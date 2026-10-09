@@ -13,6 +13,7 @@ import {
     FileArchive,
 } from "lucide-react";
 import {
+    useSbCancelScheduled,
     useSbCompleteMessages,
     useSbCompleteDlq,
     useSbResubmitDlq,
@@ -26,7 +27,13 @@ import {
     saveViewPreference,
 } from "@/lib/stores/panel-preferences";
 import { tryPrettifyJson } from "@/lib/pretty-json";
-import type { SbEntityInfo, SbMessage, SbMessageTemplate } from "@/lib/types";
+import { isScheduledMessage } from "./filterLogic";
+import type {
+    SbEntityInfo,
+    SbMessage,
+    SbMessageTemplate,
+    SbViewMode,
+} from "@/lib/types";
 import { messageToDownloadObject, safeFileName } from "./exportHelpers";
 import {
     requiresSessions,
@@ -42,7 +49,7 @@ interface Props {
     message: SbMessage | null;
     nsId: string | null;
     entity: SbEntityInfo | null;
-    viewMode: "active" | "dlq";
+    viewMode: SbViewMode;
     onClose?: () => void;
     onEditResubmit?: (message: SbMessage) => void;
     onReplay?: (message: SbMessage) => void;
@@ -65,6 +72,8 @@ export function MessageDetail({
     const completeMutation = useSbCompleteMessages();
     const completeDlqMutation = useSbCompleteDlq();
     const resubmitMutation = useSbResubmitDlq();
+    const cancelScheduledMutation = useSbCancelScheduled();
+    const scheduled = message ? isScheduledMessage(message) : false;
     // Session-required entities reject the plain receivers these settle actions ride on — gate
     // them with an explanation rather than surfacing the broker's opaque error after the click.
     const sessionBlocked = requiresSessions(entity);
@@ -245,6 +254,21 @@ export function MessageDetail({
         );
     };
 
+    const onCancelScheduled = () => {
+        if (!nsId || !entity || message.sequenceNumber == null) return;
+        cancelScheduledMutation.mutate(
+            {
+                nsId,
+                entityPath: entity.entityPath,
+                sequenceNumber: message.sequenceNumber,
+            },
+            {
+                onSuccess: () =>
+                    notify("success", "Scheduled message cancelled"),
+            },
+        );
+    };
+
     const onSaveAsTemplate = () => {
         if (!templateName.trim()) return;
         const template: SbMessageTemplate = {
@@ -295,6 +319,18 @@ export function MessageDetail({
                             Message ID: {message.messageId} · Seq: #
                             {message.sequenceNumber}
                         </p>
+                        {scheduled && (
+                            <span
+                                data-testid="message-detail-scheduled-badge"
+                                className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+                            >
+                                <Clock className="h-3 w-3" />
+                                Scheduled — fires{" "}
+                                {formatLocalDateTime(
+                                    message.scheduledEnqueueTime!,
+                                )}
+                            </span>
+                        )}
                     </div>
                     <div className="flex shrink-0 flex-wrap justify-end gap-2">
                         {onClose && (
@@ -307,13 +343,25 @@ export function MessageDetail({
                                 <X className="h-3.5 w-3.5" />
                             </button>
                         )}
-                        {viewMode === "active" && (
+                        {/* A scheduled message can't be settled (no receiver sees it yet) —
+                            the only meaningful per-message op is sender-side cancel. */}
+                        {scheduled && (
+                            <button
+                                data-testid="message-cancel-scheduled"
+                                onClick={onCancelScheduled}
+                                disabled={cancelScheduledMutation.isPending}
+                                title="Cancel this scheduled message — it never fires"
+                                className="rounded-md border border-destructive/40 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                            >
+                                Cancel schedule
+                            </button>
+                        )}
+                        {viewMode === "active" && !scheduled && (
                             <button
                                 data-testid="message-complete-button"
                                 onClick={onComplete}
                                 disabled={
-                                    completeMutation.isPending ||
-                                    sessionBlocked
+                                    completeMutation.isPending || sessionBlocked
                                 }
                                 title={
                                     sessionBlocked
@@ -729,6 +777,16 @@ export function MessageDetail({
                         <Field
                             label="Enqueued At"
                             value={formatLocalDateTime(message.enqueuedAt)}
+                        />
+                        <Field
+                            label="Scheduled For"
+                            value={
+                                message.scheduledEnqueueTime
+                                    ? formatLocalDateTime(
+                                          message.scheduledEnqueueTime,
+                                      )
+                                    : null
+                            }
                         />
                         <Field
                             label="Sequence Number"

@@ -415,6 +415,26 @@ public class AccessRequestArtifactEndpointTests
     }
 
     [Fact]
+    public async Task Request_DemoMode_NoPrincipalLookup()
+    {
+        // Demo artifacts never touch the real credential — the DefaultAzureCredential
+        // chain (az CLI, IMDS, …) can take seconds on a clean machine and the demo
+        // must stay deterministic. The artifact degrades to a null principal instead.
+        var (profile, _) = CreateProfile();
+        var demo = new DemoModeService { IsDemoMode = true };
+        var principal = new StubPrincipalContext(UserPrincipal);
+
+        var artifact = Artifact(await Invoke(
+            profile, demo, principal, "Sql",
+            DemoModeService.DemoSqlConnectionIdRestricted, "sql.metadata"));
+
+        Assert.Equal(0, principal.Calls);
+        Assert.Null(artifact.Principal);
+        Assert.Equal("VIEW DEFINITION", artifact.Role);
+        Assert.Equal("GRANT VIEW DEFINITION TO [<your-login>];", artifact.GrantStatement);
+    }
+
+    [Fact]
     public async Task Request_SqlGrant_SubstitutesPrincipalIntoStatement()
     {
         var (profile, demo) = CreateProfile();

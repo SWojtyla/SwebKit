@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Service Bus UX prototypes</title>
+<style>
+  :root { --bg:#12141c; --card:#1a1d29; --card2:#20242f; --border:#2a2e3d; --fg:#eef0f6; --muted:#8a8f9f; --primary:#8b8cf8; }
+  * { box-sizing:border-box; margin:0; font:14px/1.55 "Segoe UI",system-ui,sans-serif; }
+  body { background:var(--bg); color:var(--fg); max-width:960px; margin:0 auto; padding:40px 24px; }
+  h1 { font-size:22px; margin-bottom:6px; }
+  .sub { color:var(--muted); margin-bottom:28px; }
+  .card { display:block; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px 20px; margin-bottom:14px; color:inherit; text-decoration:none; }
+  .card:hover { border-color:var(--primary); }
+  .card h2 { font-size:16px; margin-bottom:4px; }
+  .card h2 span { color:var(--primary); font-size:12px; margin-left:8px; }
+  .card p { color:var(--muted); font-size:13px; }
+  .tags { margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; }
+  .tag { font-size:11px; border:1px solid var(--border); border-radius:12px; padding:2px 10px; color:var(--muted); }
+  table { width:100%; border-collapse:collapse; margin-top:26px; font-size:12px; }
+  th,td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-size:10px; letter-spacing:1px; text-transform:uppercase; }
+  td:first-child { color:var(--muted); }
+</style>
+</head>
+<body>
+<h1>Service Bus — UX layout prototypes</h1>
+<p class="sub">Three directions for decluttering the feature. Click a card to open the interactive mock. Nothing here is wired — evaluate the shape, not the pixels.</p>
+
+<a class="card" href="zones.html">
+  <h2>A — Zones <span>structured regions</span></h2>
+  <p>Three labelled regions — <b>Navigate / Browse / Inspect</b> — each owning its tools. The global toolbar disappears; actions live in the zone they act on. Detail is a permanent docked zone, not an overlay.</p>
+  <div class="tags"><span class="tag">keeps 3-pane model</span><span class="tag">clear action scoping</span><span class="tag">least re-learning</span></div>
+</a>
+
+<a class="card" href="ribbon.html">
+  <h2>B — Ribbon <span>Office-style tabs</span></h2>
+  <p>All ~20 commands organized into 4 ribbon tabs (<b>Home / Messages / DLQ &amp; Recovery / View</b>) with labelled groups and big primary buttons. Collapses to a tab strip. Destructive ops get their own visually-separated group.</p>
+  <div class="tags"><span class="tag">everything labelled</span><span class="tag">discovery-friendly</span><span class="tag">heavier chrome</span></div>
+</a>
+
+<a class="card" href="minimal.html">
+  <h2>C — Progressive disclosure <span>hide by default</span></h2>
+  <p>One line of chrome: breadcrumb, counts, Active/DLQ, Compose, ⋯. Entities, filters, view prefs and batch ops live in on-demand overlays. Hover reveals per-row actions; a selected message opens a bottom drawer.</p>
+  <div class="tags"><span class="tag">max list space</span><span class="tag">cleanest default</span><span class="tag">power features buried</span></div>
+</a>
+
+<table>
+  <tr><th></th><th>Visible controls at rest</th><th>Clicks to reach "DLQ triage"</th><th>Message detail</th><th>Learning curve</th></tr>
+  <tr><td>Today</td><td>~20 across 3 bars</td><td>2</td><td>right panel</td><td>—</td></tr>
+  <tr><td>A · Zones</td><td>~8 (zone headers)</td><td>2</td><td>docked zone</td><td>low</td></tr>
+  <tr><td>B · Ribbon</td><td>4 tabs + open tab</td><td>2</td><td>right panel</td><td>low–med</td></tr>
+  <tr><td>C · Progressive</td><td>~6</td><td>3 (⋯ → Recovery)</td><td>bottom drawer</td><td>med</td></tr>
+</table>
+</body>
+</html>

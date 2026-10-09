@@ -135,7 +135,8 @@ test.describe("Service Bus", () => {
 
         await expect(page.getByTestId("message-list")).toBeVisible();
 
-        // Open advanced filter panel
+        // Open advanced filter panel — the toggle lives on the ribbon's Messages tab
+        await page.getByTestId("sb-tab-messages").click();
         await page.getByTestId("toggle-advanced-filter").click();
         await expect(page.getByTestId("advanced-filter-panel")).toBeVisible();
 
@@ -168,6 +169,7 @@ test.describe("Service Bus", () => {
         await expect(page.getByTestId("message-list")).toBeVisible();
 
         // Open advanced filter and add a rule for application property
+        await page.getByTestId("sb-tab-messages").click();
         await page.getByTestId("toggle-advanced-filter").click();
         await page.getByTestId("rule-add").click();
 
@@ -185,6 +187,176 @@ test.describe("Service Bus", () => {
             .getByTestId("message-list-no-matches")
             .count();
         expect(hasMatches > 0 || hasNoMatch > 0).toBeTruthy();
+    });
+
+    test("advanced filter on an application property supports date and number comparison", async ({
+        page,
+    }) => {
+        await page.goto("/service-bus");
+        await page
+            .getByTestId("sb-namespace-select")
+            .selectOption({ label: "orders-dev" });
+        await page.getByTestId("entity-tree-queue-order-created").click();
+
+        await expect(page.getByTestId("message-list")).toBeVisible();
+        const items = page
+            .getByTestId("message-list")
+            .locator("[data-testid^='message-item-']");
+        const initialCount = await items.count();
+        expect(initialCount).toBeGreaterThan(0);
+
+        await page.getByTestId("sb-tab-messages").click();
+        await page.getByTestId("toggle-advanced-filter").click();
+        await page.getByTestId("rule-add").click();
+        await page
+            .getByTestId("rule-field")
+            .selectOption("application-property");
+
+        // Date comparison on the NServiceBus-style TimeSent property.
+        await page.getByTestId("rule-property").fill("NServiceBus.TimeSent");
+        await page.getByTestId("rule-operator").selectOption("after");
+        await page.getByTestId("rule-value").fill("2999-01-01T00:00:00Z");
+        await expect(page.getByTestId("message-list-no-matches")).toBeVisible();
+
+        await page.getByTestId("rule-operator").selectOption("before");
+        await expect(page.getByTestId("message-list-no-matches")).toHaveCount(
+            0,
+        );
+        await expect(items).toHaveCount(initialCount);
+
+        // Numeric comparison on the demo "attempt" property (delivery count).
+        await page.getByTestId("rule-property").fill("attempt");
+        await page.getByTestId("rule-operator").selectOption("gt");
+        await page.getByTestId("rule-value").fill("9999");
+        await expect(page.getByTestId("message-list-no-matches")).toBeVisible();
+
+        await page.getByTestId("rule-operator").selectOption("lte");
+        await expect(page.getByTestId("message-list-no-matches")).toHaveCount(
+            0,
+        );
+        await expect(items).toHaveCount(initialCount);
+    });
+
+    test("scheduled view lists only scheduled messages with a cancel action", async ({
+        page,
+    }) => {
+        // Scheduled messages used to peek through the active list indistinguishable from
+        // ordinary ones — the stamp was dropped client-side. The Scheduled view splits them
+        // out and swaps the settle actions for sender-side cancel.
+        await page.goto("/service-bus");
+        await page
+            .getByTestId("sb-namespace-select")
+            .selectOption({ label: "orders-dev" });
+        await page.getByTestId("entity-tree-queue-order-scheduled").click();
+
+        await page.getByTestId("sb-view-scheduled").click();
+
+        // Demo seeds on order-scheduled: two scheduled (seqs 4520/4521) alongside two
+        // ordinary actives — the view keeps the scheduled slice only.
+        await expect(page.getByTestId("message-item-4520")).toBeVisible();
+        await expect(page.getByTestId("message-item-4521")).toBeVisible();
+        await expect(page.getByTestId("message-item-4518")).not.toBeVisible();
+
+        await page.getByTestId("message-item-4520").click();
+        await expect(page.getByTestId("message-detail")).toBeVisible();
+        await expect(
+            page.getByTestId("message-detail-scheduled-badge"),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId("message-cancel-scheduled"),
+        ).toBeVisible();
+        // A scheduled message can't be completed — no receiver ever sees it.
+        await expect(
+            page.getByTestId("message-complete-button"),
+        ).not.toBeVisible();
+    });
+
+    test("ribbon tabs switch groups and collapse to the tab strip", async ({
+        page,
+    }) => {
+        await page.goto("/service-bus");
+        await page
+            .getByTestId("sb-namespace-select")
+            .selectOption({ label: "orders-dev" });
+
+        // Home is the default tab.
+        await expect(page.getByTestId("sb-compose-button")).toBeVisible();
+
+        // Switching tabs swaps the command groups.
+        await page.getByTestId("sb-tab-view").click();
+        await expect(page.getByTestId("toggle-entity-tree")).toBeVisible();
+        await page.getByTestId("sb-tab-dlq").click();
+        await expect(page.getByTestId("sb-batch-replay-button")).toBeVisible();
+
+        // Clicking the active tab (or the chevron) collapses the ribbon to its strip.
+        await page.getByTestId("sb-ribbon-collapse").click();
+        await expect(page.getByTestId("sb-ribbon-body")).not.toBeVisible();
+        await page.getByTestId("sb-ribbon-collapse").click();
+        await expect(page.getByTestId("sb-ribbon-body")).toBeVisible();
+    });
+
+    test("filter chips surface active rules and remove them individually", async ({
+        page,
+    }) => {
+        // Active filters used to be invisible once the panel closed — the chips bar keeps
+        // every narrowing condition on screen as a removable chip.
+        await page.goto("/service-bus");
+        await page
+            .getByTestId("sb-namespace-select")
+            .selectOption({ label: "orders-dev" });
+        await page.getByTestId("entity-tree-queue-order-created").click();
+        await expect(page.getByTestId("filter-chip-bar")).toBeVisible();
+
+        await page.getByTestId("sb-tab-messages").click();
+        await page.getByTestId("toggle-advanced-filter").click();
+        await page.getByTestId("rule-add").click();
+        await page.getByTestId("rule-field").selectOption("delivery-count");
+        // `equals 0` narrows the seeded actives to nothing — exercises both the chip and
+        // the "X of Y" narrowing count (a match-all rule would read "N shown" instead).
+        await page.getByTestId("rule-operator").selectOption("equals");
+        await page.getByTestId("rule-value").fill("0");
+
+        const chip = page.locator("[data-testid^='filter-chip-rule-']");
+        await expect(chip).toHaveCount(1);
+        await expect(chip.first()).toContainText("Delivery Count");
+        await expect(page.getByTestId("filter-match-count")).toContainText(
+            "of",
+        );
+
+        // Removing the chip removes exactly that rule — the list widens again.
+        await chip.first().locator("button").click();
+        await expect(
+            page.locator("[data-testid^='filter-chip-rule-']"),
+        ).toHaveCount(0);
+    });
+
+    test("a relative-time rule filters by age, not an absolute instant", async ({
+        page,
+    }) => {
+        // Demo messages enqueue minutes ago, so "older than 1h" must match nothing while
+        // "within last 1h" keeps them all — an absolute-date-only filter can't express this.
+        await page.goto("/service-bus");
+        await page
+            .getByTestId("sb-namespace-select")
+            .selectOption({ label: "orders-dev" });
+        await page.getByTestId("entity-tree-queue-order-created").click();
+        await expect(page.getByTestId("message-list")).toBeVisible();
+
+        await page.getByTestId("sb-tab-messages").click();
+        await page.getByTestId("toggle-advanced-filter").click();
+        await page.getByTestId("rule-add").click();
+        await page.getByTestId("rule-field").selectOption("enqueued-time");
+        await page.getByTestId("rule-operator").selectOption("older-than");
+        await page.getByTestId("rule-duration-value").fill("1");
+        await page.getByTestId("rule-duration-unit").selectOption("h");
+
+        await expect(page.getByTestId("message-list-no-matches")).toBeVisible();
+
+        await page.getByTestId("rule-operator").selectOption("within-last");
+        await expect(page.getByTestId("message-list")).toBeVisible();
+        await expect(
+            page.locator("[data-testid^='message-item-']").first(),
+        ).toBeVisible();
     });
 
     test("filter count shows when filters are active", async ({ page }) => {
@@ -337,8 +509,8 @@ test.describe("Service Bus", () => {
     test("purge all shows confirmation dialog and can cancel", async ({
         page,
     }) => {
-        // Purge All lives in the entity-level toolbar (next to Active/DLQ), not the per-message
-        // action row, so it never requires a message to be selected.
+        // Purge All lives on the ribbon's DLQ & Recovery tab — an entity-level command,
+        // not a per-message action, so it never requires a message to be selected.
         await page.goto("/service-bus");
         await page
             .getByTestId("sb-namespace-select")
@@ -347,6 +519,7 @@ test.describe("Service Bus", () => {
         await expect(page.getByTestId("message-list")).toBeVisible();
 
         // Click purge - should show confirmation, not immediately purge
+        await page.getByTestId("sb-tab-dlq").click();
         await page.getByTestId("sb-purge-all-button").click();
         await expect(page.getByTestId("purge-confirm")).toBeVisible();
 
@@ -370,6 +543,7 @@ test.describe("Service Bus", () => {
         const messageRows = page.locator("[data-testid^='message-item-']");
         await expect(messageRows.first()).toBeVisible();
 
+        await page.getByTestId("sb-tab-dlq").click();
         await page.getByTestId("sb-purge-all-button").click();
         await expect(page.getByTestId("purge-confirm")).toBeVisible();
         await page.getByTestId("purge-confirm-yes").click();
@@ -426,6 +600,11 @@ test.describe("Service Bus", () => {
 
         await page.getByTestId("sb-compose-button").click();
         await expect(page.getByTestId("message-composer")).toBeVisible();
+        // The selected entity derives from URL params + topology queries and can
+        // resolve a beat after the composer mounts — the target field follows it.
+        await expect(page.getByTestId("composer-target-entity")).toHaveValue(
+            "order-created",
+        );
 
         // Fill in fields
         await page.getByTestId("composer-subject").fill("Test Subject");
@@ -547,7 +726,6 @@ test.describe("Service Bus", () => {
             .selectOption({ label: "orders-dev" });
         await page.getByTestId("entity-tree-queue-order-created").click();
 
-        await page.getByTestId("sb-actions-menu").click();
         await page.getByTestId("sb-batch-send-button").click();
         await expect(page.getByTestId("batch-send-panel")).toBeVisible();
 
@@ -577,9 +755,11 @@ test.describe("Service Bus", () => {
             .selectOption({ label: "orders-dev" });
         await page.getByTestId("entity-tree-queue-order-created").click();
 
-        await page.getByTestId("sb-actions-menu").click();
         await page.getByTestId("sb-batch-send-button").click();
         await expect(page.getByTestId("batch-send-panel")).toBeVisible();
+        await expect(page.getByTestId("batch-target-entity")).toHaveValue(
+            "order-created",
+        );
 
         // Paste JSON array with a single message
         const json = JSON.stringify([
@@ -603,7 +783,6 @@ test.describe("Service Bus", () => {
             .selectOption({ label: "orders-dev" });
         await page.getByTestId("entity-tree-queue-order-created").click();
 
-        await page.getByTestId("sb-actions-menu").click();
         await page.getByTestId("sb-scheduled-button").click();
         await expect(
             page.getByTestId("scheduled-messages-panel"),
@@ -763,7 +942,7 @@ test.describe("Service Bus", () => {
             .selectOption({ label: "orders-dev" });
         await page.getByTestId("entity-tree-queue-order-failed").click();
 
-        await page.getByTestId("sb-actions-menu").click();
+        await page.getByTestId("sb-tab-dlq").click();
         await page.getByTestId("sb-batch-replay-button").click();
         await expect(page.getByTestId("batch-replay-panel")).toBeVisible();
 
@@ -852,7 +1031,6 @@ test.describe("Service Bus", () => {
         await page.getByTestId("composer-send").click();
         await expect(page.getByTestId("message-composer")).not.toBeVisible();
 
-        await page.getByTestId("sb-actions-menu").click();
         await page.getByTestId("sb-scheduled-button").click();
         await expect(
             page.getByTestId("scheduled-messages-panel"),
@@ -1057,9 +1235,7 @@ test.describe("Service Bus", () => {
         // the entity's DLQ view.
         await page.getByTestId("sb-overview-dlq-order-created").click();
         await expect(page.getByTestId("message-list")).toBeVisible();
-        await expect(page.getByTestId("sb-view-dlq")).toHaveClass(
-            /border-primary/,
-        );
+        await expect(page.getByTestId("sb-view-dlq")).toHaveClass(/bg-primary/);
     });
 
     test("entity tree is resizable and the width survives a reload", async ({
@@ -1143,6 +1319,7 @@ test.describe("Service Bus", () => {
         await expect(
             page.getByTestId("message-complete-button"),
         ).toBeDisabled();
+        await page.getByTestId("sb-tab-dlq").click();
         await expect(page.getByTestId("sb-purge-all-button")).toBeDisabled();
     });
 

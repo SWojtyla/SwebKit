@@ -26,8 +26,8 @@ Folder maps and broad navigation conventions live in `codebase-guide.md`.
 
 ### Intent
 
-Render UI fast while the Rust shell spawns the sidecar on an OS-assigned port; never fire an API
-call before the port is known.
+Render UI fast while the Rust shell spawns the sidecar on a runtime-resolved port (stable 5199
+preferred, OS-assigned when taken); never fire an API call before the port is known.
 
 ### High-Level Sequence
 
@@ -54,8 +54,10 @@ sequenceDiagram
 
 ### Design Notes
 
-- Dev (`npm run dev` / Playwright) uses a **fixed** port `5199`; production asks Tauri for the
-  OS-assigned one — `initSidecarBaseUrl()` must resolve before any fetch fires.
+- Dev (`npm run dev` / Playwright) uses a **fixed** port `5199`; production passes port `0` and
+  the sidecar upgrades it to `5199` when free (`SidecarBindUrls`), else an OS-assigned one —
+  `initSidecarBaseUrl()` must resolve before any fetch fires. The effective address is always
+  published to `%LOCALAPPDATA%\SwebKit\sidecar-endpoint.json` for external MCP clients.
 - `refetchOnWindowFocus: false` is deliberate: alt-tab back must not replay a full
   namespace/cluster fan-out; volatile queries set their own short `staleTime`.
 - Program.cs wires `AppBootstrap.ConfigureCrashHandlers` first so even a startup throw lands in
@@ -213,10 +215,10 @@ sequenceDiagram
 
 ## Key Reference Points
 
-| File                                        | Responsibility                                              |
-| ------------------------------------------- | ----------------------------------------------------------- |
-| `src-sidecar/Program.cs`                    | DI root, CORS, global exception handler, endpoint mapping   |
-| `web/src/main.tsx`                          | QueryClient defaults, sidecar URL resolution, mount         |
-| `web/src/lib/api.ts`                        | `apiFetch`/`apiSend`, error-message extraction              |
-| `src-sidecar/Services/DemoModeService.cs`   | Demo-mode resource seeds                                    |
-| `src/SwebKit.Core/Configuration/*Repository` | Atomic JSON persistence                                    |
+| File                                         | Responsibility                                            |
+| -------------------------------------------- | --------------------------------------------------------- |
+| `src-sidecar/Program.cs`                     | DI root, CORS, global exception handler, endpoint mapping |
+| `web/src/main.tsx`                           | QueryClient defaults, sidecar URL resolution, mount       |
+| `web/src/lib/api.ts`                         | `apiFetch`/`apiSend`, error-message extraction            |
+| `src-sidecar/Services/DemoModeService.cs`    | Demo-mode resource seeds                                  |
+| `src/SwebKit.Core/Configuration/*Repository` | Atomic JSON persistence                                   |

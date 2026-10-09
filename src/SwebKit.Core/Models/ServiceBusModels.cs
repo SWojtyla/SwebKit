@@ -45,6 +45,14 @@ public class SbMessage
     public string? LockToken { get; set; }
     public long? SequenceNumber { get; set; }
     public string? SessionId { get; set; }
+
+    /// <summary>
+    /// When the message becomes visible to receivers (UTC). Set on messages sent via
+    /// <c>ScheduleMessageAsync</c>; <see cref="DateTimeOffset.MinValue"/> (serialized as the
+    /// SDK's zero value) means "not scheduled". Scheduled messages peek through the ordinary
+    /// queue path — this stamp is the only way the UI can tell them apart from active ones.
+    /// </summary>
+    public DateTimeOffset? ScheduledEnqueueTime { get; set; }
 }
 
 public class SbSystemProperties

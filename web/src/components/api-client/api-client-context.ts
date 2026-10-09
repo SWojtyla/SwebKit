@@ -12,7 +12,30 @@ import type {
     ApiClientExecutionResponse,
     ApiEnvironment,
     CollectionVariable,
+    LinkedRootInfo,
 } from "@/lib/types";
+import type { ApiRunOptions, ApiRunState } from "@/lib/api-run-utils";
+
+/** The repo the Git drawer should open on — set when a linked-root Git badge is clicked. */
+export interface GitInitialRepo {
+    path: string;
+    apiSubpath: string | null;
+}
+
+/** Linked-request save conflict: which file, and the stamp the retry should send. */
+export interface LinkedConflictState {
+    rootId: string;
+    collectionId: string;
+    requestId: string;
+    currentContentStamp: string | null;
+    requestFilePath: string | null;
+}
+
+export interface ConflictState {
+    message: string;
+    /** Present when the conflict is a linked `.swebreq.json` disk edit rather than a whole-store 409. */
+    linked?: LinkedConflictState;
+}
 
 export interface TabState {
     draft: HttpRequestEntry;
@@ -78,7 +101,8 @@ export interface ApiClientPageContextValue {
 
     variableScope: Record<string, string | null>;
 
-    handleAddCollection: () => void;
+    /** `linkedRootId` creates the collection inside that root's `.swebkit-api` tree. */
+    handleAddCollection: (linkedRootId?: string) => void;
     handleAddRequest: (collectionId: string, parentId?: string) => void;
     handleAddFolder: (collectionId: string, parentId?: string) => void;
     handleDeleteNode: (nodeId: string, collectionId: string) => void;
@@ -105,7 +129,7 @@ export interface ApiClientPageContextValue {
         folderPath: string | null,
     ) => Promise<void>;
 
-    conflict: { message: string } | null;
+    conflict: ConflictState | null;
     dismissConflict: () => void;
     handleReloadConflict: () => Promise<void>;
     handleOverwriteConflict: () => Promise<void>;
@@ -124,6 +148,22 @@ export interface ApiClientPageContextValue {
     exportCollection: ApiCollection | null;
     showGitPanel: boolean;
     setShowGitPanel: (v: boolean) => void;
+    /** Repo the Git drawer selects on open (set by a linked-root Git badge). */
+    gitInitialRepo: GitInitialRepo | null;
+    setGitInitialRepo: (v: GitInitialRepo | null) => void;
+
+    // ── Linked collection roots ─────────────────────────────────────────
+    linkedRoots: LinkedRootInfo[];
+    /** Pick a folder and register it as a linked collection root. */
+    handleLinkFolder: () => void;
+    /** Re-scan a root's `.swebkit-api` tree (after external edits). */
+    handleReloadRoot: (rootId: string) => void;
+    /** Unregister a root — the files stay on disk. */
+    handleRemoveRoot: (rootId: string) => void;
+    /** Reveal a file or directory in the OS explorer. */
+    handleRevealPath: (path: string) => void;
+    /** Open the Git drawer pinned to the repository backing a linked root. */
+    handleOpenGit: (repo: GitInitialRepo) => void;
 
     nameDialog: NameDialogState | null;
     setNameDialog: (v: NameDialogState | null) => void;
@@ -131,6 +171,21 @@ export interface ApiClientPageContextValue {
     setConfirmDialog: (v: ConfirmDialogState | null) => void;
 
     handleSaveCollectionVariables: (variables: CollectionVariable[]) => void;
+
+    // ── Request runs (dependency chains + ordered batches) ──────────
+    /** Live state of the current/last run — drives the run-results drawer. */
+    runState: ApiRunState;
+    runDrawerOpen: boolean;
+    setRunDrawerOpen: (v: boolean) => void;
+    /** Client-side cancel of an in-flight run. */
+    abortRun: () => void;
+    /** stopOnError/delayMs shared by every run entry point (split button + tree). */
+    runOptions: ApiRunOptions;
+    setRunOptions: (next: ApiRunOptions) => void;
+    /** "Run in order" — every request under the folder/collection, tree order. */
+    handleRunSubtree: (collectionId: string, nodeId: string) => void;
+    /** "Run selection (N)" — explicit ordered request node ids. */
+    handleRunSelection: (collectionId: string, requestIds: string[]) => void;
 }
 
 /**
@@ -155,6 +210,9 @@ export interface ApiClientTabsContextValue {
 
     handleSave: () => Promise<boolean>;
     handleSend: () => Promise<void>;
+    /** The send split-button's second half: run the request's dependency
+     *  chain (requestWithDeps), ending with the open request itself. */
+    handleSendWithDeps: () => void;
     handleSaveExample: (
         name: string,
         response: ApiClientExecutionResponse,

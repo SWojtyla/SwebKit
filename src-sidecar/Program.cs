@@ -27,7 +27,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Configure Kestrel to use a fixed dev port by default.
 // Allow override via --urls or ASPNETCORE_URLS (used by Tauri and Playwright tests).
-builder.WebHost.UseUrls(builder.Configuration["urls"] ?? "http://127.0.0.1:5199");
+// A port-0 request — what the release-mode Tauri spawn passes — resolves to the stable
+// port when it's free so external MCP clients can hardcode the sidecar URL.
+builder.WebHost.UseUrls(SwebKit.Sidecar.Services.SidecarBindUrls.Resolve(builder.Configuration["urls"]));
 
 // Structured file logging + crash handlers — wired as early as possible so no other
 // startup work can throw/log before this is in place. In a windowless release build the
@@ -287,10 +289,8 @@ builder.Services.AddSingleton<SwebKit.Core.Configuration.AgentFeedbackRepository
 // Agent action confirm-before-execute flow (ai-augmented-app technical-plan.md Module 3). Wired
 // here as infrastructure even though nothing in the sidecar can propose an action yet — the API
 // Client propose tools (ApiClientTools.cs) land in Module 4, now that this exists for them to
-// target. IApiClientAgentService needs the linked-collection chain;
-// LinkedCollectionRootRepository's LoadAsync() is
-// deliberately not called at sidecar startup below (linked collections aren't a sidecar feature
-// yet), so it stays empty and ApiClientAgentService correctly sees local collections only.
+// target. IApiClientAgentService needs the linked-collection chain; LinkedCollectionRootRepository's
+// LoadAsync() is called at sidecar startup below, so agent tools see linked collections too.
 builder.Services.AddSingleton<SwebKit.Core.Services.LinkedGitService>();
 builder.Services.AddSingleton<SwebKit.Core.Services.LinkedCollectionFileService>();
 builder.Services.AddSingleton<SwebKit.Core.Configuration.LinkedCollectionRootRepository>();
@@ -343,6 +343,13 @@ builder.Services.AddSingleton<IAuthHeaderBuilder, SidecarAuthHeaderBuilder>();
 builder.Services.AddSingleton<OAuth2PkceFlowService>();
 builder.Services.AddSingleton<IPostRequestCaptureExecutor, PostRequestCaptureExecutor>();
 builder.Services.AddSingleton<IHttpRequestExecutor, HttpRequestExecutor>();
+// Request runs (api-client-request-runs): plan builder + run loop behind POST /api/api-client/run.
+// Stateless — every step re-executes through IHttpRequestExecutor, so a singleton is safe. The
+// CollectionRepository probe lets BuildPlan distinguish "dep lives in another internal
+// collection" (cross_collection_dependency) from "dep doesn't exist anywhere" (missing_dependency).
+builder.Services.AddSingleton<ApiClientRunService>(sp => new ApiClientRunService(
+    sp.GetRequiredService<IHttpRequestExecutor>(),
+    sp.GetRequiredService<CollectionRepository>()));
 
 // CORS for the Tauri WebView only — this sidecar listens on 127.0.0.1 and would
 // otherwise be reachable by *any* website open in the user's regular browser
@@ -494,6 +501,9 @@ if (RedisCredentialMigration.MigrateCaches(profileRepository.Config.RedisConfig,
     await profileRepository.TrySaveAsync();
 await app.Services.GetRequiredService<EnvironmentRepository>().LoadAsync();
 await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
+// Linked collection roots (api-client-workspace Slice B) — loaded so /api/linked-roots and the
+// agent's ApiClientAgentService both see the registered on-disk roots.
+await app.Services.GetRequiredService<LinkedCollectionRootRepository>().LoadAsync();
 await userSettingsRepository.LoadAsync();
 await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
 // Force-instantiate now so its constructor subscribes to MonitoringAlertEvaluationService.AlertFired
@@ -524,6 +534,7 @@ app.MapAksEndpoints();
 // ── API Client ───────────────────────────────────────────────────────────────
 
 app.MapApiClientEndpoints();
+app.MapLinkedRootsEndpoints();
 
 // ── SQL ───────────────────────────────────────────────────────────────────────
 
@@ -556,5 +567,10 @@ app.MapWorkspaceTopologyEndpoints();
 // ── Observability ───────────────────────────────────────────────────────────
 
 app.MapObservabilityEndpoints();
+
+// Publish the bound address for external MCP clients — the file is the contract for
+// "what port is the sidecar on" whenever it isn't the stable one (see SidecarEndpointFile).
+app.Lifetime.ApplicationStarted.Register(() => SwebKit.Sidecar.Services.SidecarEndpointFile.Write(app.Services));
+app.Lifetime.ApplicationStopped.Register(SwebKit.Sidecar.Services.SidecarEndpointFile.Delete);
 
 app.Run();

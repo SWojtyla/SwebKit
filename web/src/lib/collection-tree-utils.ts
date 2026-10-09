@@ -9,6 +9,35 @@ export interface FlatRow {
     collectionId: string;
     depth: number;
     isCollection: boolean;
+    /**
+     * "section" marks a section-header row ("Internal store", one per linked
+     * root) — a label that owns no tree node, is never draggable, and is never
+     * a drop target. Undefined/"node" rows behave exactly as before.
+     */
+    kind?: "node" | "section";
+    /** For `kind === "section"`: the linked root id this section groups, or null for the internal store. */
+    sectionRootId?: string | null;
+}
+
+/** Synthesizes a section-header row — a layout row that owns no tree node. */
+export function sectionRow(id: string, sectionRootId: string | null): FlatRow {
+    return {
+        id,
+        node: {
+            id,
+            type: "Folder",
+            name: "",
+            isExpanded: false,
+            children: [],
+            defaultAuth: null,
+            request: null,
+        },
+        collectionId: "",
+        depth: 0,
+        isCollection: false,
+        kind: "section",
+        sectionRootId,
+    };
 }
 
 export interface MoveNodeTarget {
@@ -151,6 +180,33 @@ export function collectExpandedFolderIds(
             collectExpandedFolderIds(n.children, into);
         }
     }
+}
+
+/**
+ * Id of the folder directly containing `nodeId` inside `nodes`, or null when
+ * `nodeId` is a top-level node (or absent — callers know which they passed).
+ */
+export function findParentFolderId(
+    nodes: ApiCollectionNode[],
+    nodeId: string,
+): string | null {
+    for (const n of nodes) {
+        if (n.type !== "Folder") continue;
+        if (n.children.some((c) => c.id === nodeId)) return n.id;
+        const found = findParentFolderId(n.children, nodeId);
+        if (found !== null) return found;
+    }
+    return null;
+}
+
+/** Ids of the direct children of `parentFolderId` (null = collection root) in display order. */
+export function childIdsOf(
+    collection: ApiCollection,
+    parentFolderId: string | null,
+): string[] {
+    if (parentFolderId === null) return collection.nodes.map((n) => n.id);
+    const folder = findRequestNode(collection.nodes, parentFolderId);
+    return folder?.type === "Folder" ? folder.children.map((c) => c.id) : [];
 }
 
 /** Finds a node (folder or request) anywhere in `nodes` by id, recursing into folders. */
@@ -577,6 +633,10 @@ export function resolveDropTarget(
     | { kind: "collection"; target: MoveCollectionTarget }
     | { kind: "node"; target: MoveNodeTarget }
     | null {
+    // Section headers are layout rows — nothing drags from or lands on them.
+    if (draggingRow.kind === "section" || targetRow.kind === "section") {
+        return null;
+    }
     const threshold = targetRect.height * 0.25;
     const relative = clientY - targetRect.top;
 

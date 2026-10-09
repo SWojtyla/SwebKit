@@ -431,6 +431,21 @@ export async function readFile(path: string): Promise<string> {
     throw new Error("Filesystem access requires the Tauri desktop app");
 }
 
+/**
+ * Reveals a file or folder in the OS file manager (Explorer / Finder /
+ * xdg-open). Tauri-only — returns false in plain-web mode or when the command
+ * fails (e.g. the path no longer exists).
+ */
+export async function revealInExplorer(path: string): Promise<boolean> {
+    if (!isTauri()) return false;
+    try {
+        await invoke("reveal_in_explorer", { path });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 // ── Notifications ────────────────────────────────────────────────────────────
 
 export async function showNotification(

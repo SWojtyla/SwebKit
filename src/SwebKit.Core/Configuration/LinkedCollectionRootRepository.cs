@@ -111,6 +111,23 @@ public sealed class LinkedCollectionRootRepository(ILogger<LinkedCollectionRootR
     }
 
     /// <summary>
+    /// Enables or disables a linked root without unregistering it — disabled roots stay listed
+    /// but are skipped everywhere collections are loaded.
+    /// </summary>
+    public async Task<bool> SetRootEnabledAsync(string rootId, bool isEnabled)
+    {
+        var root = _store.Roots.FirstOrDefault(r => r.Id == rootId);
+        if (root is null)
+        {
+            return false;
+        }
+
+        root.IsEnabled = isEnabled;
+        await SaveAsync().ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
     /// Updates the Bruno sync settings (folder path + enabled flag) for an existing linked root.
     /// </summary>
     public async Task<bool> UpdateBrunoSyncSettingsAsync(string rootId, string? brunoFolderPath, bool enabled)

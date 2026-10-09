@@ -24,6 +24,8 @@ Plan files are the shared intent record: any tool or later session reads them to
 - `api-client-agent-fixes.md` — agent create-request resolves collection by id-or-name and auto-creates missing collection/folders, `list_api_collections` tool, non-AI cURL import dialog, chat markdown styling + drop stale context-window stats.
 - `api-client-agent-variables.md` — `propose_collection_variable_change` tool (static + generator vars incl. guid), file-typed multipart form fields (`FormDataField.IsFile`) across model/executor/UI/agent schema, Postman file-field import.
 - `api-client-settings-tab.md` — API Client settings split out of General into their own tab (incl. Key Vaults), and a Storage section showing the real `collections.json` path via `GET /api/config/collections/location`.
+- `api-client-workspace.md` — file visibility (reveal-in-explorer, labeled imports, preview/warnings, git honesty) plus linked collection roots: `.swebkit-api` folders on disk as first-class read/write collection sources with per-request files, content-stamp conflicts, git badges, and import-into-root — the Bruno-style workspace model.
+- `api-client-request-runs.md` — request runs: same-collection `dependsOnRequestIds` chains (topo-ordered, cycle-checked) plus folder/subtree and ctrl-click multi-select batch runs, executed server-side through a `POST /api/api-client/run` SSE stream with live step progress, stop-on-error, delay, and a run-results drawer.
 
 ## Plan file contract
 

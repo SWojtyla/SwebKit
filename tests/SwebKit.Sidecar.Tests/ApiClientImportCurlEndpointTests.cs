@@ -18,16 +18,30 @@ public class ApiClientImportCurlEndpointTests
             new FakeKeyVaultSecretResolver(isAvailable: false)));
 
     [Fact]
-    public void ValidCurl_ReturnsParsedRequest()
+    public void ValidCurl_ReturnsParsedRequestsAndWarnings()
     {
         var req = new ImportCurlRequest(
             "curl -X POST 'https://api.example.com/orders?p=1' -H 'Content-Type: application/json' --data-raw '{\"a\":1}'");
 
         var result = ApiClientEndpoints.ImportCurl(req, CreateWorkflow());
 
-        var ok = Assert.IsType<Ok<HttpRequestEntry>>(result);
-        Assert.Equal(ApiRequestMethod.Post, ok.Value!.Method);
-        Assert.StartsWith("https://api.example.com/orders", ok.Value.Url);
+        var ok = Assert.IsType<Ok<ImportCurlResponse>>(result);
+        var request = Assert.Single(ok.Value!.Requests);
+        Assert.Equal(ApiRequestMethod.Post, request.Method);
+        Assert.StartsWith("https://api.example.com/orders", request.Url);
+        Assert.Empty(ok.Value.Warnings);
+    }
+
+    [Fact]
+    public void MultiCommandCurl_ReturnsRequestPerCommand()
+    {
+        var req = new ImportCurlRequest(
+            "curl https://api.example.com/one && curl -X POST https://api.example.com/two");
+
+        var result = ApiClientEndpoints.ImportCurl(req, CreateWorkflow());
+
+        var ok = Assert.IsType<Ok<ImportCurlResponse>>(result);
+        Assert.Equal(2, ok.Value!.Requests.Count);
     }
 
     [Fact]

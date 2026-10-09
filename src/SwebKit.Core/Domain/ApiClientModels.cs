@@ -55,6 +55,9 @@ public sealed class HttpRequestEntry
     public AuthConfig? Auth { get; set; }
     public List<CaptureRule> CaptureRules { get; set; } = [];
 
+    /// <summary>Same-collection request IDs that must run before this request when executing a dependency chain.</summary>
+    public List<string> DependsOnRequestIds { get; set; } = [];
+
     // ─── GraphQL fields ──────────────────────────────────────────────────────
     /// <summary>GraphQL query or mutation document. Used when <see cref="Method"/> is <see cref="ApiRequestMethod.GraphQl"/>.</summary>
     public string? GraphQlQuery { get; set; }
@@ -147,10 +150,14 @@ public enum VariableInspectionSource
 public sealed class CurlImportResult
 {
     public bool IsSuccess { get; init; }
-    public HttpRequestEntry? Request { get; init; }
+    /// <summary>One entry per parsed <c>curl</c> invocation (a paste can hold several).</summary>
+    public IReadOnlyList<HttpRequestEntry> Requests { get; init; } = [];
+    /// <summary>Non-fatal notes — ignored flags, <c>-k/--insecure</c>, dropped non-cURL input.</summary>
+    public IReadOnlyList<string> Warnings { get; init; } = [];
     public string? ErrorMessage { get; init; }
 
-    public static CurlImportResult Success(HttpRequestEntry request) => new() { IsSuccess = true, Request = request };
+    public static CurlImportResult Success(IReadOnlyList<HttpRequestEntry> requests, IReadOnlyList<string> warnings) =>
+        new() { IsSuccess = true, Requests = requests, Warnings = warnings };
 
     public static CurlImportResult Failure(string errorMessage) => new() { ErrorMessage = errorMessage };
 }
@@ -417,6 +424,14 @@ public sealed class CollectionsStoreResponse
     public int SchemaVersion { get; set; } = 1;
     public List<ApiCollection> Collections { get; set; } = [];
     public string? ConcurrencyToken { get; set; }
+
+    /// <summary>
+    /// Registered linked collection roots — populated only by <c>GET .../collections/store</c>.
+    /// The whole-store <c>PUT</c> leaves this null so a save response never clobbers the
+    /// frontend's linked-root state (its response contract stays untouched).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<LinkedCollectionRootSummary>? LinkedRoots { get; set; }
 }
 
 /// <summary>Root object stored in <c>environments.json</c>.</summary>

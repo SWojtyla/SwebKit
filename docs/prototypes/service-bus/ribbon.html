@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SB UX prototype — Ribbon (refined)</title>
+<style>
+  :root {
+    --bg:#12141c; --card:#1a1d29; --card2:#20242f; --border:#2a2e3d;
+    --fg:#eef0f6; --muted:#8a8f9f; --primary:#8b8cf8; --primary-soft:#8b8cf826;
+    --danger:#e5484d; --ok:#46c98e; --warn:#f5a524;
+  }
+  * { box-sizing:border-box; margin:0; font:13px/1.45 "Segoe UI",system-ui,sans-serif; }
+  body { background:var(--bg); color:var(--fg); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  button { font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
+  select, input[type=text], input[type=number] { background:var(--card2); border:1px solid var(--border); color:var(--fg); border-radius:6px; padding:3px 8px; font-size:12px; }
+
+  /* ── ribbon tabs ── */
+  .ribbon-tabs { display:flex; align-items:flex-end; gap:2px; padding:5px 10px 0; background:var(--card); border-bottom:1px solid var(--border); }
+  .rtab { padding:4px 14px; font-size:12px; font-weight:600; color:var(--muted); border-radius:6px 6px 0 0; border:1px solid transparent; border-bottom:none; }
+  .rtab:hover { color:var(--fg); }
+  .rtab.on { color:var(--primary); background:var(--card2); border-color:var(--border); }
+  .ns-pick { margin-left:auto; margin-bottom:3px; display:flex; gap:8px; align-items:center; font-size:12px; color:var(--muted); }
+
+  /* ── refined ribbon body: compact rows of icon+label controls ── */
+  .ribbon-body { display:flex; align-items:stretch; padding:5px 10px 3px; background:var(--card2); border-bottom:1px solid var(--border); }
+  .ribbon-body.hidden { display:none; }
+  .rgroup { display:flex; align-items:flex-start; gap:2px; padding:0 12px; position:relative; padding-bottom:13px; }
+  .rgroup + .rgroup { border-left:1px solid var(--border); }
+  .rgroup .glabel { position:absolute; bottom:0; left:0; right:0; text-align:center; font-size:9px; letter-spacing:1px; color:var(--muted); text-transform:uppercase; }
+  .rbtn { display:inline-flex; align-items:center; gap:6px; padding:4px 9px; border-radius:6px; font-size:11.5px; color:var(--fg); border:1px solid transparent; white-space:nowrap; }
+  .rbtn:hover { background:var(--primary-soft); }
+  .rbtn .ico { font-size:13px; color:var(--muted); }
+  .rbtn:hover .ico, .rbtn.on .ico { color:inherit; }
+  .rbtn.on { background:var(--primary-soft); border-color:var(--primary); color:var(--primary); }
+  .rbtn.pri { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .rbtn.pri .ico { color:#fff; }
+  .rbtn.dgr { color:var(--danger); }
+  .rbtn.dgr .ico { color:var(--danger); }
+  .rbtn.dgr:hover { background:#e5484d1f; }
+  .rbtn[disabled] { opacity:.4; cursor:default; }
+  .rstack { display:flex; flex-direction:column; gap:1px; }
+  .rctl { display:flex; flex-direction:column; justify-content:center; gap:3px; font-size:11px; color:var(--muted); padding-right:4px; }
+  .rctl select { width:96px; }
+  .rctl label { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+
+  /* ── context bar ── */
+  .context-bar { display:flex; align-items:center; gap:10px; padding:6px 12px; border-bottom:1px solid var(--border); background:var(--card); font-size:12px; }
+  .crumbs a { color:var(--muted); cursor:pointer; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .seg button { padding:3px 12px; font-size:12px; color:var(--muted); }
+  .seg button.on { background:var(--primary); color:#fff; }
+  .seg button .n { opacity:.75; font-size:11px; }
+  .search { position:relative; flex:1; max-width:320px; margin-left:auto; }
+  .search input { width:100%; padding-left:24px; }
+  .search::before { content:"⌕"; position:absolute; left:8px; top:50%; transform:translateY(-50%); color:var(--muted); }
+
+  /* ── filter chips bar — the answer to "where are the filters" ── */
+  .filterbar { display:flex; align-items:center; gap:6px; padding:5px 12px; border-bottom:1px solid var(--border); background:#181b26; font-size:11.5px; }
+  .filterbar .lbl { color:var(--muted); font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; margin-right:2px; }
+  .fchip { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--primary); background:var(--primary-soft); color:var(--primary); border-radius:13px; padding:2px 8px 2px 10px; font-size:11.5px; }
+  .fchip .x { color:var(--primary); opacity:.7; font-size:10px; }
+  .fchip .x:hover { opacity:1; }
+  .fchip.add { border-color:var(--border); background:none; color:var(--muted); }
+  .fchip.add:hover { border-color:var(--primary); color:var(--primary); }
+
+  /* ── rule builder row — property-typed operators ── */
+  .rulebuild { display:flex; align-items:center; gap:6px; padding:6px 12px; border-bottom:1px solid var(--border); background:#161927; font-size:11.5px; }
+  .rulebuild.hidden { display:none; }
+  .filterbar.hidden { display:none; }
+  .rulebuild .lbl { color:var(--muted); }
+  .rulebuild .num { width:70px; }
+  .rulebuild .val { width:150px; }
+  .okbtn { background:var(--primary); color:#fff; border-radius:5px; padding:3px 10px; font-size:11.5px; }
+
+  .main { display:flex; flex:1; min-height:0; }
+  .tree { width:210px; flex:none; border-right:1px solid var(--border); background:var(--card); overflow:auto; }
+  .grp { padding:8px 10px 4px; font-size:10px; font-weight:700; letter-spacing:1px; color:var(--muted); text-transform:uppercase; }
+  .ent { display:flex; align-items:center; gap:8px; padding:5px 10px; cursor:pointer; border-left:2px solid transparent; font-size:12px; }
+  .ent.sel { background:var(--primary-soft); border-left-color:var(--primary); }
+  .ent .name { flex:1; }
+  .badge { font-size:10px; padding:1px 6px; border-radius:8px; background:var(--card2); color:var(--muted); }
+  .badge.dlq { color:var(--danger); background:#e5484d22; }
+  .badge.act { color:var(--ok); background:#46c98e1f; }
+  .badge.sch { color:var(--warn); background:#f5a5241f; }
+
+  .content { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .listwrap { flex:1; overflow:auto; background:var(--card); }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; padding:6px 10px; font-size:10px; font-weight:700; letter-spacing:.8px; color:var(--muted); text-transform:uppercase; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--card); }
+  td { padding:6px 10px; border-bottom:1px solid #232735; color:#cfd3de; }
+  tbody tr:hover { background:var(--card2); }
+  tr.sel { background:var(--primary-soft); }
+  .mono { font-family:Consolas,monospace; font-size:11px; }
+  .st { display:inline-flex; align-items:center; gap:4px; font-size:10px; padding:1px 7px; border-radius:8px; }
+  .st.active { color:var(--ok); background:#46c98e1f; }
+  .st.scheduled { color:var(--warn); background:#f5a5241f; }
+  .st.dlq { color:var(--danger); background:#e5484d22; }
+  .foot { display:flex; align-items:center; gap:10px; padding:6px 12px; border-top:1px solid var(--border); font-size:11px; color:var(--muted); background:var(--card); }
+  .foot a { color:var(--primary); cursor:pointer; }
+</style>
+</head>
+<body>
+
+<nav class="ribbon-tabs">
+  <button class="rtab on" data-tab="home">Home</button>
+  <button class="rtab" data-tab="messages">Messages</button>
+  <button class="rtab" data-tab="dlq">DLQ &amp; Recovery</button>
+  <button class="rtab" data-tab="view">View</button>
+  <div class="ns-pick">
+    Namespace <select><option>portima-dev</option><option>portima-prd</option></select>
+    <button id="collapse" title="Collapse ribbon" style="color:var(--muted)">▴</button>
+  </div>
+</nav>
+
+<!-- HOME — primary send/navigation verbs -->
+<div class="ribbon-body" id="rb-home">
+  <div class="rgroup">
+    <button class="rbtn pri"><span class="ico">✉</span>Compose</button>
+    <div class="rstack">
+      <button class="rbtn"><span class="ico">⇪</span>Batch send</button>
+      <button class="rbtn"><span class="ico">⏱</span>Scheduled</button>
+      <button class="rbtn"><span class="ico">▤</span>Templates</button>
+    </div>
+    <span class="glabel">Send</span>
+  </div>
+  <div class="rgroup">
+    <button class="rbtn"><span class="ico">⌕</span>Find entity</button>
+    <div class="rstack">
+      <button class="rbtn"><span class="ico">⟳</span>Topology</button>
+      <button class="rbtn"><span class="ico">ⓘ</span>Properties</button>
+      <button class="rbtn"><span class="ico">✦</span>Ask AI</button>
+    </div>
+    <span class="glabel">Entity</span>
+  </div>
+  <div class="rgroup">
+    <button class="rbtn"><span class="ico">📌</span>Pin</button>
+    <span class="glabel">Keep</span>
+  </div>
+</div>
+
+<!-- MESSAGES — fetching + filtering live here -->
+<div class="ribbon-body hidden" id="rb-messages">
+  <div class="rgroup">
+    <button class="rbtn"><span class="ico">⟳</span>Refresh</button>
+    <div class="rctl">
+      <label>Peek <select><option>50</option><option selected>200</option><option>500</option></select></label>
+      <label>Auto <select><option>Off</option><option selected>10s</option><option>30s</option></select></label>
+    </div>
+    <span class="glabel">Fetch</span>
+  </div>
+  <div class="rgroup">
+    <button class="rbtn on" id="rulesToggle"><span class="ico">⚡</span>Rules <b style="font-size:10px;background:var(--primary);color:#fff;border-radius:8px;padding:0 5px">2</b></button>
+    <div class="rstack">
+      <button class="rbtn" id="addRule"><span class="ico">＋</span>Add rule</button>
+      <button class="rbtn"><span class="ico">🔖</span>Saved…</button>
+      <button class="rbtn"><span class="ico">✕</span>Clear all</button>
+    </div>
+    <span class="glabel">Filter</span>
+  </div>
+  <div class="rgroup">
+    <button class="rbtn"><span class="ico">⇓</span>Export ZIP</button>
+    <span class="glabel">Export</span>
+  </div>
+</div>
+
+<!-- DLQ & RECOVERY -->
+<div class="ribbon-body hidden" id="rb-dlq">
+  <div class="rgroup">
+    <button class="rbtn"><span class="ico">↺</span>Batch replay</button>
+    <button class="rbtn"><span class="ico">▦</span>DLQ triage</button>
+    <span class="glabel">Recover</span>
+  </div>
+  <div class="rgroup">
+    <button class="rbtn"><span class="ico">◎</span>Reach message</button>
+    <button class="rbtn"><span class="ico">⇥</span>Replay to…</button>
+    <span class="glabel">Targeted</span>
+  </div>
+  <div class="rgroup">
+    <button class="rbtn dgr"><span class="ico">🗑</span>Purge all</button>
+    <span class="glabel">Danger</span>
+  </div>
+</div>
+
+<!-- VIEW -->
+<div class="ribbon-body hidden" id="rb-view">
+  <div class="rgroup">
+    <button class="rbtn"><span class="ico">▤</span>Columns</button>
+    <div class="rctl"><label>Density <select><option>Compact</option><option selected>Default</option><option>Comfort</option></select></label></div>
+    <span class="glabel">List</span>
+  </div>
+  <div class="rgroup">
+    <button class="rbtn on" id="treeToggle"><span class="ico">⧉</span>Entities</button>
+    <button class="rbtn"><span class="ico">◫</span>Detail pane</button>
+    <span class="glabel">Panes</span>
+  </div>
+  <div class="rgroup">
+    <button class="rbtn"><span class="ico">N</span>NSB mode</button>
+    <span class="glabel">Schema</span>
+  </div>
+</div>
+
+<div class="main">
+  <aside class="tree" id="tree">
+    <div class="grp">Queues</div>
+    <div class="ent sel"><span>≡</span><span class="name">orders</span><span class="badge act">1 284</span><span class="badge sch">12</span><span class="badge dlq">37</span></div>
+    <div class="ent"><span>≡</span><span class="name">payments</span><span class="badge act">56</span></div>
+    <div class="ent"><span>≡</span><span class="name">invoices</span><span class="badge act">12</span><span class="badge dlq">3</span></div>
+    <div class="ent"><span>≡</span><span class="name">notifications</span></div>
+    <div class="grp">Topics</div>
+    <div class="ent"><span>◈</span><span class="name">events</span></div>
+    <div class="ent" style="padding-left:26px"><span>↳</span><span class="name">sub-billing</span><span class="badge act">8</span></div>
+    <div class="ent" style="padding-left:26px"><span>↳</span><span class="name">sub-audit</span><span class="badge act">201</span></div>
+  </aside>
+
+  <div class="content">
+    <div class="context-bar">
+      <span class="crumbs"><a>Overview</a> / portima-dev / <b>orders</b></span>
+      <!-- STATE: active vs scheduled vs dead-lettered is now a first-class picker -->
+      <div class="seg" id="stateseg">
+        <button class="on" data-state="active">Active <span class="n">1 284</span></button>
+        <button data-state="scheduled">Scheduled <span class="n">12</span></button>
+        <button data-state="dlq">DLQ <span class="n">37</span></button>
+      </div>
+      <div class="search"><input type="text" placeholder="Search id, subject, body…"></div>
+    </div>
+
+    <!-- active filters materialize here — visible, removable, not buried -->
+    <div class="filterbar" id="filterbar">
+      <span class="lbl">Filtered</span>
+      <span class="fchip">deliveryCount ≥ 3 <button class="x">✕</button></span>
+      <span class="fchip">enqueued · older than 2h <button class="x">✕</button></span>
+      <button class="fchip add" id="addRule2">＋ rule</button>
+      <span style="margin-left:auto;color:var(--muted);font-size:10.5px">200 of 1 284 match</span>
+    </div>
+
+    <!-- rule builder: operators adapt to the property's type -->
+    <div class="rulebuild" id="rulebuild">
+      <span class="lbl">Rule</span>
+      <select id="propSel">
+        <option value="num">deliveryCount</option>
+        <option value="num">sequenceNumber</option>
+        <option value="time" selected>enqueuedAt</option>
+        <option value="time">scheduledFor</option>
+        <option value="text">subject</option>
+        <option value="text">messageId</option>
+        <option value="text">custom property…</option>
+      </select>
+      <!-- time operators -->
+      <span id="opsTime">
+        <select><option>older than</option><option>within last</option><option>between</option></select>
+        <input type="number" class="num" value="2" style="width:52px">
+        <select><option>minutes</option><option selected>hours</option><option>days</option></select>
+      </span>
+      <!-- numeric operators -->
+      <span id="opsNum" style="display:none">
+        <select><option>=</option><option>≠</option><option>&lt;</option><option>≤</option><option selected>≥</option><option>between</option></select>
+        <input type="number" class="num" value="3">
+      </span>
+      <!-- text operators -->
+      <span id="opsText" style="display:none">
+        <select><option>contains</option><option>equals</option><option>starts with</option><option>regex</option></select>
+        <input type="text" class="val" placeholder="value…">
+      </span>
+      <button class="okbtn">Add</button>
+      <button class="rbtn" id="cancelRule">Cancel</button>
+    </div>
+
+    <div class="listwrap">
+      <table>
+        <thead><tr><th style="width:30px"><input type="checkbox"></th><th>Message ID</th><th>Subject</th><th>State</th><th id="whenHead">Enqueued</th><th>Dlv</th><th>Size</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="foot">
+      <a>⟳</a><span id="countLabel">Showing 200 of 1 284</span>
+      <a>Load more</a>
+      <span style="margin-left:auto">updated 4s ago · auto 10s</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  // ── ribbon tabs + collapse ──
+  const tabs = document.querySelectorAll(".rtab");
+  const bodies = { home:"rb-home", messages:"rb-messages", dlq:"rb-dlq", view:"rb-view" };
+  let collapsed = false, current = "home";
+  function show(tab){
+    current = tab;
+    tabs.forEach(t => t.classList.toggle("on", t.dataset.tab === tab));
+    Object.entries(bodies).forEach(([k,id]) =>
+      $(id).classList.toggle("hidden", collapsed || k !== tab));
+  }
+  tabs.forEach(t => t.onclick = () => {
+    if (collapsed) { collapsed = false; show(t.dataset.tab); }
+    else if (t.dataset.tab === current) { collapsed = true; show(current); }
+    else show(t.dataset.tab);
+  });
+  $("collapse").onclick = e => { collapsed = !collapsed; e.target.textContent = collapsed ? "▾" : "▴"; show(current); };
+  $("treeToggle").onclick = () => $("tree").classList.toggle("hidden") || $("treeToggle").classList.toggle("on");
+  // Entities toggle actually hides the tree:
+  $("treeToggle").onclick = () => { $("tree").style.display = $("tree").style.display === "none" ? "" : "none"; };
+
+  // ── state segmented control: swaps list + column ──
+  const sets = {
+    active:    { head:"Enqueued",    count:"Showing 200 of 1 284", rows:[["ord-88412","OrderCreated","active","11:42:03",1,"1.2 KB"],["ord-88405","OrderCreated","active","11:41:50",1,"1.1 KB"],["ord-88398","PaymentRequested","active","11:41:37",1,"1.8 KB"],["ord-88391","OrderCreated","active","11:41:24",1,"1.2 KB"],["ord-88384","InvoiceIssued","active","11:41:11",1,"2.0 KB"],["ord-88377","OrderCancelled","active","11:40:58",3,"1.4 KB"],["ord-88370","OrderCreated","active","11:40:45",1,"1.2 KB"],["ord-88363","StockReserved","active","11:40:32",1,"0.9 KB"]] },
+    scheduled: { head:"Scheduled for", count:"Showing 12 of 12", rows:[["ord-88490","RetryPayment","scheduled","14:00:00",0,"1.1 KB"],["ord-88489","OrderReminder","scheduled","15:30:00",0,"1.0 KB"],["ord-88488","OrderReminder","scheduled","15:30:00",0,"1.0 KB"],["ord-88487","NightlyReconcile","scheduled","23:55:00",0,"3.2 KB"],["ord-88486","RetryPayment","scheduled","14:05:00",0,"1.1 KB"]] },
+    dlq:       { head:"Enqueued",    count:"Showing 37 of 37",   rows:[["ord-88012","OrderCreated","dlq","09:12:44",5,"1.3 KB"],["ord-87996","PaymentRequested","dlq","08:58:01",6,"1.9 KB"],["ord-87990","InvoiceIssued","dlq","08:51:37",4,"2.1 KB"],["ord-87981","OrderCreated","dlq","08:44:20",5,"1.2 KB"]] },
+  };
+  const stName = { active:"Active", scheduled:"Scheduled", dlq:"Dead-lettered" };
+  function render(state){
+    const s = sets[state];
+    $("whenHead").textContent = s.head;
+    $("countLabel").textContent = s.count;
+    const tb = $("rows"); tb.innerHTML = "";
+    s.rows.forEach((r,i) => {
+      const tr = document.createElement("tr");
+      if (i===0) tr.className="sel";
+      tr.innerHTML = `<td><input type="checkbox"${i===0?" checked":""}></td>
+        <td class="mono">${r[0]}</td><td>${r[1]}</td>
+        <td><span class="st ${r[2]}">${r[2]==="scheduled"?"⏱ ":""}${stName[r[2]]}</span></td>
+        <td>${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td>`;
+      tr.onclick = () => { tb.querySelectorAll("tr").forEach(x=>x.classList.remove("sel")); tr.classList.add("sel"); };
+      tb.appendChild(tr);
+    });
+  }
+  render("active");
+  document.querySelectorAll("#stateseg button").forEach(b =>
+    b.onclick = () => { document.querySelectorAll("#stateseg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); render(b.dataset.state); });
+
+  // ── rule builder: operator set follows property type ──
+  function syncOps(){
+    const t = $("propSel").selectedOptions[0].value;
+    $("opsTime").style.display  = t==="time" ? "" : "none";
+    $("opsNum").style.display   = t==="num"  ? "" : "none";
+    $("opsText").style.display  = t==="text" ? "" : "none";
+  }
+  $("propSel").onchange = syncOps; syncOps();
+  const openRule = () => $("rulebuild").classList.remove("hidden");
+  $("addRule").onclick = openRule; $("addRule2").onclick = openRule;
+  $("cancelRule").onclick = () => $("rulebuild").classList.add("hidden");
+  $("rulesToggle").onclick = () => $("filterbar").classList.toggle("hidden");
+</script>
+</body>
+</html>

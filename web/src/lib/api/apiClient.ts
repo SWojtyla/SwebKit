@@ -1,5 +1,5 @@
 import { apiFetch, apiSend } from "./transport";
-import type { CollectionImportResult, HttpRequestEntry } from "../types";
+import type { CollectionImportResult, CurlImportResult } from "../types";
 
 export interface KeyVaultPreviewResult {
     status: "ok" | "error";
@@ -91,6 +91,9 @@ export async function getOAuth2Result(
 export async function importCollection(payload: {
     folderPath?: string | null;
     payloadBase64?: string | null;
+    /** Routes the import into that linked root's `.swebkit-api` tree instead of
+     *  the internal collections.json store. */
+    linkedRootId?: string | null;
 }): Promise<CollectionImportResult> {
     return apiSend<CollectionImportResult>(
         "/api/config/collections/import",
@@ -100,11 +103,12 @@ export async function importCollection(payload: {
 }
 
 // Paste-a-cURL import — the sidecar only parses; the caller inserts the returned
-// request into the collections store itself (same path as every other tree edit).
+// requests into the collections store itself (same path as every other tree edit).
+// A paste can hold several `curl` commands, hence the array.
 export async function importCurlRequest(
     command: string,
-): Promise<HttpRequestEntry> {
-    return apiSend<HttpRequestEntry>("/api/api-client/import-curl", "POST", {
+): Promise<CurlImportResult> {
+    return apiSend<CurlImportResult>("/api/api-client/import-curl", "POST", {
         command,
     });
 }

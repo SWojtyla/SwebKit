@@ -10,6 +10,21 @@ export interface ApiEnvironment {
     variables: EnvironmentVariable[];
     createdAt: string;
     updatedAt: string;
+    /**
+     * Frontend-assigned provenance — set when environments from linked roots are
+     * merged into the workspace list. Never persisted; strip it before sending an
+     * environment back to any endpoint (`origin.kind === "linked"` envs route to
+     * `/api/linked-roots/{rootId}/environments`, not the internal PUT).
+     */
+    origin?: ApiEnvironmentOrigin;
+}
+
+export interface ApiEnvironmentOrigin {
+    kind: "internal" | "linked";
+    /** Owning linked root — present when `kind === "linked"`. */
+    rootId?: string;
+    /** The `.swebenv.json` this environment was read from (linked only). */
+    filePath?: string;
 }
 
 export interface EnvironmentVariable {
@@ -73,6 +88,21 @@ export interface ApiCollection {
     defaultAuth: AuthConfig | null;
     createdAt: string;
     updatedAt: string;
+    /**
+     * Frontend-assigned provenance — set while flattening the store response into
+     * the workspace tree (`internal`, the synthetic `demo` collection, or a
+     * collection living under a linked root). Never persisted; strip it before any
+     * whole-store PUT.
+     */
+    origin?: ApiCollectionOrigin;
+}
+
+export interface ApiCollectionOrigin {
+    kind: "internal" | "linked" | "demo";
+    /** Owning linked root — present when `kind === "linked"`. */
+    rootId?: string;
+    rootName?: string;
+    rootPath?: string;
 }
 
 export interface ApiCollectionNode {
@@ -89,6 +119,72 @@ export interface CollectionsStoreResponse {
     schemaVersion: number;
     collections: ApiCollection[];
     concurrencyToken: string | null;
+    /**
+     * Linked collection roots — folders on disk holding a `.swebkit-api/` tree.
+     * Empty in demo mode; disabled roots appear but carry no collections. Absent
+     * from the whole-store PUT response, so clients merging `setQueryData` writes
+     * must preserve the previous array.
+     */
+    linkedRoots?: LinkedRootInfo[];
+}
+
+// ── Linked collection roots (Slice B — /api/linked-roots) ────────────────────
+
+/** Wire shape of one linked root — `LinkedCollectionRootSummary` on the backend. */
+export interface LinkedRootInfo {
+    id: string;
+    name: string;
+    path: string;
+    /** `<path>/.swebkit-api` — where the collections/environments trees live. */
+    apiRootPath: string;
+    isEnabled: boolean;
+    isGitRepository: boolean;
+    repositoryRoot: string | null;
+    branch: string | null;
+    changedFileCount: number;
+    isValid: boolean;
+    diagnostics: string[];
+    collections: ApiCollection[];
+    environments: ApiEnvironment[];
+    requestFiles: LinkedRequestFileState[];
+    environmentFiles: LinkedEnvironmentFileState[];
+    brunoSyncFolderPath?: string | null;
+    brunoSyncEnabled?: boolean;
+}
+
+/** Per-request file bookkeeping — the content stamp drives save-conflict detection. */
+export interface LinkedRequestFileState {
+    requestId: string;
+    requestFilePath: string;
+    contentStamp: string;
+}
+
+export interface LinkedEnvironmentFileState {
+    environmentId: string;
+    environmentFilePath: string;
+}
+
+/** `LinkedCollectionMutationResult` — create-collection response. */
+export interface LinkedCollectionMutationResult {
+    root: LinkedRootInfo;
+    collectionId: string;
+}
+
+/** `LinkedRequestMutationResult` — create/save-request response. `requestId` is
+ *  the request node's tree id (the file's stable id), `contentStamp` the stamp to
+ *  send on the next save. */
+export interface LinkedRequestMutationResult {
+    root: LinkedRootInfo;
+    requestId: string;
+    requestFilePath: string;
+    contentStamp: string;
+}
+
+/** The 409 body `PUT .../requests/{id}` returns when the file changed on disk. */
+export interface LinkedRequestConflict {
+    error?: string;
+    currentContentStamp: string | null;
+    requestFilePath: string | null;
 }
 
 export interface CollectionImportResult {
@@ -98,6 +194,13 @@ export interface CollectionImportResult {
     captureRuleCount: number;
     authConfigsRequiringReEntry: number;
     variablesExtractedAsEnvironment: number;
+    warnings: string[];
+}
+
+/** `POST /api/api-client/import-curl` — one parsed request per pasted command,
+ *  plus non-fatal notes for flags the parser ignored (e.g. `--insecure`). */
+export interface CurlImportResult {
+    requests: HttpRequestEntry[];
     warnings: string[];
 }
 
@@ -121,6 +224,14 @@ export interface HttpRequestEntry {
     updatedAt: string;
     preRequestActions: RequestAction[];
     postRequestActions: RequestAction[];
+    /**
+     * "Runs after" — ids of same-collection request nodes that must run before
+     * this one when sent via "Send with dependencies". Ids are tree node ids
+     * (for internal collections these equal `request.id`; for linked requests
+     * they are the file's stable id). Optional for backward compatibility with
+     * collections.json and `.swebreq.json` files written before runs existed.
+     */
+    dependsOnRequestIds?: string[];
 }
 
 export interface RequestBody {
@@ -282,5 +393,77 @@ export interface GraphQlErrorLocation {
     line: number;
     column: number;
 }
+
+// ── Request runs (POST /api/api-client/run — SSE stream) ─────────────────────
+// See docs/features/active/api-client-request-runs.md. One `data:` frame per
+// event, flat JSON with a `type` discriminator.
+
+export type ApiRunMode = "requestWithDeps" | "subtree" | "explicit";
+
+/** Body of `POST /api/api-client/run`. */
+export interface ApiRunRequest {
+    mode: ApiRunMode;
+    collectionId: string;
+    /** Set when the collection lives under a linked root (`collection.origin.rootId`). */
+    linkedRootId?: string | null;
+    /** requestWithDeps: the request node id the chain resolves and ends with. */
+    requestId?: string;
+    /** subtree: folder node id — or the collection id for a whole-collection run. */
+    nodeId?: string;
+    /** explicit: caller-supplied request node ids, run in the given order. */
+    requestIds?: string[];
+    /** The collection-scoped environment layer. */
+    activeEnvironmentId?: string | null;
+    /** The global environment layer, applied underneath the scoped one. */
+    globalEnvironmentId?: string | null;
+    /** Abort the run after the first failed step. */
+    stopOnError: boolean;
+    /** Sleep between steps (server caps at 10s). */
+    delayMs: number;
+}
+
+export interface ApiRunPlanStep {
+    index: number;
+    requestId: string;
+    name: string;
+}
+
+/** One variable captured into scope by a completed step's capture rules. */
+export interface ApiRunCapturedVariable {
+    targetVariable: string;
+    source: string;
+}
+
+export type ApiRunAbortReason = "stopOnError" | "cancelled";
+
+export type ApiRunEvent =
+    | { type: "plan"; runId: string; steps: ApiRunPlanStep[] }
+    | { type: "stepStarted"; index: number; requestId: string; name: string }
+    | {
+          type: "stepCompleted";
+          index: number;
+          requestId: string;
+          status: number;
+          durationMs: number;
+          captured: ApiRunCapturedVariable[];
+          response: ApiClientExecutionResponse;
+      }
+    | {
+          type: "stepFailed";
+          index: number;
+          requestId: string;
+          status?: number | null;
+          /** Null when the step never reached the wire (plan/mid-step abort). */
+          durationMs?: number | null;
+          error: string;
+          response?: ApiClientExecutionResponse | null;
+      }
+    | { type: "aborted"; reason: ApiRunAbortReason; completedSteps: number }
+    | {
+          type: "done";
+          completedSteps: number;
+          failedSteps: number;
+          durationMs: number;
+      };
 
 // ── Service Bus ──────────────────────────────────────────────────────────────

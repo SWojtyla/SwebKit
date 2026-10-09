@@ -75,8 +75,9 @@ sandbox cannot do. Commands return `Result<_, String>`; the web side calls them 
 Key files:
 
 - `src-tauri/src/lib.rs` — plugin + `invoke_handler` registration
-- `src-tauri/src/sidecar.rs` — sidecar process lifecycle; `get_sidecar_port` (prod uses an
-  OS-assigned port; dev fixes `http://127.0.0.1:5199`)
+- `src-tauri/src/sidecar.rs` — sidecar process lifecycle; `get_sidecar_port` (prod asks for an
+  OS-assigned port, which `SidecarBindUrls` upgrades to the stable `5199` when free; dev fixes
+  `http://127.0.0.1:5199` outright)
 - `src-tauri/src/native.rs` — kubectl port-forward sessions, file/folder pickers, clipboard,
   reveal-in-explorer
 - `src-tauri/src/pod_shell.rs` — `kubectl exec` interactive pod shells (xterm.js backend)

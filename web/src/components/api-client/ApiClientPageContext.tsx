@@ -15,6 +15,11 @@ import {
     useExecuteRequest,
     useEnvironments,
     useUpdateEnvironments,
+    useLinkedRoots,
+    useLinkedRootActions,
+    useDemoMode,
+    useApiRun,
+    type ApiRunCallbacks,
 } from "@/lib/hooks";
 import type { ResponseHistoryEntry } from "./ResponseViewer";
 import type { RequestTab } from "./RequestTabStrip";
@@ -23,12 +28,14 @@ import {
     ApiClientTabsContext,
     type ApiClientPageContextValue,
     type ApiClientTabsContextValue,
+    type ConflictState,
     type ConfirmDialogState,
+    type GitInitialRepo,
     type NameDialogState,
     type TabState,
 } from "./api-client-context";
 import { buildVariableScope } from "@/lib/variable-utils";
-import { getSecret } from "@/lib/tauri-bridge";
+import { getSecret, pickDirectory, revealInExplorer } from "@/lib/tauri-bridge";
 import { buildResponseExample } from "@/lib/response-example";
 import { runRequestActions } from "@/lib/request-action-runner";
 import { useNotification } from "@/components/layout/notification-context";
@@ -37,14 +44,28 @@ import {
     moveNode,
     moveCollection,
     findRequestNode,
+    findParentFolderId,
+    childIdsOf,
     describeNodeForDelete,
     formatDeleteMessage,
     insertRequestAtFolderPath,
     type MoveNodeTarget,
     type MoveCollectionTarget,
 } from "@/lib/collection-tree-utils";
+import {
+    mergeCollections,
+    mergeEnvironments,
+    stripEnvironmentOrigin,
+    requestFileState,
+} from "@/lib/linked-root-utils";
 import { pickNeighborTabId } from "@/lib/request-tab-utils";
 import { describeApiError } from "@/lib/api";
+import {
+    DEFAULT_RUN_OPTIONS,
+    lastResponseOf,
+    type ApiRunOptions,
+    type ApiRunState,
+} from "@/lib/api-run-utils";
 import type {
     ApiCollection,
     ApiCollectionNode,
@@ -55,6 +76,7 @@ import type {
     CollectionVariable,
     AuthConfig,
     CollectionsStoreResponse,
+    ApiRunRequest,
 } from "@/lib/types";
 
 function newId() {
@@ -248,6 +270,19 @@ function renameNodeInNodes(
     });
 }
 
+/** The folder named `name` directly under `parentId` (null = collection root). */
+function findFolderByName(
+    collection: ApiCollection,
+    parentId: string | null,
+    name: string,
+): ApiCollectionNode | null {
+    const siblings =
+        parentId === null
+            ? collection.nodes
+            : (findRequestNode(collection.nodes, parentId)?.children ?? []);
+    return siblings.find((n) => n.type === "Folder" && n.name === name) ?? null;
+}
+
 /** Newest-first cap on per-tab response history. Session-only, as documented. */
 const HISTORY_LIMIT = 20;
 
@@ -274,7 +309,12 @@ export function ApiClientPageProvider({
     children: ReactNode;
 }): JSX.Element {
     const { notify } = useNotification();
-    const { data: collections = [], isLoading } = useCollections();
+    const { data: internalCollections = [], isLoading } = useCollections();
+    // Linked roots ride on the same ["collections"] query — the store response
+    // carries them alongside the internal collections.
+    const { data: linkedRoots = [] } = useLinkedRoots();
+    const linkedActions = useLinkedRootActions();
+    const { data: demoMode } = useDemoMode();
     const updateCollections = useUpdateCollections();
     const executeRequest = useExecuteRequest();
     const { data: envData } = useEnvironments();
@@ -290,7 +330,32 @@ export function ApiClientPageProvider({
     const navigate = useNavigate();
     const qc = useQueryClient();
 
-    const environments = useMemo(() => envData?.environments ?? [], [envData]);
+    const isDemo = demoMode?.isDemoMode ?? false;
+
+    // The workspace collection list flattens internal collections and every
+    // enabled linked root's collections, each tagged with its `origin` so the
+    // mutation handlers below can route to the right backend.
+    const collections = useMemo(
+        () => mergeCollections(internalCollections, linkedRoots, isDemo),
+        [internalCollections, linkedRoots, isDemo],
+    );
+
+    // Same merge for environments: internal ones plus every linked root's
+    // environments (tagged with their rootId/filePath). Linked envs never go
+    // to the internal environments PUT — they route to the linked endpoints.
+    const environments = useMemo(
+        () =>
+            mergeEnvironments(envData?.environments ?? [], linkedRoots, isDemo),
+        [envData, linkedRoots, isDemo],
+    );
+    /** What the internal environments PUT is allowed to see — origin stripped. */
+    const internalEnvironments = useMemo(
+        () =>
+            environments
+                .filter((e) => e.origin?.kind !== "linked")
+                .map(stripEnvironmentOrigin),
+        [environments],
+    );
     const uiState = envData?.uiState;
     const activeEnvironmentId = uiState?.activeEnvironmentId ?? null;
 
@@ -350,7 +415,10 @@ export function ApiClientPageProvider({
         null,
     );
     const [showGitPanel, setShowGitPanel] = useState(false);
-    const [conflict, setConflict] = useState<{ message: string } | null>(null);
+    const [gitInitialRepo, setGitInitialRepo] = useState<GitInitialRepo | null>(
+        null,
+    );
+    const [conflict, setConflict] = useState<ConflictState | null>(null);
     const [legacyNoticeDismissed, setLegacyNoticeDismissed] = useState(
         () =>
             typeof window !== "undefined" &&
@@ -364,6 +432,18 @@ export function ApiClientPageProvider({
     const [confirmDialog, setConfirmDialog] =
         useState<ConfirmDialogState | null>(null);
 
+    // ── Request runs ────────────────────────────────────────────────
+    // One run at a time — `useApiRun.start` aborts whatever was in flight. The
+    // drawer's open flag lives here (not inside the hook's state) so closing it
+    // never implies the run stopped.
+    // Destructured rather than kept as one object — `{state,start,abort}` is a
+    // fresh identity every render, and it's in the page-context memo's deps:
+    // keeping it whole would re-render every context consumer on each keystroke.
+    const { state: runState, start: startRun, abort: abortRun } = useApiRun();
+    const [runDrawerOpen, setRunDrawerOpen] = useState(false);
+    const [runOptions, setRunOptions] =
+        useState<ApiRunOptions>(DEFAULT_RUN_OPTIONS);
+
     // Refs mirror the per-keystroke tab state so handlers living in the *page*
     // context (delete-node, conflict resolution, select-node) can read it without
     // depending on it — otherwise their identity, and the whole page-context
@@ -371,10 +451,23 @@ export function ApiClientPageProvider({
     const tabsRef = useRef(tabs);
     const tabStatesRef = useRef(tabStates);
     const activeTabIdRef = useRef(activeTabId);
+    // Origin lookups in event handlers must see the freshest merge (a handler's
+    // render snapshot can lag the store the mutation just invalidated), so the
+    // merged collections/environments/roots get mirror refs too.
+    const collectionsRef = useRef(collections);
+    const environmentsRef = useRef(environments);
+    const linkedRootsRef = useRef(linkedRoots);
+    const selectedNodeIdRef = useRef(selectedNodeId);
+    const runOptionsRef = useRef(runOptions);
     useEffect(() => {
         tabsRef.current = tabs;
         tabStatesRef.current = tabStates;
         activeTabIdRef.current = activeTabId;
+        collectionsRef.current = collections;
+        environmentsRef.current = environments;
+        linkedRootsRef.current = linkedRoots;
+        selectedNodeIdRef.current = selectedNodeId;
+        runOptionsRef.current = runOptions;
     });
 
     /**
@@ -609,27 +702,41 @@ export function ApiClientPageProvider({
         [openTab],
     );
 
-    const handleAddCollection = useCallback(() => {
-        setNameDialog({
-            title: "New Collection",
-            label: "Collection name",
-            defaultValue: "",
-            confirmText: "Create",
-            onConfirm: (name) => {
-                const collection: ApiCollection = {
-                    id: newId(),
-                    name,
-                    nodes: [],
-                    variables: [],
-                    defaultAuth: null,
-                    createdAt: now(),
-                    updatedAt: now(),
-                };
-                updateCollectionsMutate((prev) => [...prev, collection]);
-                setNameDialog(null);
-            },
-        });
-    }, [updateCollectionsMutate]);
+    const handleAddCollection = useCallback(
+        (linkedRootId?: string) => {
+            setNameDialog({
+                title: "New Collection",
+                label: "Collection name",
+                defaultValue: "",
+                confirmText: "Create",
+                onConfirm: (name) => {
+                    setNameDialog(null);
+                    if (linkedRootId) {
+                        // A linked collection is a directory on disk — created via
+                        // the root endpoint, never the whole-store PUT.
+                        void linkedActions
+                            .createCollection(linkedRootId, name)
+                            .then((res) => {
+                                if (res)
+                                    setSelectedCollectionId(res.collectionId);
+                            });
+                        return;
+                    }
+                    const collection: ApiCollection = {
+                        id: newId(),
+                        name,
+                        nodes: [],
+                        variables: [],
+                        defaultAuth: null,
+                        createdAt: now(),
+                        updatedAt: now(),
+                    };
+                    updateCollectionsMutate((prev) => [...prev, collection]);
+                },
+            });
+        },
+        [updateCollectionsMutate, linkedActions],
+    );
 
     const handleAddRequest = useCallback(
         (collectionId: string, parentId?: string) => {
@@ -641,6 +748,44 @@ export function ApiClientPageProvider({
                 confirmText: "Create",
                 onConfirm: (name) => {
                     request.name = name;
+                    setNameDialog(null);
+                    const rootId = collectionsRef.current.find(
+                        (c) => c.id === collectionId,
+                    )?.origin?.rootId;
+                    if (rootId) {
+                        void (async () => {
+                            const res = await linkedActions.createRequest(
+                                rootId,
+                                collectionId,
+                                {
+                                    name,
+                                    parentFolderId: parentId ?? null,
+                                    request,
+                                },
+                            );
+                            if (!res) return;
+                            setSelectedNodeId(res.requestId);
+                            setSelectedCollectionId(collectionId);
+                            const tabId = newId();
+                            setTabs((prev) => [
+                                ...prev,
+                                {
+                                    id: tabId,
+                                    nodeId: res.requestId,
+                                    collectionId,
+                                    name,
+                                    method: request.method,
+                                    dirty: false,
+                                },
+                            ]);
+                            setTabStates((prev) => ({
+                                ...prev,
+                                [tabId]: emptyTabState(deepClone(request)),
+                            }));
+                            setActiveTabId(tabId);
+                        })();
+                        return;
+                    }
                     const node: ApiCollectionNode = {
                         id: request.id,
                         type: "Request",
@@ -681,11 +826,10 @@ export function ApiClientPageProvider({
                             },
                         },
                     );
-                    setNameDialog(null);
                 },
             });
         },
-        [updateCollectionsMutate],
+        [updateCollectionsMutate, linkedActions],
     );
 
     // "New API request" palette action: `state.newRequest` opens the create-request
@@ -696,7 +840,6 @@ export function ApiClientPageProvider({
         if (!state?.newRequest) return;
         const target = selectedCollectionId ?? collections[0]?.id;
         if (target) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot location.state deep-link consumption; the paired navigate() must live in an effect anyway
             handleAddRequest(target);
         } else {
             notify(
@@ -723,6 +866,19 @@ export function ApiClientPageProvider({
                 defaultValue: "",
                 confirmText: "Create",
                 onConfirm: (name) => {
+                    setNameDialog(null);
+                    const rootId = collectionsRef.current.find(
+                        (c) => c.id === collectionId,
+                    )?.origin?.rootId;
+                    if (rootId) {
+                        void linkedActions.createFolder(
+                            rootId,
+                            collectionId,
+                            name,
+                            parentId ?? null,
+                        );
+                        return;
+                    }
                     const node: ApiCollectionNode = {
                         id: newId(),
                         type: "Folder",
@@ -742,11 +898,10 @@ export function ApiClientPageProvider({
                             parentId,
                         ),
                     );
-                    setNameDialog(null);
                 },
             });
         },
-        [updateCollectionsMutate],
+        [updateCollectionsMutate, linkedActions],
     );
 
     const handleDeleteNode = useCallback(
@@ -756,61 +911,154 @@ export function ApiClientPageProvider({
                 nodeId,
                 collectionId,
             );
+            // Shared post-delete bookkeeping for both backends: drop the
+            // selection, close the request's tab the same way a manual tab close
+            // would (unit 4.1), and unselect a deleted collection.
+            const cleanupAfterDelete = () => {
+                if (selectedNodeIdRef.current !== nodeId) return;
+                setSelectedNodeId(null);
+                const tabToClose = tabsRef.current.find(
+                    (t) => t.nodeId === nodeId,
+                );
+                if (tabToClose) {
+                    setTabs((prev) =>
+                        prev.filter((t) => t.id !== tabToClose.id),
+                    );
+                    setTabStates((prev) => {
+                        const next = { ...prev };
+                        delete next[tabToClose.id];
+                        return next;
+                    });
+                    if (activeTabIdRef.current === tabToClose.id)
+                        setActiveTabId(
+                            pickNeighborTabId(tabsRef.current, tabToClose.id),
+                        );
+                }
+                setSelectedCollectionId(
+                    collectionId === nodeId ? null : collectionId,
+                );
+            };
             setConfirmDialog({
                 message: formatDeleteMessage(info),
                 confirmText: "Delete",
                 onConfirm: () => {
+                    setConfirmDialog(null);
+                    const collection = collectionsRef.current.find(
+                        (c) => c.id === collectionId,
+                    );
+                    const rootId = collection?.origin?.rootId;
+                    if (rootId && collection) {
+                        void (async () => {
+                            let ok: boolean;
+                            if (nodeId === collectionId) {
+                                ok = !!(await linkedActions.deleteCollection(
+                                    rootId,
+                                    collectionId,
+                                ));
+                            } else {
+                                const node = findRequestNode(
+                                    collection.nodes,
+                                    nodeId,
+                                );
+                                ok =
+                                    node?.type === "Folder"
+                                        ? !!(await linkedActions.deleteFolder(
+                                              rootId,
+                                              collectionId,
+                                              nodeId,
+                                          ))
+                                        : !!(await linkedActions.deleteRequest(
+                                              rootId,
+                                              collectionId,
+                                              nodeId,
+                                          ));
+                            }
+                            if (ok) cleanupAfterDelete();
+                        })();
+                        return;
+                    }
                     updateCollectionsMutate(
                         (prev) => removeNode(prev, nodeId),
-                        {
-                            onSuccess: () => {
-                                if (selectedNodeId === nodeId) {
-                                    setSelectedNodeId(null);
-                                    // Close tab for deleted node — same neighbor-activation rule as
-                                    // a manual tab close (unit 4.1).
-                                    const tabToClose = tabsRef.current.find(
-                                        (t) => t.nodeId === nodeId,
-                                    );
-                                    if (tabToClose) {
-                                        setTabs((prev) =>
-                                            prev.filter(
-                                                (t) => t.id !== tabToClose.id,
-                                            ),
-                                        );
-                                        setTabStates((prev) => {
-                                            const next = { ...prev };
-                                            delete next[tabToClose.id];
-                                            return next;
-                                        });
-                                        if (
-                                            activeTabIdRef.current ===
-                                            tabToClose.id
-                                        )
-                                            setActiveTabId(
-                                                pickNeighborTabId(
-                                                    tabsRef.current,
-                                                    tabToClose.id,
-                                                ),
-                                            );
-                                    }
-                                    setSelectedCollectionId(
-                                        collectionId === nodeId
-                                            ? null
-                                            : collectionId,
-                                    );
-                                }
-                            },
-                        },
+                        { onSuccess: cleanupAfterDelete },
                     );
-                    setConfirmDialog(null);
                 },
             });
         },
-        [collections, selectedNodeId, updateCollectionsMutate],
+        [collections, updateCollectionsMutate, linkedActions],
+    );
+
+    /**
+     * Linked request rename: the request's name *is* its file name on a linked
+     * root, and the save payload carries no name field, so rename = write the
+     * request to a new file name + delete the old file. `id` must be cleared —
+     * the create endpoint resolves an existing file by `Request.Id` and would
+     * overwrite the file we're about to delete instead of writing a new one.
+     * The recreated file gets a fresh node id (stable ids derive from the file
+     * path), which is why the open tab and selection remap onto
+     * `created.requestId`.
+     */
+    const renameLinkedRequest = useCallback(
+        async (
+            rootId: string,
+            collection: ApiCollection,
+            node: ApiCollectionNode,
+            newName: string,
+        ) => {
+            const parentId = findParentFolderId(collection.nodes, node.id);
+            const created = await linkedActions.createRequest(
+                rootId,
+                collection.id,
+                {
+                    name: newName,
+                    parentFolderId: parentId,
+                    request: { ...node.request!, id: "", name: newName },
+                },
+            );
+            if (!created) return;
+            await linkedActions.deleteRequest(rootId, collection.id, node.id);
+            setTabs((prev) =>
+                prev.map((t) =>
+                    t.nodeId === node.id
+                        ? { ...t, nodeId: created.requestId, name: newName }
+                        : t,
+                ),
+            );
+            if (selectedNodeIdRef.current === node.id)
+                setSelectedNodeId(created.requestId);
+        },
+        [linkedActions],
     );
 
     const handleRenameNode = useCallback(
         (_nodeId: string, _collectionId: string, newName: string) => {
+            const collection = collectionsRef.current.find(
+                (c) => c.id === _collectionId,
+            );
+            const rootId = collection?.origin?.rootId;
+            if (rootId && collection) {
+                if (_nodeId === _collectionId) {
+                    void linkedActions.renameCollection(
+                        rootId,
+                        _collectionId,
+                        newName,
+                    );
+                    return;
+                }
+                const node = findRequestNode(collection.nodes, _nodeId);
+                if (node?.type === "Folder") {
+                    void linkedActions.renameFolder(
+                        rootId,
+                        _collectionId,
+                        _nodeId,
+                        newName,
+                    );
+                    return;
+                }
+                if (node?.type === "Request" && node.request) {
+                    void renameLinkedRequest(rootId, collection, node, newName);
+                }
+                return;
+            }
             updateCollectionsMutate((prev) =>
                 renameNodeInCollections(prev, _nodeId, newName),
             );
@@ -821,7 +1069,96 @@ export function ApiClientPageProvider({
                 ),
             );
         },
-        [updateCollectionsMutate],
+        [updateCollectionsMutate, linkedActions, renameLinkedRequest],
+    );
+
+    /**
+     * Linked move: the move endpoint relocates a file/folder to a parent
+     * (appending last), and the order endpoint writes the sibling ordering
+     * manifest — a before/after drop needs both, a plain "inside" drop needs
+     * only the move. Moves are confined to the dragged node's own collection.
+     */
+    const handleLinkedMoveNode = useCallback(
+        async (
+            nodeId: string,
+            source: ApiCollection,
+            target: MoveNodeTarget,
+        ) => {
+            const rootId = source.origin?.rootId;
+            if (!rootId || nodeId === target.targetNodeId) return;
+            if (target.targetCollectionId !== source.id) {
+                notify(
+                    "info",
+                    "Can't move across collections",
+                    "Linked items stay inside their own collection.",
+                );
+                return;
+            }
+            const sourceParent = findParentFolderId(source.nodes, nodeId);
+            const targetParent =
+                target.placement === "inside"
+                    ? (target.targetNodeId ?? null)
+                    : target.targetNodeId
+                      ? findParentFolderId(source.nodes, target.targetNodeId)
+                      : null;
+            const sameParent = sourceParent === targetParent;
+
+            // Dropping a node "inside" the folder it already sits in changes nothing.
+            if (sameParent && target.placement === "inside") return;
+
+            let root = linkedRootsRef.current.find((r) => r.id === rootId);
+            if (!sameParent) {
+                const moved = await linkedActions.moveNode(
+                    rootId,
+                    source.id,
+                    nodeId,
+                    targetParent,
+                );
+                if (!moved) return;
+                root = moved;
+            }
+            if (target.placement === "inside") {
+                // The move endpoint appends last inside the folder — that is the
+                // whole "inside" semantics, no order write needed.
+                notify("success", "Moved", "Item moved.");
+                return;
+            }
+
+            // before/after needs the explicit sibling order — recompute it from
+            // the refreshed root so a cross-parent move sees its new siblings.
+            const refreshed = root?.collections.find((c) => c.id === source.id);
+            if (!refreshed) return;
+            const siblings = childIdsOf(refreshed, targetParent);
+            let movedId = nodeId;
+            if (!sameParent) {
+                // A cross-parent move gives the node a new file and therefore a
+                // new id — find it as the sibling that was not there before.
+                const previous = new Set(childIdsOf(source, targetParent));
+                movedId = siblings.find((id) => !previous.has(id)) ?? nodeId;
+            }
+            const without = siblings.filter((id) => id !== movedId);
+            let index = without.length;
+            if (target.targetNodeId) {
+                const ti = without.indexOf(target.targetNodeId);
+                if (ti !== -1)
+                    index = ti + (target.placement === "before" ? 0 : 1);
+            } else if (target.placement === "before") {
+                index = 0;
+            }
+            const ordered = [
+                ...without.slice(0, index),
+                movedId,
+                ...without.slice(index),
+            ];
+            const res = await linkedActions.setChildOrder(
+                rootId,
+                source.id,
+                targetParent,
+                ordered,
+            );
+            if (res) notify("success", "Moved", "Item moved.");
+        },
+        [linkedActions, notify],
     );
 
     const handleMoveNode = useCallback(
@@ -830,6 +1167,26 @@ export function ApiClientPageProvider({
             sourceCollectionId: string,
             target: MoveNodeTarget,
         ) => {
+            const source = collectionsRef.current.find(
+                (c) => c.id === sourceCollectionId,
+            );
+            if (source?.origin?.kind === "linked") {
+                void handleLinkedMoveNode(nodeId, source, target);
+                return;
+            }
+            // Defensive counterpart to the tree's drop rules — an internal node
+            // must never land inside a linked collection.
+            const targetCol = collectionsRef.current.find(
+                (c) => c.id === target.targetCollectionId,
+            );
+            if (targetCol?.origin?.kind === "linked") {
+                notify(
+                    "info",
+                    "Can't move into a linked collection",
+                    "Move items inside the same linked collection instead.",
+                );
+                return;
+            }
             // No snapshot-based no-op guard here on purpose: a node created moments ago
             // may not be in this render's `collections` yet, `moveNode` returns its input
             // unchanged when it cannot find the source, and bailing on that swallowed the
@@ -849,14 +1206,23 @@ export function ApiClientPageProvider({
             }
             updateCollectionsMutate((prev) => moveNode(prev, nodeId, target), {
                 onSuccess: () => notify("success", "Moved", "Request moved."),
-                onError: (err) => notify("error", "Move failed", describeApiError(err)),
+                onError: (err) =>
+                    notify("error", "Move failed", describeApiError(err)),
             });
         },
-        [selectedNodeId, updateCollectionsMutate, notify],
+        [selectedNodeId, updateCollectionsMutate, notify, handleLinkedMoveNode],
     );
 
     const handleMoveCollection = useCallback(
         (collectionId: string, target: MoveCollectionTarget) => {
+            // Collection-root reorder is internal-store-only — linked
+            // collections live in their root's directory ordering, not
+            // collections.json.
+            if (
+                collectionsRef.current.find((c) => c.id === collectionId)
+                    ?.origin?.kind === "linked"
+            )
+                return;
             updateCollectionsMutate(
                 (prev) => moveCollection(prev, collectionId, target),
                 {
@@ -879,6 +1245,77 @@ export function ApiClientPageProvider({
             collectionIdOrName: string,
             folderPath: string | null,
         ) => {
+            // A linked target imports through the root endpoints — folder-path
+            // segments materialize as directories by name, then the request file
+            // is created at the end of the path.
+            const match = collectionsRef.current.find(
+                (c) =>
+                    c.id === collectionIdOrName ||
+                    c.name.toLowerCase() === collectionIdOrName.toLowerCase(),
+            );
+            if (match?.origin?.kind === "linked" && match.origin.rootId) {
+                const rootId = match.origin.rootId;
+                const collectionId = match.id;
+                const segments = (folderPath ?? "")
+                    .split("/")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                let parentId: string | null = null;
+                for (const seg of segments) {
+                    let col = linkedRootsRef.current
+                        .find((r) => r.id === rootId)
+                        ?.collections.find((c) => c.id === collectionId);
+                    let folder: ApiCollectionNode | null = col
+                        ? findFolderByName(col, parentId, seg)
+                        : null;
+                    if (!folder) {
+                        const refreshed = await linkedActions.createFolder(
+                            rootId,
+                            collectionId,
+                            seg,
+                            parentId,
+                        );
+                        col = refreshed?.collections.find(
+                            (c) => c.id === collectionId,
+                        );
+                        folder = col
+                            ? findFolderByName(col, parentId, seg)
+                            : null;
+                        if (!folder) return;
+                    }
+                    parentId = folder.id;
+                }
+                const res = await linkedActions.createRequest(
+                    rootId,
+                    collectionId,
+                    {
+                        name: request.name,
+                        parentFolderId: parentId,
+                        request,
+                    },
+                );
+                if (!res) return;
+                setSelectedNodeId(res.requestId);
+                setSelectedCollectionId(collectionId);
+                const tabId = newId();
+                setTabs((prev) => [
+                    ...prev,
+                    {
+                        id: tabId,
+                        nodeId: res.requestId,
+                        collectionId,
+                        name: request.name,
+                        method: request.method,
+                        dirty: false,
+                    },
+                ]);
+                setTabStates((prev) => ({
+                    ...prev,
+                    [tabId]: emptyTabState(deepClone(request)),
+                }));
+                setActiveTabId(tabId);
+                return;
+            }
             const node: ApiCollectionNode = {
                 id: request.id || newId(),
                 type: "Request",
@@ -919,7 +1356,66 @@ export function ApiClientPageProvider({
             }));
             setActiveTabId(tabId);
         },
-        [updateCollectionsMutateAsync],
+        [updateCollectionsMutateAsync, linkedActions],
+    );
+
+    /**
+     * Persist a linked tab through its root's save endpoint, sending the file's
+     * last-known content stamp. A 409 returns the fresh stamp in `conflict.linked`
+     * so Overwrite can retry without re-reading the file.
+     */
+    const saveLinkedTab = useCallback(
+        async (
+            tab: RequestTab,
+            draftForSave: HttpRequestEntry,
+            collection: ApiCollection,
+            overrideStamp?: string | null,
+        ): Promise<boolean> => {
+            const rootId = collection.origin?.rootId;
+            if (!rootId) return false;
+            const stamp =
+                overrideStamp !== undefined
+                    ? overrideStamp
+                    : (requestFileState(
+                          linkedRootsRef.current.find((r) => r.id === rootId),
+                          tab.nodeId,
+                      )?.contentStamp ?? null);
+            const outcome = await linkedActions.saveRequest(
+                rootId,
+                collection.id,
+                tab.nodeId,
+                draftForSave,
+                stamp,
+            );
+            if (outcome.kind === "saved") {
+                setConflict(null);
+                setTabStates((prev) => ({
+                    ...prev,
+                    [tab.id]: { ...prev[tab.id], dirty: false },
+                }));
+                setTabs((prev) =>
+                    prev.map((t) =>
+                        t.id === tab.id ? { ...t, dirty: false } : t,
+                    ),
+                );
+                return true;
+            }
+            if (outcome.kind === "conflict") {
+                setConflict({
+                    message: `The request file${outcome.conflict.requestFilePath ? ` "${outcome.conflict.requestFilePath}"` : ""} changed on disk. Reload the latest version or overwrite it with your changes.`,
+                    linked: {
+                        rootId,
+                        collectionId: collection.id,
+                        requestId: tab.nodeId,
+                        currentContentStamp:
+                            outcome.conflict.currentContentStamp,
+                        requestFilePath: outcome.conflict.requestFilePath,
+                    },
+                });
+            }
+            return false;
+        },
+        [linkedActions],
     );
 
     const saveActiveTab = useCallback(
@@ -937,6 +1433,12 @@ export function ApiClientPageProvider({
                     ...draftForSave.auth,
                     credentialSecret: null,
                 };
+            }
+            const tabCollection = collectionsRef.current.find(
+                (c) => c.id === tab.collectionId,
+            );
+            if (tabCollection?.origin?.kind === "linked") {
+                return saveLinkedTab(tab, draftForSave, tabCollection);
             }
             try {
                 // An explicit base is an overwrite-after-conflict, which must send exactly
@@ -983,7 +1485,7 @@ export function ApiClientPageProvider({
                 return false;
             }
         },
-        [updateCollectionsMutateAsync],
+        [updateCollectionsMutateAsync, saveLinkedTab],
     );
 
     const handleSave = useCallback(
@@ -1104,6 +1606,252 @@ export function ApiClientPageProvider({
         resolveEnvironmentLayers,
     ]);
 
+    // ── Request runs ────────────────────────────────────────────────────────
+
+    /** Mirror a step's response into the active tab's viewer while the run
+     *  streams — the response pane tracks the run live, not just at the end. */
+    const pushRunResponseToActiveTab = useCallback(
+        (response: ApiClientExecutionResponse | null | undefined) => {
+            if (!response) return;
+            const tabId = activeTabIdRef.current;
+            if (!tabId) return;
+            setTabStates((prev) =>
+                prev[tabId]
+                    ? { ...prev, [tabId]: { ...prev[tabId], response } }
+                    : prev,
+            );
+        },
+        [],
+    );
+
+    /** The SSE callbacks every run entry point shares: live response mirroring,
+     *  a history entry for the final step, and a done/aborted notification.
+     *  `extra` runs after the shared finish work (e.g. clearing `sending`). */
+    const runCallbacks = useCallback(
+        (extra?: (s: ApiRunState) => void): ApiRunCallbacks => ({
+            onEvent: (e) => {
+                if (
+                    (e.type === "stepCompleted" || e.type === "stepFailed") &&
+                    e.response
+                ) {
+                    pushRunResponseToActiveTab(e.response);
+                }
+            },
+            onFinished: (s) => {
+                const last = lastResponseOf(s.steps);
+                if (last) {
+                    const tabId = activeTabIdRef.current;
+                    if (tabId)
+                        setTabStates((prev) =>
+                            prev[tabId]
+                                ? {
+                                      ...prev,
+                                      [tabId]: {
+                                          ...prev[tabId],
+                                          response: last,
+                                          history: appendHistory(
+                                              prev[tabId],
+                                              last,
+                                          ),
+                                      },
+                                  }
+                                : prev,
+                        );
+                }
+                if (s.status === "done") {
+                    const completed = s.summary?.completedSteps ?? 0;
+                    const failed = s.summary?.failedSteps ?? 0;
+                    notify(
+                        failed > 0 ? "info" : "success",
+                        "Run finished",
+                        `${completed} step${completed === 1 ? "" : "s"} completed${failed > 0 ? `, ${failed} failed` : ""}.`,
+                    );
+                } else if (s.status === "aborted") {
+                    notify(
+                        "info",
+                        "Run aborted",
+                        s.abortReason === "stopOnError"
+                            ? "Stopped on the first failed step."
+                            : "Cancelled.",
+                    );
+                }
+                extra?.(s);
+            },
+        }),
+        [pushRunResponseToActiveTab, notify],
+    );
+
+    /** Shared ApiRunRequest fields for a collection: env layers, linked root,
+     *  current run options. Null (plus a notification) when the collection
+     *  vanished between menu open and click. */
+    const buildRunRequest = useCallback(
+        (
+            collectionId: string,
+            extras: Pick<
+                ApiRunRequest,
+                "mode" | "requestId" | "nodeId" | "requestIds"
+            >,
+        ): ApiRunRequest | null => {
+            const collection = collectionsRef.current.find(
+                (c) => c.id === collectionId,
+            );
+            if (!collection) {
+                notify(
+                    "error",
+                    "Couldn't start run",
+                    "The collection no longer exists.",
+                );
+                return null;
+            }
+            const layers = resolveEnvironmentLayers(collectionId);
+            return {
+                collectionId,
+                linkedRootId:
+                    collection.origin?.kind === "linked"
+                        ? collection.origin.rootId
+                        : null,
+                activeEnvironmentId: layers.scoped?.id ?? null,
+                globalEnvironmentId: layers.global?.id ?? null,
+                stopOnError: runOptionsRef.current.stopOnError,
+                delayMs: runOptionsRef.current.delayMs,
+                ...extras,
+            };
+        },
+        [notify, resolveEnvironmentLayers],
+    );
+
+    const handleRunSubtree = useCallback(
+        (collectionId: string, nodeId: string) => {
+            const req = buildRunRequest(collectionId, {
+                mode: "subtree",
+                nodeId,
+            });
+            if (!req) return;
+            setRunDrawerOpen(true);
+            startRun(req, runCallbacks());
+        },
+        [buildRunRequest, startRun, runCallbacks],
+    );
+
+    const handleRunSelection = useCallback(
+        (collectionId: string, requestIds: string[]) => {
+            // The selection carries tree node ids; the run endpoint indexes
+            // requests by entry id (node.request.id) — translate here so an
+            // imported collection whose ids differ still resolves.
+            const collection = collectionsRef.current.find(
+                (c) => c.id === collectionId,
+            );
+            const entryIds = requestIds.map(
+                (id) =>
+                    (collection &&
+                        findRequestNode(collection.nodes, id)?.request?.id) ||
+                    id,
+            );
+            const req = buildRunRequest(collectionId, {
+                mode: "explicit",
+                requestIds: entryIds,
+            });
+            if (!req) return;
+            setRunDrawerOpen(true);
+            startRun(req, runCallbacks());
+        },
+        [buildRunRequest, startRun, runCallbacks],
+    );
+
+    /**
+     * "Send with dependencies" — the split-button sibling of handleSend. Saves
+     * the draft first (the chain resolves deps from the persisted request),
+     * runs the target's pre-request actions, then streams the requestWithDeps
+     * run. `sending` stays set for the whole run so plain Send stays disabled
+     * while the chain executes; the final step's response lands where a plain
+     * Send's would.
+     */
+    const handleSendWithDeps = useCallback(() => {
+        const activeTabId = activeTabIdRef.current;
+        if (!activeTabId) return;
+        const tab = tabsRef.current.find((t) => t.id === activeTabId);
+        if (!tab) return;
+        void (async () => {
+            const saved = await handleSave();
+            if (!saved) return;
+            const draft = tabStatesRef.current[activeTabId]?.draft;
+            if (!draft) return;
+            // The endpoint's plan index is keyed by request *entry* id —
+            // node.id equals it for app-created data but imports may diverge.
+            const collection = collectionsRef.current.find(
+                (c) => c.id === tab.collectionId,
+            );
+            const requestId =
+                (collection &&
+                    findRequestNode(collection.nodes, tab.nodeId)?.request
+                        ?.id) ||
+                tab.nodeId;
+            const req = buildRunRequest(tab.collectionId, {
+                mode: "requestWithDeps",
+                requestId,
+            });
+            if (!req) return;
+            // Same secret resolution as handleSend — the run endpoint executes
+            // server-side but the target's credential still travels resolved.
+            const request = deepClone(draft);
+            if (request.auth?.credentialKey && !request.auth.credentialSecret) {
+                const secret = await getSecret(request.auth.credentialKey);
+                if (secret)
+                    request.auth = {
+                        ...request.auth,
+                        credentialSecret: secret,
+                    };
+            }
+            setTabStates((prev) => ({
+                ...prev,
+                [activeTabId]: {
+                    ...prev[activeTabId],
+                    sending: true,
+                    response: null,
+                },
+            }));
+            await runRequestActions(
+                request.preRequestActions ?? [],
+                { request },
+                (type, title, message) => notify(type, title, message),
+            );
+            setRunDrawerOpen(true);
+            startRun(
+                req,
+                runCallbacks((s) => {
+                    const last = lastResponseOf(s.steps);
+                    setTabStates((prev) =>
+                        prev[activeTabId]
+                            ? {
+                                  ...prev,
+                                  [activeTabId]: {
+                                      ...prev[activeTabId],
+                                      sending: false,
+                                  },
+                              }
+                            : prev,
+                    );
+                    if (last) {
+                        void runRequestActions(
+                            request.postRequestActions ?? [],
+                            { request, response: last },
+                            (type, title, message) =>
+                                notify(type, title, message),
+                        ).catch((err: unknown) =>
+                            notify(
+                                "error",
+                                "Post-request action failed",
+                                err instanceof Error
+                                    ? err.message
+                                    : "Unknown error",
+                            ),
+                        );
+                    }
+                }),
+            );
+        })();
+    }, [handleSave, buildRunRequest, startRun, notify, runCallbacks]);
+
     /** Saves a scrubbed example onto the active request and persists it. */
     const handleSaveExample = useCallback(
         async (name: string, response: ApiClientExecutionResponse) => {
@@ -1138,6 +1886,13 @@ export function ApiClientPageProvider({
                     credentialSecret: null,
                 };
             }
+            const tabCollection = collectionsRef.current.find(
+                (c) => c.id === tab.collectionId,
+            );
+            if (tabCollection?.origin?.kind === "linked") {
+                await saveLinkedTab(tab, draftForSave, tabCollection);
+                return;
+            }
             try {
                 await updateCollectionsMutateAsync((prev) =>
                     updateRequestInCollections(prev, tab.nodeId, draftForSave),
@@ -1146,7 +1901,7 @@ export function ApiClientPageProvider({
                 console.error("Failed to save response example", err);
             }
         },
-        [updateCollectionsMutateAsync],
+        [updateCollectionsMutateAsync, saveLinkedTab],
     );
 
     const getLatestCollections = useCallback(
@@ -1157,7 +1912,46 @@ export function ApiClientPageProvider({
     );
 
     const handleReloadConflict = useCallback(async () => {
+        const linkedConflict = conflict?.linked;
         setConflict(null);
+        if (linkedConflict) {
+            // Re-scan the root, then replace the active draft with whatever the
+            // file now holds — the on-disk version wins. The refetch must land
+            // before the draft swap: the editor auto-saves ~2s after any draft
+            // change, and a save with the stale cached stamp would re-conflict.
+            const root = await linkedActions.reloadRoot(linkedConflict.rootId);
+            await qc.refetchQueries({ queryKey: ["collections"] });
+            const activeTabId = activeTabIdRef.current;
+            if (!root || !activeTabId) return;
+            const col = root.collections.find(
+                (c) => c.id === linkedConflict.collectionId,
+            );
+            const node = col
+                ? findRequestNode(col.nodes, linkedConflict.requestId)
+                : null;
+            if (!node?.request) return;
+            setTabStates((prev) => ({
+                ...prev,
+                [activeTabId]: {
+                    ...prev[activeTabId],
+                    draft: deepClone(node.request!),
+                    dirty: false,
+                },
+            }));
+            setTabs((prev) =>
+                prev.map((t) =>
+                    t.id === activeTabId
+                        ? {
+                              ...t,
+                              name: node.request!.name,
+                              method: node.request!.method,
+                              dirty: false,
+                          }
+                        : t,
+                ),
+            );
+            return;
+        }
         await qc.refetchQueries({ queryKey: ["collections"] });
         const latest = getLatestCollections();
         const activeTabId = activeTabIdRef.current;
@@ -1190,17 +1984,99 @@ export function ApiClientPageProvider({
                 break;
             }
         }
-    }, [qc, getLatestCollections]);
+    }, [qc, getLatestCollections, conflict, linkedActions]);
 
     const handleOverwriteConflict = useCallback(async () => {
+        const linkedConflict = conflict?.linked;
         setConflict(null);
+        if (linkedConflict) {
+            // Retry the same save with the stamp the 409 handed back — the new
+            // stamp matches the file that was edited on disk, so the write wins.
+            const activeTabId = activeTabIdRef.current;
+            const tab = activeTabId
+                ? tabsRef.current.find((t) => t.id === activeTabId)
+                : undefined;
+            const tabState = activeTabId
+                ? tabStatesRef.current[activeTabId]
+                : undefined;
+            const collection = collectionsRef.current.find(
+                (c) => c.id === linkedConflict.collectionId,
+            );
+            if (!tab || !tabState || !collection) return;
+            const draftForSave = deepClone(tabState.draft);
+            if (draftForSave.auth) {
+                draftForSave.auth = {
+                    ...draftForSave.auth,
+                    credentialSecret: null,
+                };
+            }
+            await saveLinkedTab(
+                tab,
+                draftForSave,
+                collection,
+                linkedConflict.currentContentStamp,
+            );
+            return;
+        }
         await qc.refetchQueries({ queryKey: ["collections"] });
         const latest = getLatestCollections();
         await saveActiveTab(latest);
-    }, [qc, getLatestCollections, saveActiveTab]);
+    }, [qc, getLatestCollections, saveActiveTab, saveLinkedTab, conflict]);
 
     const handleSaveAsCopy = useCallback(async () => {
+        const linkedConflict = conflict?.linked;
         setConflict(null);
+        if (linkedConflict) {
+            // The disk-edited file is left alone — the draft lands as a brand-new
+            // `<name> (copy).swebreq.json` next to it.
+            const activeTabId = activeTabIdRef.current;
+            const tab = activeTabId
+                ? tabsRef.current.find((t) => t.id === activeTabId)
+                : undefined;
+            const tabState = activeTabId
+                ? tabStatesRef.current[activeTabId]
+                : undefined;
+            const collection = collectionsRef.current.find(
+                (c) => c.id === linkedConflict.collectionId,
+            );
+            if (!tab || !tabState || !collection) return;
+            const copy = deepClone(tabState.draft);
+            copy.id = newId();
+            copy.name = `${copy.name} (copy)`;
+            copy.createdAt = now();
+            copy.updatedAt = now();
+            if (copy.auth) copy.auth = { ...copy.auth, credentialSecret: null };
+            const parentId = findParentFolderId(
+                collection.nodes,
+                linkedConflict.requestId,
+            );
+            const res = await linkedActions.createRequest(
+                linkedConflict.rootId,
+                collection.id,
+                { name: copy.name, parentFolderId: parentId, request: copy },
+            );
+            if (!res) return;
+            const tabId = newId();
+            setTabs((prev) => [
+                ...prev,
+                {
+                    id: tabId,
+                    nodeId: res.requestId,
+                    collectionId: collection.id,
+                    name: copy.name,
+                    method: copy.method,
+                    dirty: false,
+                },
+            ]);
+            setTabStates((prev) => ({
+                ...prev,
+                [tabId]: emptyTabState(deepClone(copy)),
+            }));
+            setActiveTabId(tabId);
+            setSelectedNodeId(res.requestId);
+            setSelectedCollectionId(collection.id);
+            return;
+        }
         await qc.refetchQueries({ queryKey: ["collections"] });
         const latest = getLatestCollections();
         const activeTabId = activeTabIdRef.current;
@@ -1260,13 +2136,126 @@ export function ApiClientPageProvider({
                 console.error("Failed to save as copy", err);
             }
         }
-    }, [qc, getLatestCollections, updateCollectionsMutateAsync]);
+    }, [
+        qc,
+        getLatestCollections,
+        updateCollectionsMutateAsync,
+        conflict,
+        linkedActions,
+    ]);
 
+    /**
+     * Environment manager save. The manager hands back the *merged* env list, so
+     * this splits it: envs that were (or became) linked route to their root's
+     * environment endpoints; only the remaining internal envs go to the
+     * internal PUT. Re-scoping an env between stores moves it (delete + create)
+     * since an env's home is part of its identity.
+     */
     const handleSaveEnvironments = useCallback(
         (envs: ApiEnvironment[], activeId: string | null) => {
+            const prevById = new Map(
+                environmentsRef.current.map((e) => [e.id, e]),
+            );
+            const nextIds = new Set(envs.map((e) => e.id));
+            const linkedRootOfCollection = (collectionId: string | null) =>
+                collectionId
+                    ? linkedRootsRef.current.find((r) =>
+                          r.collections.some((c) => c.id === collectionId),
+                      )
+                    : undefined;
+            const internalNext: ApiEnvironment[] = [];
+            const linkedOps: (() => Promise<unknown>)[] = [];
+
+            for (const e of envs) {
+                const prev = prevById.get(e.id);
+                const stripped = stripEnvironmentOrigin(e);
+                const scopeRoot = linkedRootOfCollection(e.collectionId);
+                const prevRootId =
+                    prev?.origin?.kind === "linked"
+                        ? prev.origin.rootId
+                        : undefined;
+
+                if (prevRootId) {
+                    if (e.collectionId === prev?.collectionId) {
+                        // Same scope → write the .swebenv.json back in place.
+                        linkedOps.push(() =>
+                            linkedActions.updateEnvironment(
+                                prevRootId,
+                                e.id,
+                                stripped,
+                            ),
+                        );
+                    } else if (scopeRoot) {
+                        // Re-scoped onto another linked collection → recreate the
+                        // file under that root.
+                        linkedOps.push(async () => {
+                            await linkedActions.deleteEnvironment(
+                                prevRootId,
+                                e.id,
+                            );
+                            await linkedActions.createEnvironment(
+                                scopeRoot.id,
+                                stripped,
+                                e.collectionId,
+                            );
+                        });
+                    } else if (e.collectionId === null) {
+                        // Moved to global scope — keep it linked as a root-level
+                        // file in the same root.
+                        linkedOps.push(async () => {
+                            await linkedActions.deleteEnvironment(
+                                prevRootId,
+                                e.id,
+                            );
+                            await linkedActions.createEnvironment(
+                                prevRootId,
+                                stripped,
+                            );
+                        });
+                    } else {
+                        // Re-scoped onto an internal collection → migrate it into
+                        // the internal store.
+                        linkedOps.push(() =>
+                            linkedActions.deleteEnvironment(prevRootId, e.id),
+                        );
+                        internalNext.push(stripped);
+                    }
+                    continue;
+                }
+
+                if (scopeRoot) {
+                    // A previously-internal (or new) env scoped onto a linked
+                    // collection moves out of the internal store.
+                    linkedOps.push(() =>
+                        linkedActions.createEnvironment(
+                            scopeRoot.id,
+                            stripped,
+                            e.collectionId,
+                        ),
+                    );
+                    continue;
+                }
+
+                internalNext.push(stripped);
+            }
+
+            // Linked envs deleted in the manager.
+            for (const p of environmentsRef.current) {
+                if (
+                    p.origin?.kind === "linked" &&
+                    p.origin.rootId &&
+                    !nextIds.has(p.id)
+                ) {
+                    const rootId = p.origin.rootId;
+                    linkedOps.push(() =>
+                        linkedActions.deleteEnvironment(rootId, p.id),
+                    );
+                }
+            }
+
             updateEnvironmentsMutate({
                 schemaVersion: 1,
-                environments: envs,
+                environments: internalNext,
                 uiState: {
                     activeEnvironmentId: activeId,
                     activeEnvironmentIdByCollection:
@@ -1275,15 +2264,18 @@ export function ApiClientPageProvider({
                         uiState?.lastSelectedRequestIdByCollection ?? {},
                 },
             });
+            void (async () => {
+                for (const op of linkedOps) await op();
+            })();
         },
-        [uiState, updateEnvironmentsMutate],
+        [uiState, updateEnvironmentsMutate, linkedActions],
     );
 
     const handleSetActiveEnvironment = useCallback(
         (envId: string | null) => {
             updateEnvironmentsMutate({
                 schemaVersion: 1,
-                environments,
+                environments: internalEnvironments,
                 uiState: {
                     activeEnvironmentId: envId,
                     activeEnvironmentIdByCollection:
@@ -1293,7 +2285,7 @@ export function ApiClientPageProvider({
                 },
             });
         },
-        [environments, uiState, updateEnvironmentsMutate],
+        [internalEnvironments, uiState, updateEnvironmentsMutate],
     );
 
     /// Sets the collection-scoped layer. Kept separate from the global slot so
@@ -1309,7 +2301,7 @@ export function ApiClientPageProvider({
 
             updateEnvironmentsMutate({
                 schemaVersion: 1,
-                environments,
+                environments: internalEnvironments,
                 uiState: {
                     // A pre-existing global selection that is really collection-scoped would
                     // keep overriding this one through the compatibility path, so clear it.
@@ -1325,12 +2317,27 @@ export function ApiClientPageProvider({
                 },
             });
         },
-        [environments, uiState, activeEnvironmentId, updateEnvironmentsMutate],
+        [
+            environments,
+            internalEnvironments,
+            uiState,
+            activeEnvironmentId,
+            updateEnvironmentsMutate,
+        ],
     );
 
     const handleSaveCollectionVariables = useCallback(
         (variables: CollectionVariable[]) => {
             if (!selectedCollectionId) return;
+            // The linked file model has no collection-variables slot — the
+            // editor is disabled for linked collections, so a save should never
+            // reach the internal PUT with linked metadata.
+            if (
+                collectionsRef.current.find(
+                    (c) => c.id === selectedCollectionId,
+                )?.origin?.kind === "linked"
+            )
+                return;
             updateCollectionsMutate(
                 (prev) =>
                     prev.map((c) =>
@@ -1351,6 +2358,85 @@ export function ApiClientPageProvider({
         },
         [selectedCollectionId, updateCollectionsMutate, notify],
     );
+
+    // ── Linked collection roots ────────────────────────────────────────────────
+
+    /// `isTauri` in tauri-bridge is module-private; the same probe is duplicated
+    /// in transport.ts/CollectionTree.tsx, so a local copy is the established pattern.
+    const handleLinkFolder = useCallback(() => {
+        void (async () => {
+            const dir = await pickDirectory(
+                "Select a folder to link as a collection root",
+            );
+            if (!dir) {
+                if (
+                    typeof window !== "undefined" &&
+                    !("__TAURI_INTERNALS__" in window)
+                ) {
+                    notify(
+                        "info",
+                        "Linking needs the desktop app",
+                        "Run SwebKit through Tauri to link a folder from disk.",
+                    );
+                }
+                return;
+            }
+            await linkedActions.createRoot({ path: dir });
+        })();
+    }, [linkedActions, notify]);
+
+    const handleReloadRoot = useCallback(
+        (rootId: string) => {
+            void (async () => {
+                const root = await linkedActions.reloadRoot(rootId);
+                if (root)
+                    notify(
+                        "success",
+                        "Reloaded",
+                        `${root.name} re-scanned from disk.`,
+                    );
+            })();
+        },
+        [linkedActions, notify],
+    );
+
+    const handleRemoveRoot = useCallback(
+        (rootId: string) => {
+            void (async () => {
+                const name = linkedRootsRef.current.find(
+                    (r) => r.id === rootId,
+                )?.name;
+                const ok = await linkedActions.removeRoot(rootId);
+                if (ok)
+                    notify(
+                        "success",
+                        "Unlinked",
+                        `${name ?? "Collection root"} removed — its files stay on disk.`,
+                    );
+            })();
+        },
+        [linkedActions, notify],
+    );
+
+    const handleRevealPath = useCallback(
+        (path: string) => {
+            void (async () => {
+                const revealed = await revealInExplorer(path);
+                if (!revealed)
+                    notify(
+                        "info",
+                        "Reveal unavailable",
+                        "Revealing files needs the desktop app.",
+                    );
+            })();
+        },
+        [notify],
+    );
+
+    const handleOpenGit = useCallback((repo: GitInitialRepo) => {
+        setGitInitialRepo(repo);
+        setShowGitPanel(true);
+    }, []);
 
     const selectedCollection = useMemo(
         () => collections.find((c) => c.id === selectedCollectionId) ?? null,
@@ -1455,6 +2541,7 @@ export function ApiClientPageProvider({
             activeCollection,
             handleSave,
             handleSend,
+            handleSendWithDeps,
             handleSaveExample,
         }),
         [
@@ -1470,6 +2557,7 @@ export function ApiClientPageProvider({
             activeCollection,
             handleSave,
             handleSend,
+            handleSendWithDeps,
             handleSaveExample,
         ],
     );
@@ -1489,6 +2577,7 @@ export function ApiClientPageProvider({
                 uiState?.activeEnvironmentIdByCollection ?? {},
             handleSetActiveEnvironment,
             handleSetScopedEnvironment,
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
             handleSaveEnvironments,
 
             selectedNodeId,
@@ -1506,9 +2595,13 @@ export function ApiClientPageProvider({
             handleAddRequest,
             handleAddFolder,
             handleDeleteNode,
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
             handleRenameNode,
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
             handleMoveNode,
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
             handleMoveCollection,
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
             handleImportCurlRequest,
 
             conflict,
@@ -1533,13 +2626,35 @@ export function ApiClientPageProvider({
             exportCollection,
             showGitPanel,
             setShowGitPanel,
+            gitInitialRepo,
+            setGitInitialRepo,
+
+            linkedRoots,
+            handleLinkFolder,
+            handleReloadRoot,
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
+            handleRemoveRoot,
+            handleRevealPath,
+            handleOpenGit,
 
             nameDialog,
             setNameDialog,
             confirmDialog,
             setConfirmDialog,
 
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
             handleSaveCollectionVariables,
+
+            runState,
+            runDrawerOpen,
+            setRunDrawerOpen,
+            abortRun,
+            runOptions,
+            setRunOptions,
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
+            handleRunSubtree,
+            // eslint-disable-next-line react-hooks/refs -- event-time ref reads, same pattern as handleSelectNode above
+            handleRunSelection,
         }),
         [
             collections,
@@ -1580,9 +2695,22 @@ export function ApiClientPageProvider({
             exportCollectionId,
             exportCollection,
             showGitPanel,
+            gitInitialRepo,
+            linkedRoots,
+            handleLinkFolder,
+            handleReloadRoot,
+            handleRemoveRoot,
+            handleRevealPath,
+            handleOpenGit,
             nameDialog,
             confirmDialog,
             handleSaveCollectionVariables,
+            runState,
+            runDrawerOpen,
+            abortRun,
+            runOptions,
+            handleRunSubtree,
+            handleRunSelection,
         ],
     );
 
