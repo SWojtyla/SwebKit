@@ -187,6 +187,50 @@ test.describe("Service Bus", () => {
         expect(hasMatches > 0 || hasNoMatch > 0).toBeTruthy();
     });
 
+    test("advanced filter on an application property supports date and number comparison", async ({
+        page,
+    }) => {
+        await page.goto("/service-bus");
+        await page
+            .getByTestId("sb-namespace-select")
+            .selectOption({ label: "orders-dev" });
+        await page.getByTestId("entity-tree-queue-order-created").click();
+
+        await expect(page.getByTestId("message-list")).toBeVisible();
+        const items = page
+            .getByTestId("message-list")
+            .locator("[data-testid^='message-item-']");
+        const initialCount = await items.count();
+        expect(initialCount).toBeGreaterThan(0);
+
+        await page.getByTestId("toggle-advanced-filter").click();
+        await page.getByTestId("rule-add").click();
+
+        // Date comparison on the NServiceBus-style TimeSent property.
+        await page.getByTestId("rule-property").fill("NServiceBus.TimeSent");
+        await page.getByTestId("rule-operator").selectOption("after");
+        await page.getByTestId("rule-value").fill("2999-01-01T00:00:00Z");
+        await expect(page.getByTestId("message-list-no-matches")).toBeVisible();
+
+        await page.getByTestId("rule-operator").selectOption("before");
+        await expect(page.getByTestId("message-list-no-matches")).toHaveCount(
+            0,
+        );
+        await expect(items).toHaveCount(initialCount);
+
+        // Numeric comparison on the demo "attempt" property (delivery count).
+        await page.getByTestId("rule-property").fill("attempt");
+        await page.getByTestId("rule-operator").selectOption("gt");
+        await page.getByTestId("rule-value").fill("9999");
+        await expect(page.getByTestId("message-list-no-matches")).toBeVisible();
+
+        await page.getByTestId("rule-operator").selectOption("lte");
+        await expect(page.getByTestId("message-list-no-matches")).toHaveCount(
+            0,
+        );
+        await expect(items).toHaveCount(initialCount);
+    });
+
     test("filter count shows when filters are active", async ({ page }) => {
         await page.goto("/service-bus");
         await page

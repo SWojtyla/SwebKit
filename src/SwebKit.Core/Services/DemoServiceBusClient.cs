@@ -1173,7 +1173,12 @@ public sealed class DemoServiceBusClient : IServiceBusClient
     private static SbMessage Msg(
         string id, string subject, string? correlationId, string body,
         DateTimeOffset enqueuedAt, int deliveryCount, long sequenceNumber,
-        Dictionary<string, object> props) => new()
+        Dictionary<string, object> props)
+    {
+        // NServiceBus-style timestamp so property filters exercise a real date shape.
+        props["NServiceBus.TimeSent"] = enqueuedAt.ToString("yyyy-MM-dd HH:mm:ss:ffffff") + " Z";
+        props["attempt"] = deliveryCount;
+        return new()
         {
             MessageId = id,
             Subject = subject,
@@ -1185,6 +1190,7 @@ public sealed class DemoServiceBusClient : IServiceBusClient
             SequenceNumber = sequenceNumber,
             ApplicationProperties = props
         };
+    }
 
     private static SbMessage DlqMsg(
         string id, string subject, string reason, string description, string body,
@@ -1204,7 +1210,11 @@ public sealed class DemoServiceBusClient : IServiceBusClient
     private static SbMessage SessionMsg(
         string id, string subject, string sessionId, string body,
         DateTimeOffset enqueuedAt, int deliveryCount, long sequenceNumber,
-        Dictionary<string, object> props) => new()
+        Dictionary<string, object> props)
+    {
+        props["NServiceBus.TimeSent"] = enqueuedAt.ToString("yyyy-MM-dd HH:mm:ss:ffffff") + " Z";
+        props["attempt"] = deliveryCount;
+        return new()
         {
             MessageId = id,
             Subject = subject,
@@ -1216,6 +1226,7 @@ public sealed class DemoServiceBusClient : IServiceBusClient
             SequenceNumber = sequenceNumber,
             ApplicationProperties = props
         };
+    }
 
     private sealed record DemoEntityData(
         IReadOnlyList<SbMessage> ActiveMessages,
