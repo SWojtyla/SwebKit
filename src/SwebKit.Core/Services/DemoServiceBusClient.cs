@@ -44,7 +44,8 @@ public sealed class DemoServiceBusClient : IServiceBusClient
             Entity("order-created"),
             Entity("order-processed"),
             Entity("order-failed"),
-            Entity("order-sessions")
+            Entity("order-sessions"),
+            Entity("order-scheduled")
         ];
         return Task.FromResult(queues);
     }
@@ -137,7 +138,7 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         {
             ActiveMessageCount = CountFor(entityPath, false),
             DeadLetterMessageCount = CountFor(entityPath, true),
-            ScheduledMessageCount = 0
+            ScheduledMessageCount = ScheduledCountFor(entityPath)
         });
 
     public Task<IReadOnlyList<SbMessage>> PeekMessagesAsync(string entityPath, int count, CancellationToken ct = default, long? fromSequenceNumber = null) =>
@@ -172,7 +173,7 @@ public sealed class DemoServiceBusClient : IServiceBusClient
 
         var sequenceSet = new HashSet<long>(sequenceNumbers);
         var kept = entityData.ActiveMessages
-            .Where(m => !m.SequenceNumber.HasValue || !sequenceSet.Contains(m.SequenceNumber.Value))
+            .Where(m => !m.SequenceNumber.HasValue || !sequenceSet.Contains(m.SequenceNumber.Value) || !IsReceivable(m))
             .ToList();
         var removed = entityData.ActiveMessages.Count - kept.Count;
         if (removed > 0)
@@ -197,7 +198,7 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         var deadLettered = new List<SbMessage>();
         foreach (var message in entityData.ActiveMessages)
         {
-            if (message.SequenceNumber is { } seq && sequenceSet.Contains(seq))
+            if (message.SequenceNumber is { } seq && sequenceSet.Contains(seq) && IsReceivable(message))
             {
                 message.DeadLetterReason = "SwebKit.ManualTransfer";
                 message.DeadLetterErrorDescription = "Moved to the dead-letter queue by the user";
@@ -237,8 +238,11 @@ public sealed class DemoServiceBusClient : IServiceBusClient
             return Task.FromResult(removed);
         }
 
-        var activeRemoved = entityData.ActiveMessages.Count;
-        _entityData[entityPath] = entityData with { ActiveMessages = [] };
+        // Purge emulates a receive-delete loop: scheduled messages aren't receivable until
+        // they fire, so they survive the purge untouched.
+        var stillScheduled = entityData.ActiveMessages.Where(m => !IsReceivable(m)).ToList();
+        var activeRemoved = entityData.ActiveMessages.Count - stillScheduled.Count;
+        _entityData[entityPath] = entityData with { ActiveMessages = stillScheduled };
         return Task.FromResult(activeRemoved);
     }
 
@@ -280,11 +284,36 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         SessionId = message.SessionId,
     };
 
-    public Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime, CancellationToken ct = default) =>
-        Task.FromResult(Interlocked.Increment(ref _nextSequence));
+    /// <summary>
+    /// Schedules honestly: the message goes into the entity's active collection carrying its
+    /// <see cref="SbMessage.ScheduledEnqueueTime"/> — exactly how the broker keeps scheduled
+    /// messages (they peek normally but count separately until they fire).
+    /// </summary>
+    public Task<long> ScheduleMessageAsync(string entityPath, SbMessage message, DateTimeOffset scheduledEnqueueTime, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var targetData = _entityData.TryGetValue(entityPath, out var existing)
+            ? existing
+            : new DemoEntityData([], []);
+        var copy = BrokerCopy(message);
+        copy.ScheduledEnqueueTime = scheduledEnqueueTime;
+        _entityData[entityPath] = targetData with { ActiveMessages = [.. targetData.ActiveMessages, copy] };
+        return Task.FromResult(copy.SequenceNumber!.Value);
+    }
 
-    public Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default) =>
-        Task.CompletedTask;
+    /// <summary>Removing a scheduled message = deleting it before it fires.</summary>
+    public Task CancelScheduledMessageAsync(string entityPath, long sequenceNumber, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (_entityData.TryGetValue(entityPath, out var entityData))
+        {
+            var kept = entityData.ActiveMessages
+                .Where(m => m.SequenceNumber != sequenceNumber || IsReceivable(m))
+                .ToList();
+            _entityData[entityPath] = entityData with { ActiveMessages = kept };
+        }
+        return Task.CompletedTask;
+    }
 
     /// <summary>
     /// Move-semantics resubmit, mirroring <see cref="Azure-side"/> behavior: each requested DLQ
@@ -422,7 +451,8 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         var moved = new List<(string Target, SbMessage Clone)>();
         foreach (var message in source)
         {
-            if (message.SequenceNumber is { } seq && requested.Remove(seq))
+            // Active-side resubmit is a receive-settle op — scheduled messages stay put.
+            if (message.SequenceNumber is { } seq && requested.Remove(seq) && (deadLetter || IsReceivable(message)))
             {
                 var applicationProperties = new Dictionary<string, object>(message.ApplicationProperties);
                 applicationProperties.Remove("DeadLetterReason");
@@ -568,7 +598,9 @@ public sealed class DemoServiceBusClient : IServiceBusClient
             ct.ThrowIfCancellationRequested();
             var sequenceNumber = message.SequenceNumber;
 
-            if (stop || sequenceNumber is null)
+            // The walk is a receive loop — a still-scheduled message is invisible to it
+            // and simply stays in the active list.
+            if (stop || sequenceNumber is null || !IsReceivable(message))
             {
                 kept.Add(message);
                 continue;
@@ -994,9 +1026,33 @@ public sealed class DemoServiceBusClient : IServiceBusClient
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private long CountFor(string path, bool dlq) =>
+    /// <summary>
+    /// Whether a receiver could settle this message right now: an unfired
+    /// <see cref="SbMessage.ScheduledEnqueueTime"/> means the message exists (peeks see it,
+    /// the scheduled count includes it) but no receiver can touch it until it fires —
+    /// the distinction the broker enforces on every receive-style operation.
+    /// </summary>
+    private static bool IsReceivable(SbMessage m) =>
+        m.ScheduledEnqueueTime is not { } t || t <= DateTimeOffset.UtcNow;
+
+    private long CountFor(string path, bool dlq)
+    {
+        if (!_entityData.TryGetValue(path, out var d))
+        {
+            return 0;
+        }
+        if (dlq)
+        {
+            return d.DeadLetterMessages.Count;
+        }
+        // The broker's ActiveMessageCount excludes messages still waiting on their schedule.
+        var now = DateTimeOffset.UtcNow;
+        return d.ActiveMessages.Count(m => m.ScheduledEnqueueTime is not { } t || t <= now);
+    }
+
+    private long ScheduledCountFor(string path) =>
         _entityData.TryGetValue(path, out var d)
-            ? (dlq ? d.DeadLetterMessages.Count : d.ActiveMessages.Count)
+            ? d.ActiveMessages.Count(m => m.ScheduledEnqueueTime is { } t && t > DateTimeOffset.UtcNow)
             : 0;
 
     private SbEntityInfo Entity(string name) => new()
@@ -1008,7 +1064,8 @@ public sealed class DemoServiceBusClient : IServiceBusClient
         Stats = new SbEntityStats
         {
             ActiveMessageCount = CountFor(name, false),
-            DeadLetterMessageCount = CountFor(name, true)
+            DeadLetterMessageCount = CountFor(name, true),
+            ScheduledMessageCount = ScheduledCountFor(name)
         }
     };
 
@@ -1110,6 +1167,25 @@ public sealed class DemoServiceBusClient : IServiceBusClient
                         now.AddHours(-2), 5, 4590)
                 ],
                 RequiresSession: true),
+            // A queue carrying broker-side scheduled messages — they peek alongside active
+            // ones (as on the real broker) but stay invisible to receive-style ops until
+            // their ScheduledEnqueueTime fires.
+            ["order-scheduled"] = new(
+                [
+                    Msg("osch-001", "ReportRequested", null,
+                        """{"reportId":"RPT-4401","format":"pdf"}""",
+                        now.AddMinutes(-20), 1, 4518, new() { ["source"] = "portal" }),
+                    Msg("osch-002", "ReportRequested", null,
+                        """{"reportId":"RPT-4402","format":"csv"}""",
+                        now.AddMinutes(-10), 1, 4519, new() { ["source"] = "portal" }),
+                    SchedMsg("osch-101", "InvoiceGenerationScheduled", null,
+                        """{"invoiceId":"INV-8821","reason":"month-end batch"}""",
+                        now.AddMinutes(-30), 0, 4520, now.AddHours(2), new() { ["source"] = "scheduler" }),
+                    SchedMsg("osch-102", "CustomerReminderScheduled", null,
+                        """{"customerId":"C-3391","reminder":"payment-due"}""",
+                        now.AddMinutes(-45), 0, 4521, now.AddDays(1), new() { ["source"] = "scheduler" })
+                ],
+                []),
             ["user-events/subscriptions/consumer-a"] = new(
                 [
                     Msg("ue-a-001", "UserCreated", null,
@@ -1191,6 +1267,23 @@ public sealed class DemoServiceBusClient : IServiceBusClient
             ApplicationProperties = props
         };
     }
+
+    private static SbMessage SchedMsg(
+        string id, string subject, string? correlationId, string body,
+        DateTimeOffset enqueuedAt, int deliveryCount, long sequenceNumber,
+        DateTimeOffset scheduledEnqueueTime, Dictionary<string, object> props) => new()
+        {
+            MessageId = id,
+            Subject = subject,
+            CorrelationId = correlationId,
+            ContentType = "application/json",
+            Body = body,
+            EnqueuedAt = enqueuedAt,
+            DeliveryCount = deliveryCount,
+            SequenceNumber = sequenceNumber,
+            ScheduledEnqueueTime = scheduledEnqueueTime,
+            ApplicationProperties = props
+        };
 
     private static SbMessage DlqMsg(
         string id, string subject, string reason, string description, string body,

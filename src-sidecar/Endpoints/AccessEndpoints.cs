@@ -192,11 +192,14 @@ public static class AccessEndpoints
                 return error;
             }
             // Dry-run "test send" doesn't need a real connection — render sample values so
-            // the user sees exactly what the template produces before trusting it.
+            // the user sees exactly what the template produces before trusting it. Demo
+            // mode never touches the real credential — the sample principal stands in.
             var principalContext =
                 services.GetService<IAzurePrincipalContext>() ?? SharedPrincipalContext.Value;
             artifact = SampleArtifact(
-                await principalContext.GetPrincipalAsync(ct).ConfigureAwait(false));
+                demo.IsDemoMode
+                    ? null
+                    : await principalContext.GetPrincipalAsync(ct).ConfigureAwait(false));
         }
         else
         {
@@ -361,8 +364,10 @@ public static class AccessEndpoints
 
         // Resolve the signed-in principal only when it can actually be granted something —
         // the token lookup can shell out to `az`, so don't pay it for connection-string rows.
+        // Demo mode skips it entirely: the demo must never touch a real credential (the
+        // DefaultAzureCredential chain probing az/IMDS can take seconds on a clean machine).
         ResolvedPrincipal? principal = null;
-        if (!connectionStringAuth)
+        if (!connectionStringAuth && !demo.IsDemoMode)
         {
             var principalContext =
                 services.GetService<IAzurePrincipalContext>() ?? SharedPrincipalContext.Value;

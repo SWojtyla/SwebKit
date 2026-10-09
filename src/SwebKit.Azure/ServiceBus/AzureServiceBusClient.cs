@@ -1436,7 +1436,10 @@ public class AzureServiceBusClient : IServiceBusClient, IAsyncDisposable
         EnqueuedAt = m.EnqueuedTime,
         DeliveryCount = m.DeliveryCount,
         SequenceNumber = m.SequenceNumber,
-        SessionId = m.SessionId
+        SessionId = m.SessionId,
+        // The SDK returns DateTimeOffset.MinValue for messages that were never scheduled —
+        // normalize that to null so the wire shape stays clean.
+        ScheduledEnqueueTime = m.ScheduledEnqueueTime == default ? null : m.ScheduledEnqueueTime
     };
 
     private static ServiceBusMessage MapToSdk(SbMessage m)

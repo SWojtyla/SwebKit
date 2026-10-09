@@ -1,6 +1,12 @@
 import type { SbMessage } from "@/lib/types";
 import type { AdvancedFilterRule, FilterOperator } from "./filterTypes";
-import { isRuleConfigured } from "./filterTypes";
+import {
+    isRuleConfigured,
+    isRelativeOperator,
+    isRangeOperator,
+    parseDurationMs,
+    splitRange,
+} from "./filterTypes";
 
 function matchesTextFilter(message: SbMessage, text: string): boolean {
     const q = text.toLowerCase();
@@ -51,6 +57,8 @@ function evaluateTextOperator(
             return actual.toLowerCase() === expected.toLowerCase();
         case "not-equals":
             return actual.toLowerCase() !== expected.toLowerCase();
+        case "starts-with":
+            return actual.toLowerCase().startsWith(expected.toLowerCase());
         case "regex":
             return safeRegexMatch(actual, expected);
         default: // contains
@@ -136,8 +144,9 @@ export function parseFlexibleDate(value: string): number {
 /**
  * Application-property values are untyped strings/objects, so the operator
  * decides the semantics: date operators parse both sides as dates, the `>`/`>=`/`<`/`<=`
- * family coerces both sides to numbers, everything else compares as text.
- * Unparseable operands never match.
+ * family coerces both sides to numbers, `between` is numeric when both bounds are
+ * numeric and a date range otherwise, and the relative ops compare the parsed
+ * property date against now-minus-duration. Unparseable operands never match.
  */
 function evaluatePropertyOperator(
     actual: string,
@@ -154,6 +163,30 @@ function evaluatePropertyOperator(
             if (isNaN(actualMs) || isNaN(expectedMs)) return false;
             return evaluateDateOperator(actualMs, expectedMs, op);
         }
+        case "older-than":
+        case "within-last": {
+            const actualMs = parseFlexibleDate(actual);
+            const durationMs = parseDurationMs(expected);
+            if (isNaN(actualMs) || durationMs === null) return false;
+            const cutoffMs = Date.now() - durationMs;
+            return op === "older-than"
+                ? actualMs < cutoffMs
+                : actualMs >= cutoffMs;
+        }
+        case "between": {
+            const { min, max } = splitRange(expected);
+            const loNum = Number(min);
+            const hiNum = Number(max);
+            const actualNum = Number(actual);
+            if (!isNaN(loNum) && !isNaN(hiNum) && !isNaN(actualNum)) {
+                return actualNum >= loNum && actualNum <= hiNum;
+            }
+            const actualMs = parseFlexibleDate(actual);
+            const loMs = parseFlexibleDate(min);
+            const hiMs = parseFlexibleDate(max);
+            if (isNaN(actualMs) || isNaN(loMs) || isNaN(hiMs)) return false;
+            return actualMs >= loMs && actualMs <= hiMs;
+        }
         case "gt":
         case "gte":
         case "lt":
@@ -166,6 +199,28 @@ function evaluatePropertyOperator(
         default:
             return evaluateTextOperator(actual, expected, op);
     }
+}
+
+function matchesNumeric(actual: number, rule: AdvancedFilterRule): boolean {
+    const rawValue = rule.value.trim();
+    if (isRangeOperator(rule.operator)) {
+        const { min, max } = splitRange(rawValue);
+        const lo = Number(min);
+        const hi = Number(max);
+        if (isNaN(lo) || isNaN(hi)) return false;
+        return actual >= lo && actual <= hi;
+    }
+    const expected = Number(rawValue);
+    if (isNaN(expected)) return false;
+    return evaluateNumericOperator(actual, expected, rule.operator);
+}
+
+/** A scheduled message is one whose broker-side fire time is still in the future — past
+ * stamps have already fired and the message is a normal active one. */
+export function isScheduledMessage(m: SbMessage, now = Date.now()): boolean {
+    if (!m.scheduledEnqueueTime) return false;
+    const t = Date.parse(m.scheduledEnqueueTime);
+    return !isNaN(t) && t > now;
 }
 
 function matchesAdvancedRule(
@@ -189,32 +244,63 @@ function matchesAdvancedRule(
             );
         }
 
-        case "delivery-count": {
-            const expected = Number(rawValue);
-            if (isNaN(expected)) return false;
-            return evaluateNumericOperator(
-                message.deliveryCount,
-                expected,
+        case "message-id":
+            return evaluateTextOperator(
+                message.messageId,
+                rawValue,
                 rule.operator,
             );
-        }
+        case "subject":
+            return (
+                !!message.subject &&
+                evaluateTextOperator(message.subject, rawValue, rule.operator)
+            );
+        case "correlation-id":
+            return (
+                !!message.correlationId &&
+                evaluateTextOperator(
+                    message.correlationId,
+                    rawValue,
+                    rule.operator,
+                )
+            );
 
+        case "delivery-count":
+            return matchesNumeric(message.deliveryCount, rule);
         case "sequence-number": {
             if (message.sequenceNumber === null) return false;
-            const expected = Number(rawValue);
-            if (isNaN(expected)) return false;
-            return evaluateNumericOperator(
-                message.sequenceNumber,
-                expected,
-                rule.operator,
-            );
+            return matchesNumeric(message.sequenceNumber, rule);
         }
 
-        case "enqueued-time": {
+        case "enqueued-time":
+        case "scheduled-time": {
+            const actual =
+                rule.field === "enqueued-time"
+                    ? message.enqueuedAt
+                    : message.scheduledEnqueueTime;
+            if (!actual) return false;
+            const actualMs = Date.parse(actual);
+            if (isNaN(actualMs)) return false;
+            // Relative operators: the comparison point is "now minus the duration" —
+            // `older than 2h` means the timestamp sits before now-2h, `within last 30m`
+            // means at or after now-30m.
+            if (isRelativeOperator(rule.operator)) {
+                const durationMs = parseDurationMs(rawValue);
+                if (durationMs === null) return false;
+                const cutoffMs = Date.now() - durationMs;
+                return rule.operator === "older-than"
+                    ? actualMs < cutoffMs
+                    : actualMs >= cutoffMs;
+            }
+            if (isRangeOperator(rule.operator)) {
+                const { min, max } = splitRange(rawValue);
+                const lo = Date.parse(min);
+                const hi = Date.parse(max);
+                if (isNaN(lo) || isNaN(hi)) return false;
+                return actualMs >= lo && actualMs <= hi;
+            }
             const expectedMs = parseFlexibleDate(rawValue);
             if (isNaN(expectedMs)) return false;
-            const actualMs = Date.parse(message.enqueuedAt);
-            if (isNaN(actualMs)) return false;
             return evaluateDateOperator(actualMs, expectedMs, rule.operator);
         }
 

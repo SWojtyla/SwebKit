@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SB UX prototype — Zones</title>
+<style>
+  :root {
+    --bg:#12141c; --card:#1a1d29; --card2:#20242f; --border:#2a2e3d;
+    --fg:#eef0f6; --muted:#8a8f9f; --primary:#8b8cf8; --primary-soft:#8b8cf826;
+    --danger:#e5484d; --warn:#f5a524; --ok:#46c98e; --radius:8px;
+  }
+  * { box-sizing:border-box; margin:0; font:13px/1.45 "Segoe UI",system-ui,sans-serif; }
+  body { background:var(--bg); color:var(--fg); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  button { font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
+  .topbar { display:flex; align-items:center; gap:12px; padding:8px 14px; border-bottom:1px solid var(--border); background:var(--card); }
+  .brand { font-weight:700; letter-spacing:.3px; }
+  .brand span { color:var(--muted); font-weight:400; }
+  select, input[type=text] { background:var(--card2); border:1px solid var(--border); color:var(--fg); border-radius:6px; padding:4px 8px; font-size:12px; }
+  .zones { display:flex; flex:1; gap:8px; padding:8px; min-height:0; }
+  .zone { display:flex; flex-direction:column; border:1px solid var(--border); border-radius:var(--radius); background:var(--card); overflow:hidden; min-width:0; }
+  .zone-head { display:flex; align-items:center; gap:8px; padding:6px 10px; border-bottom:1px solid var(--border); background:var(--card2); }
+  .zone-label { font-size:10px; font-weight:700; letter-spacing:1.2px; color:var(--muted); text-transform:uppercase; }
+  .zone-title { font-size:12px; font-weight:600; }
+  .zone-tools { margin-left:auto; display:flex; gap:2px; }
+  .icon-btn { padding:4px 6px; border-radius:5px; color:var(--muted); font-size:12px; }
+  .icon-btn:hover { background:var(--primary-soft); color:var(--fg); }
+  .icon-btn.on { color:var(--primary); background:var(--primary-soft); }
+  .zone-body { flex:1; overflow:auto; }
+  /* entity tree */
+  .ent-search { padding:8px; border-bottom:1px solid var(--border); }
+  .ent-search input { width:100%; }
+  .grp { padding:8px 10px 4px; font-size:10px; font-weight:700; letter-spacing:1px; color:var(--muted); text-transform:uppercase; }
+  .ent { display:flex; align-items:center; gap:8px; padding:5px 10px; cursor:pointer; border-left:2px solid transparent; }
+  .ent:hover { background:var(--card2); }
+  .ent.sel { background:var(--primary-soft); border-left-color:var(--primary); }
+  .ent .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .badge { font-size:10px; padding:1px 6px; border-radius:8px; background:var(--card2); color:var(--muted); }
+  .badge.dlq { color:var(--danger); background:#e5484d22; }
+  .badge.act { color:var(--ok); background:#46c98e1f; }
+  /* browse zone */
+  .crumbs { display:flex; align-items:center; gap:6px; padding:7px 12px; border-bottom:1px solid var(--border); font-size:12px; }
+  .crumbs .sep { color:var(--muted); }
+  .crumbs .here { font-weight:600; }
+  .crumbs .stats { margin-left:auto; color:var(--muted); font-size:11px; display:flex; gap:10px; }
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .seg button { padding:3px 12px; font-size:12px; color:var(--muted); }
+  .seg button.on { background:var(--primary); color:#fff; }
+  .filterstrip { display:flex; align-items:center; gap:8px; padding:6px 12px; border-bottom:1px solid var(--border); }
+  .filterstrip .grow { position:relative; flex:1; }
+  .filterstrip input { width:100%; padding-left:26px; }
+  .filterstrip .grow::before { content:"⌕"; position:absolute; left:8px; top:50%; transform:translateY(-50%); color:var(--muted); }
+  .chip { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--border); border-radius:14px; padding:3px 10px; font-size:11px; color:var(--muted); cursor:pointer; }
+  .chip:hover { border-color:var(--primary); color:var(--fg); }
+  .chip.on { background:var(--primary-soft); border-color:var(--primary); color:var(--primary); }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; padding:6px 10px; font-size:10px; font-weight:700; letter-spacing:.8px; color:var(--muted); text-transform:uppercase; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--card); }
+  td { padding:6px 10px; border-bottom:1px solid #232735; color:#cfd3de; }
+  tr { cursor:pointer; }
+  tbody tr:hover { background:var(--card2); }
+  tr.sel { background:var(--primary-soft); }
+  .mono { font-family:Consolas,monospace; font-size:11px; }
+  .foot { display:flex; align-items:center; gap:10px; padding:6px 12px; border-top:1px solid var(--border); font-size:11px; color:var(--muted); }
+  .foot button { color:var(--primary); }
+  /* inspect zone */
+  .detail { padding:12px; }
+  .detail h3 { font-size:12px; font-weight:600; margin-bottom:8px; }
+  .kv { display:grid; grid-template-columns:110px 1fr; gap:3px 10px; font-size:11px; margin-bottom:12px; }
+  .kv dt { color:var(--muted); }
+  .kv dd { font-family:Consolas,monospace; }
+  pre { background:#0d0f16; border:1px solid var(--border); border-radius:6px; padding:10px; font:11px/1.5 Consolas,monospace; color:#a5d6a7; overflow:auto; max-height:260px; }
+  .msg-actions { display:flex; flex-wrap:wrap; gap:6px; padding:10px 12px; border-top:1px solid var(--border); }
+  .btn { border:1px solid var(--border); border-radius:6px; padding:5px 12px; font-size:12px; }
+  .btn:hover { background:var(--card2); }
+  .btn.pri { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .btn.dgr { color:var(--danger); border-color:#e5484d55; }
+  .btn.dgr:hover { background:#e5484d1f; }
+  .lbl { font-size:10px; color:var(--muted); margin-top:4px; text-align:center; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">SwebKit <span>/ Service Bus</span></div>
+  <select><option>portima-dev</option><option>portima-prd</option></select>
+  <div style="margin-left:auto;display:flex;gap:4px">
+    <button class="icon-btn" title="Ask AI">✦ Ask AI</button>
+    <button class="icon-btn" title="Command palette">⌘K</button>
+  </div>
+</header>
+
+<div class="zones">
+
+  <!-- ══ ZONE 1 : NAVIGATE ══ -->
+  <section class="zone" style="width:230px;flex:none">
+    <div class="zone-head">
+      <span class="zone-label">Navigate</span>
+      <div class="zone-tools">
+        <button class="icon-btn" title="Refresh topology">⟳</button>
+        <button class="icon-btn" title="Collapse zone">«</button>
+      </div>
+    </div>
+    <div class="ent-search"><input type="text" placeholder="Filter entities… (Ctrl+Shift+E)"></div>
+    <div class="zone-body">
+      <div class="grp">Queues</div>
+      <div class="ent sel"><span>≡</span><span class="name">orders</span><span class="badge act">1 284</span><span class="badge dlq">37</span></div>
+      <div class="ent"><span>≡</span><span class="name">payments</span><span class="badge act">56</span><span class="badge dlq">0</span></div>
+      <div class="ent"><span>≡</span><span class="name">invoices</span><span class="badge act">12</span><span class="badge dlq">3</span></div>
+      <div class="ent"><span>≡</span><span class="name">notifications</span><span class="badge act">0</span><span class="badge dlq">0</span></div>
+      <div class="grp">Topics</div>
+      <div class="ent"><span>◈</span><span class="name">events</span></div>
+      <div class="ent" style="padding-left:26px"><span>↳</span><span class="name">sub-billing</span><span class="badge act">8</span></div>
+      <div class="ent" style="padding-left:26px"><span>↳</span><span class="name">sub-audit</span><span class="badge act">201</span></div>
+    </div>
+    <div class="foot"><span>portima-dev · 7 entities</span></div>
+  </section>
+
+  <!-- ══ ZONE 2 : BROWSE ══ -->
+  <section class="zone" style="flex:1">
+    <div class="zone-head">
+      <span class="zone-label">Browse</span>
+      <span class="zone-title">orders</span>
+      <div class="zone-tools">
+        <button class="icon-btn" title="Entity properties">ⓘ</button>
+        <button class="icon-btn" title="Scheduled messages">⏱</button>
+        <button class="icon-btn" title="Pin">📌</button>
+      </div>
+    </div>
+    <div class="crumbs">
+      <a style="color:var(--muted);cursor:pointer">Overview</a><span class="sep">/</span>
+      <span>portima-dev</span><span class="sep">/</span><span class="here">orders</span>
+      <div class="stats"><span style="color:var(--ok)">● 1 284 active</span><span style="color:var(--danger)">● 37 dead-lettered</span></div>
+      <div class="seg"><button class="on">Active</button><button>DLQ</button></div>
+    </div>
+    <div class="filterstrip">
+      <div class="grow"><input type="text" placeholder="Search id, subject, body…"></div>
+      <button class="chip on">⚡ Filters 2</button>
+      <button class="chip">☰ View</button>
+    </div>
+    <div class="zone-body">
+      <table>
+        <thead><tr><th style="width:30px"><input type="checkbox"></th><th>Message ID</th><th>Subject</th><th>Enqueued</th><th>Dlv</th><th>Size</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="foot">
+      <button>⟳</button>
+      <span>Showing 200 of 1 284</span>
+      <button style="border:1px solid var(--border);border-radius:5px;padding:2px 10px">Load more</button>
+      <span style="margin-left:auto">updated 4s ago · every 10s ▾</span>
+    </div>
+  </section>
+
+  <!-- ══ ZONE 3 : INSPECT ══ -->
+  <section class="zone" style="width:380px;flex:none">
+    <div class="zone-head">
+      <span class="zone-label">Inspect</span>
+      <span class="zone-title" style="font-family:Consolas,monospace">ord-88412</span>
+      <div class="zone-tools">
+        <button class="icon-btn" title="Dock bottom">⬓</button>
+        <button class="icon-btn" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="zone-body">
+      <div class="detail">
+        <h3>Properties</h3>
+        <dl class="kv">
+          <dt>Message ID</dt><dd>ord-88412</dd>
+          <dt>Sequence</dt><dd>88 412</dd>
+          <dt>Subject</dt><dd>OrderCreated</dd>
+          <dt>Enqueued</dt><dd>08/10/2026 11:42:03</dd>
+          <dt>Delivery count</dt><dd>1</dd>
+          <dt>Session</dt><dd>—</dd>
+        </dl>
+        <h3>Body</h3>
+        <pre>{
+  "orderId": "88412",
+  "customer": "RE-4402",
+  "total": 1290.50,
+  "currency": "EUR",
+  "lines": [
+    { "sku": "SWB-ENT", "qty": 1 }
+  ]
+}</pre>
+      </div>
+    </div>
+    <div class="msg-actions">
+      <button class="btn pri">Complete</button>
+      <button class="btn">Edit &amp; resubmit</button>
+      <button class="btn">Replay</button>
+      <button class="btn">Schedule</button>
+      <button class="btn dgr">Dead-letter</button>
+    </div>
+  </section>
+</div>
+
+<script>
+  const subjects = ["OrderCreated","OrderCreated","PaymentRequested","OrderCreated","InvoiceIssued","OrderCancelled","OrderCreated","StockReserved","OrderCreated","OrderShipped"];
+  const tb = document.getElementById("rows");
+  for (let i = 0; i < 10; i++) {
+    const tr = document.createElement("tr");
+    if (i === 0) tr.className = "sel";
+    tr.innerHTML = `<td><input type="checkbox"${i===0?" checked":""}></td>
+      <td class="mono">ord-${88412 - i * 7}</td>
+      <td>${subjects[i]}</td>
+      <td>11:${42 - i}:${(i * 13 % 60).toString().padStart(2, "0")}</td>
+      <td>${i === 5 ? 3 : 1}</td>
+      <td>${(1.2 + i * 0.3).toFixed(1)} KB</td>`;
+    tr.onclick = () => { document.querySelectorAll("#rows tr").forEach(r => r.classList.remove("sel")); tr.classList.add("sel"); };
+    tb.appendChild(tr);
+  }
+</script>
+</body>
+</html>
