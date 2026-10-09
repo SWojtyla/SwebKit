@@ -1,6 +1,6 @@
 # API Client workspace model — file visibility + linked roots
 
-State: In Progress
+State: Review
 
 ## Goal
 
