@@ -18,6 +18,8 @@ import { EnvironmentManager } from "./EnvironmentManager";
 import { CollectionVariableEditor } from "./CollectionVariableEditor";
 import { RequestTabStrip } from "./RequestTabStrip";
 import { CollectionExportDialog } from "./CollectionExportDialog";
+import { ChainListSection } from "./ChainListSection";
+import { ChainEditorDialog } from "./ChainEditorDialog";
 import { GitDrawer } from "./GitDrawer";
 import { RunResultsDrawer } from "./RunResultsDrawer";
 import { apiSubpathWithin } from "@/lib/linked-root-utils";
@@ -282,38 +284,56 @@ function ApiClientPageContent() {
                     panelLabels={["collections", "request", "response"]}
                     className="w-full min-w-0"
                 >
-                    <CollectionTree
-                        collections={ctx.collections}
-                        linkedRoots={ctx.linkedRoots}
-                        selectedNodeId={ctx.selectedNodeId}
-                        selectedCollectionId={ctx.selectedCollectionId}
-                        onSelectNode={ctx.handleSelectNode}
-                        onAddCollection={ctx.handleAddCollection}
-                        onAddRequest={ctx.handleAddRequest}
-                        onAddFolder={ctx.handleAddFolder}
-                        onDeleteNode={ctx.handleDeleteNode}
-                        onRenameNode={ctx.handleRenameNode}
-                        onMoveNode={ctx.handleMoveNode}
-                        onMoveCollection={ctx.handleMoveCollection}
-                        onExportCollection={ctx.setExportCollectionId}
-                        onImportCurl={ctx.handleImportCurlRequest}
-                        onLinkFolder={ctx.handleLinkFolder}
-                        onReloadRoot={ctx.handleReloadRoot}
-                        onRemoveRoot={ctx.handleRemoveRoot}
-                        onRevealPath={ctx.handleRevealPath}
-                        onRunSubtree={ctx.handleRunSubtree}
-                        onRunSelection={ctx.handleRunSelection}
-                        onOpenGit={(root) => {
-                            if (!root.repositoryRoot) return;
-                            ctx.handleOpenGit({
-                                path: root.repositoryRoot,
-                                apiSubpath: apiSubpathWithin(
-                                    root.repositoryRoot,
-                                    root.apiRootPath,
-                                ),
-                            });
-                        }}
-                    />
+                    {/* Collections tree + the chains section share the first
+                        pane — the tree keeps the flexible space, the chain list
+                        caps at 45% of the pane height. */}
+                    <div className="flex h-full min-h-0 w-full flex-col">
+                        <div className="min-h-0 flex-1">
+                            <CollectionTree
+                                collections={ctx.collections}
+                                linkedRoots={ctx.linkedRoots}
+                                selectedNodeId={ctx.selectedNodeId}
+                                selectedCollectionId={ctx.selectedCollectionId}
+                                onSelectNode={ctx.handleSelectNode}
+                                onAddCollection={ctx.handleAddCollection}
+                                onAddRequest={ctx.handleAddRequest}
+                                onAddFolder={ctx.handleAddFolder}
+                                onDeleteNode={ctx.handleDeleteNode}
+                                onRenameNode={ctx.handleRenameNode}
+                                onMoveNode={ctx.handleMoveNode}
+                                onMoveCollection={ctx.handleMoveCollection}
+                                onExportCollection={ctx.setExportCollectionId}
+                                onImportCurl={ctx.handleImportCurlRequest}
+                                onLinkFolder={ctx.handleLinkFolder}
+                                onReloadRoot={ctx.handleReloadRoot}
+                                onRemoveRoot={ctx.handleRemoveRoot}
+                                onRevealPath={ctx.handleRevealPath}
+                                onRunSubtree={ctx.handleRunSubtree}
+                                onRunSelection={ctx.handleRunSelection}
+                                chains={ctx.chains}
+                                onAddToChain={ctx.handleAddToChain}
+                                onOpenGit={(root) => {
+                                    if (!root.repositoryRoot) return;
+                                    ctx.handleOpenGit({
+                                        path: root.repositoryRoot,
+                                        apiSubpath: apiSubpathWithin(
+                                            root.repositoryRoot,
+                                            root.apiRootPath,
+                                        ),
+                                    });
+                                }}
+                            />
+                        </div>
+                        <ChainListSection
+                            chains={ctx.chains}
+                            onNewChain={() => ctx.openChainEditor(null)}
+                            onEditChain={ctx.openChainEditor}
+                            onRunChain={ctx.handleRunChain}
+                            onRenameChain={ctx.handleRenameChain}
+                            onExportChain={ctx.handleExportChain}
+                            onDeleteChain={ctx.handleDeleteChain}
+                        />
+                    </div>
 
                     {/* No `border-r` here — RequestEditor already carries one, and the
               resizer provides the visual divider. */}
@@ -371,6 +391,14 @@ function ApiClientPageContent() {
                     collection={ctx.exportCollection}
                     environments={ctx.environments}
                     onClose={() => ctx.setExportCollectionId(null)}
+                />
+            )}
+            {ctx.chainEditor && (
+                <ChainEditorDialog
+                    chainId={ctx.chainEditor.chainId}
+                    collections={ctx.collections}
+                    onSave={ctx.handleSaveChain}
+                    onClose={ctx.closeChainEditor}
                 />
             )}
 

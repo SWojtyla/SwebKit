@@ -21,10 +21,17 @@ public interface IHttpRequestExecutor
     /// The global environment layer, applied underneath <paramref name="activeEnvironment"/> so
     /// a value shared by a family of environments need only be defined once.
     /// </param>
+    /// <param name="overlay">
+    /// Run-scoped variable bag (api-request-chains): applied at TOP priority after every
+    /// persisted layer, so a variable captured by an earlier step in the same run wins over
+    /// collection and environment definitions — including entries living in other collections.
+    /// <see langword="null"/> outside of a run.
+    /// </param>
     Task<HttpRequestResult> ExecuteAsync(
         HttpRequestEntry request,
         ApiCollection collection,
         ApiEnvironment? activeEnvironment,
         ApiEnvironment? globalEnvironment = null,
+        IReadOnlyDictionary<string, string?>? overlay = null,
         CancellationToken cancellationToken = default);
 }

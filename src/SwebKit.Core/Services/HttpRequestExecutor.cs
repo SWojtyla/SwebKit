@@ -31,12 +31,26 @@ public sealed class HttpRequestExecutor(
         ApiCollection collection,
         ApiEnvironment? activeEnvironment,
         ApiEnvironment? globalEnvironment = null,
+        IReadOnlyDictionary<string, string?>? overlay = null,
         CancellationToken cancellationToken = default)
     {
         // Lowest priority first: the collection-scoped environment overrides the global one.
         var scope = await substitution
             .BuildScopeAsync(collection.Variables, [globalEnvironment, activeEnvironment], cancellationToken)
             .ConfigureAwait(false);
+
+        // Run-scoped overlay (api-request-chains): values captured by earlier steps in the same
+        // run outrank every persisted layer — a chain step in collection B must see the variable
+        // collection A's step just captured, which layer ordering alone cannot express.
+        if (overlay is { Count: > 0 })
+        {
+            var merged = new Dictionary<string, string?>(scope, StringComparer.Ordinal);
+            foreach (var (key, value) in overlay)
+            {
+                merged[key] = value;
+            }
+            scope = merged;
+        }
 
         // Build the URL (with query params merged in). Edge whitespace — a paste artifact in
         // the URL field or inside a substituted variable's value — is never valid in a URI.

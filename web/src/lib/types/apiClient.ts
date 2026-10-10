@@ -398,12 +398,19 @@ export interface GraphQlErrorLocation {
 // See docs/features/active/api-client-request-runs.md. One `data:` frame per
 // event, flat JSON with a `type` discriminator.
 
-export type ApiRunMode = "requestWithDeps" | "subtree" | "explicit";
+export type ApiRunMode = "requestWithDeps" | "subtree" | "explicit" | "chain";
 
 /** Body of `POST /api/api-client/run`. */
 export interface ApiRunRequest {
     mode: ApiRunMode;
-    collectionId: string;
+    /**
+     * The collection the run resolves against. Absent for `chain` mode — each
+     * chain step carries its own collection reference and the backend resolves
+     * per-step environments, so chain runs send no env ids either.
+     */
+    collectionId?: string;
+    /** `chain`: the persisted chain to expand and run. */
+    chainId?: string;
     /** Set when the collection lives under a linked root (`collection.origin.rootId`). */
     linkedRootId?: string | null;
     /** requestWithDeps: the request node id the chain resolves and ends with. */
@@ -422,7 +429,23 @@ export interface ApiRunRequest {
     delayMs: number;
 }
 
-export interface ApiRunPlanStep {
+/**
+ * Per-step context carried on `plan` steps and the step lifecycle events of a
+ * `mode: "chain"` run: which collection the step resolved against, which chain
+ * step (`stepId`) produced it, and whether it is a dependency pulled in by a
+ * declared step (`isDependency` + `ownerStepId`) rather than a step itself.
+ * All optional — absent on the collection-scoped run modes.
+ */
+export interface ApiRunStepContext {
+    collectionId?: string;
+    collectionName?: string;
+    stepId?: string;
+    isDependency?: boolean;
+    /** For dependency steps: the declared chain step that pulled this dep in. */
+    ownerStepId?: string;
+}
+
+export interface ApiRunPlanStep extends ApiRunStepContext {
     index: number;
     requestId: string;
     name: string;
@@ -432,14 +455,26 @@ export interface ApiRunPlanStep {
 export interface ApiRunCapturedVariable {
     targetVariable: string;
     source: string;
+    /**
+     * `"run"` when the capture landed in the run-scoped variable overlay
+     * (visible to later steps across collections, dies with the run);
+     * `"environment"` when it wrote into its owning env/collection scope.
+     * Absent on runs predating the overlay — treat as `"environment"`.
+     */
+    scope?: "run" | "environment";
 }
 
 export type ApiRunAbortReason = "stopOnError" | "cancelled";
 
 export type ApiRunEvent =
     | { type: "plan"; runId: string; steps: ApiRunPlanStep[] }
-    | { type: "stepStarted"; index: number; requestId: string; name: string }
-    | {
+    | ({
+          type: "stepStarted";
+          index: number;
+          requestId: string;
+          name: string;
+      } & ApiRunStepContext)
+    | ({
           type: "stepCompleted";
           index: number;
           requestId: string;
@@ -447,8 +482,8 @@ export type ApiRunEvent =
           durationMs: number;
           captured: ApiRunCapturedVariable[];
           response: ApiClientExecutionResponse;
-      }
-    | {
+      } & ApiRunStepContext)
+    | ({
           type: "stepFailed";
           index: number;
           requestId: string;
@@ -457,7 +492,7 @@ export type ApiRunEvent =
           durationMs?: number | null;
           error: string;
           response?: ApiClientExecutionResponse | null;
-      }
+      } & ApiRunStepContext)
     | { type: "aborted"; reason: ApiRunAbortReason; completedSteps: number }
     | {
           type: "done";
@@ -465,5 +500,52 @@ export type ApiRunEvent =
           failedSteps: number;
           durationMs: number;
       };
+
+// ── Request chains (persisted, cross-collection ordered runs) ────────────────
+// See docs/features/active/api-request-chains.md. Chains live in the internal
+// store only (`chains.json`); steps may reference requests in any reachable
+// collection — internal, linked-root, or demo.
+
+/** One ordered step of a persisted chain. */
+export interface ApiChainStep {
+    /** Stable step id — SSE `stepId`/`ownerStepId` correlate back to it. */
+    id: string;
+    /** Internal or linked-root collection id. */
+    collectionId: string;
+    /** Set when the collection lives under a linked root. */
+    linkedRootId?: string | null;
+    /** The request's entry id (`node.request.id`). */
+    requestId: string;
+    enabled: boolean;
+}
+
+export interface ApiChain {
+    id: string;
+    name: string;
+    description?: string | null;
+    steps: ApiChainStep[];
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+/** `GET /api/api-client/chains` list row — no step payload, just the count. */
+export interface ApiChainSummary {
+    id: string;
+    name: string;
+    description?: string | null;
+    stepCount: number;
+    updatedAt: string;
+}
+
+/**
+ * POST/PUT body for `/api/api-client/chains`. The server validates but stores
+ * steps verbatim — a broken request ref surfaces at plan time (`unknown_request`),
+ * not at save time.
+ */
+export interface ApiChainUpsert {
+    name: string;
+    description?: string | null;
+    steps: ApiChainStep[];
+}
 
 // ── Service Bus ──────────────────────────────────────────────────────────────

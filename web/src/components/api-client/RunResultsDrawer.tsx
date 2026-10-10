@@ -7,6 +7,7 @@ import {
     Circle,
     ChevronDown,
     ChevronRight,
+    CornerDownRight,
     ListOrdered,
     OctagonX,
 } from "lucide-react";
@@ -227,16 +228,35 @@ function RunStepRow({ step }: { step: ApiRunStepState }) {
 
     return (
         <div
-            className="border-b border-border/50 py-1 last:border-b-0"
+            className={`border-b border-border/50 py-1 last:border-b-0 ${
+                step.isDependency ? "opacity-80" : ""
+            }`}
             data-testid={`run-step-${step.index}`}
+            data-dependency={step.isDependency || undefined}
         >
-            <div className="flex items-center gap-2 text-sm">
+            <div
+                className={`flex items-center gap-2 text-sm ${
+                    // Expanded dependency steps indent under the chain step
+                    // that pulled them in — they're not declared steps.
+                    step.isDependency ? "ml-4" : ""
+                }`}
+            >
                 <span
                     className="w-6 shrink-0 text-right text-xs text-muted-foreground"
                     aria-label={`Step ${step.index + 1}`}
                 >
                     {step.index + 1}
                 </span>
+                {step.isDependency && (
+                    <span
+                        className="flex shrink-0 items-center gap-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"
+                        title="Dependency pulled in by a chain step"
+                        data-testid={`run-dep-${step.index}`}
+                    >
+                        <CornerDownRight className="h-3 w-3" />
+                        dep
+                    </span>
+                )}
                 <span
                     data-testid={`run-status-${step.index}`}
                     data-status={step.status}
@@ -267,6 +287,15 @@ function RunStepRow({ step }: { step: ApiRunStepState }) {
                     )}
                     <span className="truncate">{step.name}</span>
                 </button>
+                {step.collectionName && (
+                    <span
+                        className="shrink-0 rounded border bg-muted/40 px-1.5 py-0 text-[10px] text-muted-foreground"
+                        title="Collection this step resolved against"
+                        data-testid={`run-collection-${step.index}`}
+                    >
+                        {step.collectionName}
+                    </span>
+                )}
                 {step.httpStatus != null && (
                     <span
                         className={`shrink-0 font-mono text-xs ${
@@ -302,9 +331,19 @@ function RunStepRow({ step }: { step: ApiRunStepState }) {
                         <span
                             key={`${c.targetVariable}:${c.source}`}
                             className="rounded border bg-muted/40 px-1.5 py-0 font-mono text-[11px] text-muted-foreground"
-                            title={`Captured from ${c.source}`}
+                            title={`Captured from ${c.source}${
+                                c.scope === "run"
+                                    ? " — run scope (visible to later steps, dies with the run)"
+                                    : ""
+                            }`}
+                            data-scope={c.scope ?? "environment"}
                         >
                             {c.targetVariable}
+                            {c.scope === "run" && (
+                                <span className="ml-1 text-[9px] uppercase tracking-wide text-primary">
+                                    run
+                                </span>
+                            )}
                         </span>
                     ))}
                 </div>

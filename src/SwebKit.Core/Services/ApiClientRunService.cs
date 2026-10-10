@@ -22,7 +22,8 @@ namespace SwebKit.Core.Services;
 /// <c>cross_collection_dependency</c> rather than <c>missing_dependency</c>. Pass the DI
 /// <see cref="CollectionRepository"/> (it covers <c>collections.json</c> only — a dep held by a
 /// linked-root collection still resolves as missing). When null, every unresolved dep is
-/// <c>missing_dependency</c>.
+/// <c>missing_dependency</c>. In chain mode the same probe distinguishes "dep exists in a
+/// collection that isn't part of this chain" from "dep exists nowhere".
 /// </param>
 public sealed class ApiClientRunService(
     IHttpRequestExecutor executor,
@@ -42,7 +43,15 @@ public sealed class ApiClientRunService(
     /// for user-facing failures (bad mode, unknown node/request, missing or cross-collection
     /// dependency, dependency cycle, oversized or empty plan).
     /// </summary>
-    public ApiRunPlanResult BuildPlan(ApiCollection collection, ApiRunRequest request)
+    /// <param name="activeEnvironment">The collection-scoped env layer resolved by the caller —
+    /// baked into every <see cref="ApiRunResolvedStep"/> so <see cref="RunAsync"/> needs no
+    /// second env source. Null means "no environment".</param>
+    /// <param name="globalEnvironment">The global env layer, applied underneath the scoped one.</param>
+    public ApiRunPlanResult BuildPlan(
+        ApiCollection collection,
+        ApiRunRequest request,
+        ApiEnvironment? activeEnvironment = null,
+        ApiEnvironment? globalEnvironment = null)
     {
         ArgumentNullException.ThrowIfNull(collection);
         ArgumentNullException.ThrowIfNull(request);
@@ -88,7 +97,190 @@ public sealed class ApiClientRunService(
         {
             RunId = Guid.NewGuid().ToString("N"),
             Steps = steps,
-            Requests = ordered,
+            ResolvedSteps = ordered
+                .Select(entry => new ApiRunResolvedStep(entry, collection, activeEnvironment, globalEnvironment))
+                .ToList(),
+        });
+    }
+
+    // ── Chain mode (api-request-chains) ──────────────────────────────────────
+
+    /// <summary>
+    /// Expands the enabled steps of <paramref name="chain"/> into a run plan. Each entry of
+    /// <paramref name="resolvedSteps"/> carries the collection and environment pair its step
+    /// resolved against (the endpoint does that per step — internal repository → linked root →
+    /// demo — because resolution needs services this service deliberately does not hold).
+    /// Disabled steps are the caller's filter; pass only enabled steps here.
+    /// </summary>
+    /// <remarks>
+    /// Dependency edges inside a chain run may cross collections — the one place the
+    /// <c>cross_collection_dependency</c> ban is lifted: a dep id is looked up in its owning
+    /// collection first, then in a run-wide index across every resolved collection. Cycle
+    /// detection and <see cref="MaxSteps"/> apply to the expanded (steps + deps) list.
+    /// </remarks>
+    public ApiRunPlanResult BuildChainPlan(
+        ApiChain chain,
+        IReadOnlyList<ApiChainResolvedStep> resolvedSteps,
+        ApiRunRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(chain);
+        ArgumentNullException.ThrowIfNull(request);
+
+        // Per-collection request indexes for every collection reachable in this run — a dep's
+        // own collection is consulted first; the run-wide index is the cross-collection fallback.
+        var indexByCollection = new Dictionary<ApiCollection, IReadOnlyDictionary<string, HttpRequestEntry>>();
+        var runWideIndex = new Dictionary<string, ApiCollection>(StringComparer.Ordinal);
+
+        foreach (var step in resolvedSteps)
+        {
+            if (indexByCollection.ContainsKey(step.Collection))
+            {
+                continue;
+            }
+            var localIndex = BuildRequestIndex(step.Collection);
+            indexByCollection[step.Collection] = localIndex;
+            foreach (var (id, _) in localIndex)
+            {
+                // First writer wins on a request-id collision across collections; a step's own
+                // collection is always consulted first anyway, so order here only matters for
+                // ids that exist in two *foreign* collections.
+                runWideIndex.TryAdd(id, step.Collection);
+            }
+        }
+
+        var steps = new List<ApiRunPlanStep>();
+        var resolved = new List<ApiRunResolvedStep>();
+        // Dep-expanded rows dedupe across steps: when two chain steps pull the same request in as
+        // a dependency, it runs once (at its first expansion — still before every dependent, since
+        // chain steps expand in order). Explicit chain steps are never deduped: a chain is an
+        // ordered sequence, so two steps pointing at the same request each run it.
+        var emittedDependencies = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var resolvedStep in resolvedSteps)
+        {
+            var chainStep = resolvedStep.Step;
+            var localIndex = indexByCollection[resolvedStep.Collection];
+
+            if (string.IsNullOrWhiteSpace(chainStep.RequestId) || !localIndex.ContainsKey(chainStep.RequestId))
+            {
+                // The request vanished since the chain was saved — honest plan error naming the
+                // step, never a silent skip.
+                return ApiRunPlanResult.Failure("unknown_request", requestId: chainStep.RequestId, stepId: chainStep.Id);
+            }
+
+            var visited = new HashSet<string>(StringComparer.Ordinal);
+            var inStack = new HashSet<string>(StringComparer.Ordinal);
+            var stack = new List<string>();
+            var expanded = new List<(HttpRequestEntry Entry, ApiChainResolvedStep Context, bool IsDependency)>();
+            ApiRunPlanError? error = null;
+
+            void Visit(string requestId, ApiChainResolvedStep home, bool isDependency)
+            {
+                if (error is not null || !visited.Add(requestId))
+                {
+                    return;
+                }
+
+                // Resolve against the request's own collection first, then the run-wide index —
+                // a dep may legally live in another collection *of this run*.
+                HttpRequestEntry entry;
+                ApiChainResolvedStep context;
+                if (indexByCollection[home.Collection].TryGetValue(requestId, out var own))
+                {
+                    entry = own;
+                    context = home;
+                }
+                else if (runWideIndex.TryGetValue(requestId, out var owner))
+                {
+                    entry = indexByCollection[owner][requestId];
+                    context = resolvedSteps.First(s => ReferenceEquals(s.Collection, owner));
+                }
+                else
+                {
+                    // Same probe semantics as the single-collection modes: a dep that exists in
+                    // some *other* persisted collection (not reachable in this run) is
+                    // cross_collection_dependency; one that exists nowhere is missing_dependency.
+                    var probe = collections?.FindRequest(requestId).Collection;
+                    error = probe is not null && !string.Equals(probe.Id, home.Collection.Id, StringComparison.Ordinal)
+                        ? new ApiRunPlanError { Error = "cross_collection_dependency", RequestId = requestId }
+                        : new ApiRunPlanError { Error = "missing_dependency", RequestId = requestId };
+                    return;
+                }
+
+                inStack.Add(requestId);
+                stack.Add(requestId);
+
+                foreach (var depId in entry.DependsOnRequestIds)
+                {
+                    if (error is not null)
+                    {
+                        break;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(depId))
+                    {
+                        continue;
+                    }
+
+                    if (inStack.Contains(depId))
+                    {
+                        var cycleStart = stack.IndexOf(depId);
+                        var cycle = stack.Skip(cycleStart).Concat([depId]).ToList();
+                        error = new ApiRunPlanError { Error = "dependency_cycle", Cycle = cycle };
+                        break;
+                    }
+
+                    Visit(depId, context, isDependency: true);
+                }
+
+                inStack.Remove(requestId);
+                stack.RemoveAt(stack.Count - 1);
+                expanded.Add((entry, context, isDependency));
+            }
+
+            Visit(chainStep.RequestId, resolvedStep, isDependency: false);
+            if (error is not null)
+            {
+                return new ApiRunPlanResult { Error = error };
+            }
+
+            foreach (var (entry, context, isDependency) in expanded)
+            {
+                if (isDependency && !emittedDependencies.Add(entry.Id))
+                {
+                    continue;
+                }
+
+                var index = steps.Count;
+                steps.Add(new ApiRunPlanStep(
+                    index,
+                    entry.Id,
+                    entry.Name,
+                    CollectionId: context.Collection.Id,
+                    CollectionName: context.Collection.Name,
+                    StepId: isDependency ? null : chainStep.Id,
+                    IsDependency: isDependency ? true : null,
+                    OwnerStepId: isDependency ? chainStep.Id : null));
+                resolved.Add(new ApiRunResolvedStep(entry, context.Collection, context.ActiveEnvironment, context.GlobalEnvironment));
+            }
+        }
+
+        if (steps.Count == 0)
+        {
+            return ApiRunPlanResult.Failure("empty_plan");
+        }
+
+        // MaxSteps counts the *expanded* rows so a chain cannot smuggle past the cap via deps.
+        if (steps.Count > MaxSteps)
+        {
+            return ApiRunPlanResult.Failure("too_many_steps", max: MaxSteps);
+        }
+
+        return ApiRunPlanResult.Success(new ApiRunPlan
+        {
+            RunId = Guid.NewGuid().ToString("N"),
+            Steps = steps,
+            ResolvedSteps = resolved,
         });
     }
 
@@ -241,22 +433,26 @@ public sealed class ApiClientRunService(
     /// <c>aborted{reason:"cancelled"}</c>. <c>options.DelayMs</c> (clamped to
     /// <see cref="MaxDelayMs"/>) is slept between steps.
     /// </summary>
+    /// <remarks>
+    /// Every step runs under its own <see cref="ApiRunResolvedStep"/> context — chain plans span
+    /// collections, so the collection/env pair is per-step. On top of the persisted in-place
+    /// capture write the run also feeds a local overlay bag: captured values are readable by
+    /// every later step at top scope priority (the only cross-collection variable channel) and
+    /// die with the run.
+    /// </remarks>
     public async IAsyncEnumerable<ApiRunEvent> RunAsync(
         ApiRunPlan plan,
-        ApiCollection collection,
-        ApiEnvironment? activeEnvironment,
-        ApiEnvironment? globalEnvironment,
         ApiRunRequest options,
         [EnumeratorCancellation] CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        ArgumentNullException.ThrowIfNull(collection);
         ArgumentNullException.ThrowIfNull(options);
 
         var runStopwatch = Stopwatch.StartNew();
         var completed = 0;
         var failed = 0;
         var delayMs = Math.Clamp(options.DelayMs, 0, MaxDelayMs);
+        var runBag = new Dictionary<string, string?>(StringComparer.Ordinal);
 
         yield return ApiRunEvent.Plan(plan.RunId, plan.Steps);
 
@@ -269,9 +465,10 @@ public sealed class ApiClientRunService(
             }
 
             var step = plan.Steps[i];
-            var entry = plan.Requests[i];
+            var context = plan.ResolvedSteps[i];
+            var entry = context.Request;
 
-            yield return ApiRunEvent.StepStarted(step.Index, step.RequestId, step.Name);
+            yield return ApiRunEvent.StepStarted(step);
 
             HttpRequestResult? result = null;
             string? transportError = null;
@@ -279,7 +476,7 @@ public sealed class ApiClientRunService(
             try
             {
                 result = await executor
-                    .ExecuteAsync(entry, collection, activeEnvironment, globalEnvironment, ct)
+                    .ExecuteAsync(entry, context.Collection, context.ActiveEnvironment, context.GlobalEnvironment, runBag, ct)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
@@ -306,11 +503,10 @@ public sealed class ApiClientRunService(
             {
                 completed++;
                 yield return ApiRunEvent.StepCompleted(
-                    step.Index,
-                    step.RequestId,
+                    step,
                     result!.StatusCode,
                     result.Elapsed.TotalMilliseconds,
-                    BuildCaptured(entry, result),
+                    BuildCaptured(context, result, runBag),
                     result);
             }
             else
@@ -322,8 +518,7 @@ public sealed class ApiClientRunService(
                         ? $"HTTP {result?.StatusCode ?? 0}"
                         : result.StatusText);
                 yield return ApiRunEvent.StepFailed(
-                    step.Index,
-                    step.RequestId,
+                    step,
                     result?.StatusCode > 0 ? result.StatusCode : null,
                     result?.Elapsed.TotalMilliseconds,
                     error,
@@ -363,22 +558,63 @@ public sealed class ApiClientRunService(
     /// The capture rules that actually produced a value on this step: every enabled rule that did
     /// not generate a capture warning. The executor reports captures only as warnings, so a rule
     /// whose target never appears in <see cref="HttpRequestResult.CaptureWarnings"/> is treated as
-    /// having written its variable.
+    /// having written its variable. Each written value is read back out of the owning scope and
+    /// upserted into <paramref name="runBag"/> — the run-local overlay later steps resolve
+    /// <c>{{var}}</c> against before any persisted layer — and reported with <c>scope:"run"</c>.
     /// </summary>
-    private static IReadOnlyList<ApiRunCapturedVariable> BuildCaptured(HttpRequestEntry entry, HttpRequestResult result)
+    private static IReadOnlyList<ApiRunCapturedVariable> BuildCaptured(
+        ApiRunResolvedStep context,
+        HttpRequestResult result,
+        Dictionary<string, string?> runBag)
     {
         var captured = new List<ApiRunCapturedVariable>();
-        foreach (var rule in entry.CaptureRules.Where(static rule => rule.IsEnabled))
+        foreach (var rule in context.Request.CaptureRules.Where(static rule => rule.IsEnabled))
         {
             var warned = result.CaptureWarnings.Any(warning =>
                 warning.StartsWith($"Capture '{rule.TargetVariable}':", StringComparison.Ordinal));
-            if (!warned)
+            if (warned)
             {
-                captured.Add(new ApiRunCapturedVariable(rule.TargetVariable, CaptureSourceLabel(rule.Source)));
+                continue;
             }
+
+            var value = ReadCapturedValue(context, rule);
+            var fedBag = !string.IsNullOrWhiteSpace(rule.TargetVariable) && value is not null;
+            if (fedBag)
+            {
+                runBag[rule.TargetVariable] = value;
+            }
+
+            captured.Add(new ApiRunCapturedVariable(
+                rule.TargetVariable,
+                CaptureSourceLabel(rule.Source),
+                fedBag ? "run" : "environment"));
         }
 
         return captured;
+    }
+
+    /// <summary>Reads back the value a successful capture rule just wrote in place — the
+    /// collection's variable list or the step's active environment, per
+    /// <see cref="CaptureRule.TargetScope"/>. Null when the write can't be located (the bag is
+    /// then skipped too, so a stale value is never smuggled forward).</summary>
+    private static string? ReadCapturedValue(ApiRunResolvedStep context, CaptureRule rule)
+    {
+        if (string.Equals(rule.TargetScope, "collection", StringComparison.OrdinalIgnoreCase))
+        {
+            return context.Collection.Variables
+                .FirstOrDefault(v => string.Equals(v.Key, rule.TargetVariable, StringComparison.Ordinal))
+                ?.Value;
+        }
+
+        if (context.ActiveEnvironment is not null
+            && string.Equals(rule.TargetScope, context.ActiveEnvironment.Id, StringComparison.Ordinal))
+        {
+            return context.ActiveEnvironment.Variables
+                .FirstOrDefault(v => string.Equals(v.Key, rule.TargetVariable, StringComparison.Ordinal))
+                ?.Value;
+        }
+
+        return null;
     }
 
     private static string CaptureSourceLabel(CaptureSource source) => source switch

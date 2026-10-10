@@ -36,6 +36,9 @@ internal sealed class ApiRunTestHelpers
 internal sealed class FakeRunExecutor : IHttpRequestExecutor
 {
     public List<string> Executed { get; } = [];
+    /// <summary>Run-overlay bag snapshot per executed request — the overlay is a run-local
+    /// mutable bag, so the copy is taken at call time.</summary>
+    public Dictionary<string, IReadOnlyDictionary<string, string?>> OverlaysByRequestId { get; } = new(StringComparer.Ordinal);
     public Func<HttpRequestResult>? Result { get; set; }
     public Dictionary<string, Func<HttpRequestResult>> ResultsByRequestId { get; } = new(StringComparer.Ordinal);
     public Action<HttpRequestEntry>? OnExecuted { get; set; }
@@ -46,10 +49,14 @@ internal sealed class FakeRunExecutor : IHttpRequestExecutor
         ApiCollection collection,
         ApiEnvironment? activeEnvironment,
         ApiEnvironment? globalEnvironment = null,
+        IReadOnlyDictionary<string, string?>? overlay = null,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         Executed.Add(request.Id);
+        OverlaysByRequestId[request.Id] = overlay is null
+            ? new Dictionary<string, string?>()
+            : new Dictionary<string, string?>(overlay);
         if (ThrowOnExecute is not null)
         {
             throw ThrowOnExecute;
@@ -339,7 +346,7 @@ public sealed class ApiClientRunServiceRunTests
         CancellationToken ct = default)
     {
         var events = new List<ApiRunEvent>();
-        await foreach (var e in service.RunAsync(plan, collection, null, null, options, ct))
+        await foreach (var e in service.RunAsync(plan, options, ct))
         {
             events.Add(e);
         }

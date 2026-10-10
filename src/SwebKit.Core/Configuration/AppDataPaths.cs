@@ -55,6 +55,9 @@ public static class AppDataPaths
     /// Agent for prompt tuning.</summary>
     public static string AgentFeedbackJson => Path.Combine(Root, "agent-feedback.json");
     public static string CollectionsJson => Path.Combine(Root, "collections.json");
+    /// <summary>Persisted API request chains (api-request-chains) — internal store only; chains
+    /// are never written into linked roots even when their steps point at linked requests.</summary>
+    public static string ChainsJson => Path.Combine(Root, "chains.json");
     public static string EnvironmentsJson => Path.Combine(Root, "environments.json");
     public static string ApiLinkedRootsJson => Path.Combine(Root, "api-linked-roots.json");
     public static string SqlQueriesJson => Path.Combine(Root, "sql-queries.json");
