@@ -7,10 +7,6 @@ import {
     useAksOverlays,
     useAksActions,
     aksRefreshIntervals,
-    directTabs,
-    networkTabs,
-    extraTabs,
-    networkTabIds,
 } from "./shared/aks-workspace-context";
 import { useScreenStateProvider } from "../../lib/stores/screen-state";
 import { DeploymentsTab } from "./DeploymentsTab";
@@ -38,6 +34,7 @@ import { SecretDetailPanel } from "./SecretDetailPanel";
 import { ConfigMapDetailPanel } from "./ConfigMapDetailPanel";
 import { HttpRouteDetailPanel } from "./HttpRouteDetailPanel";
 import { MultiPodLogView } from "./MultiPodLogView";
+import { AksNavBar } from "./AksNavBar";
 import { ContextMenu } from "./ContextMenu";
 import { ContainerDetailPanel } from "./ContainerDetailPanel";
 import { PodShellPanel } from "./PodShellPanel";
@@ -71,7 +68,6 @@ function AksPageContent() {
         ...useAksActions(),
     };
     const navigate = useNavigate();
-    const isNetworkTabActive = networkTabIds.has(ws.activeTab);
 
     // Screen-state snapshot (agent-workspace-awareness M1): what the user sees on this page —
     // bounded to the fields the agent needs; read at publish time so it stays current.
@@ -301,89 +297,8 @@ function AksPageContent() {
                 />
             )}
 
-            {/* Tabs */}
-            <div
-                className="flex border-b overflow-x-auto"
-                data-testid="aks-tabs"
-            >
-                {directTabs.map((tab) => (
-                    <button
-                        key={tab.id}
-                        onClick={() => {
-                            ws.setActiveTab(tab.id);
-                            ws.setNetworkMenuOpen(false);
-                        }}
-                        data-testid={`aks-tab-${tab.id}`}
-                        className={`whitespace-nowrap px-4 py-2 text-sm font-medium ${
-                            ws.activeTab === tab.id
-                                ? "border-b-2 border-primary text-foreground"
-                                : "text-muted-foreground hover:text-foreground"
-                        }`}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
-                <button
-                    type="button"
-                    onClick={() => ws.setNetworkMenuOpen((v) => !v)}
-                    data-testid="aks-tab-network"
-                    className={`flex items-center gap-1 whitespace-nowrap px-4 py-2 text-sm font-medium ${
-                        isNetworkTabActive || ws.networkMenuOpen
-                            ? "border-b-2 border-primary text-foreground"
-                            : "text-muted-foreground hover:text-foreground"
-                    }`}
-                >
-                    Network{" "}
-                    <span className="text-xs">
-                        {ws.networkMenuOpen ? "▲" : "▼"}
-                    </span>
-                </button>
-                {extraTabs.map((tab) => (
-                    <button
-                        key={tab.id}
-                        onClick={() => {
-                            ws.setActiveTab(tab.id);
-                            ws.setNetworkMenuOpen(false);
-                        }}
-                        data-testid={`aks-tab-${tab.id}`}
-                        className={`whitespace-nowrap px-4 py-2 text-sm font-medium ${
-                            ws.activeTab === tab.id
-                                ? "border-b-2 border-primary text-foreground"
-                                : "text-muted-foreground hover:text-foreground"
-                        }`}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
-
-            {ws.networkMenuOpen && (
-                <div
-                    className="flex gap-1 border-b bg-card px-2 py-1"
-                    data-testid="aks-network-submenu"
-                >
-                    <span className="text-xs text-muted-foreground py-1 px-2">
-                        Network
-                    </span>
-                    {networkTabs.map((tab) => (
-                        <button
-                            key={tab.id}
-                            onClick={() => {
-                                ws.setActiveTab(tab.id);
-                                ws.setNetworkMenuOpen(true);
-                            }}
-                            data-testid={`aks-tab-${tab.id}`}
-                            className={`rounded px-3 py-1 text-xs ${
-                                ws.activeTab === tab.id
-                                    ? "bg-primary text-primary-foreground"
-                                    : "text-muted-foreground hover:bg-accent"
-                            }`}
-                        >
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
-            )}
+            {/* Resource nav — grouped dropdown menus, one row, no layout shift */}
+            <AksNavBar />
 
             {/* Content */}
             <div

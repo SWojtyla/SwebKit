@@ -87,6 +87,18 @@ public class PodInfo
     public string? OwnerName { get; set; }
     public List<string> Containers { get; set; } = [];
     public Dictionary<string, string> Labels { get; set; } = [];
+
+    /// <summary>Summed <c>resources.requests.cpu</c> across the pod's containers, in cores.
+    /// Null when no container declares one — the pods table falls back to its generic
+    /// ceiling for severity coloring rather than implying a basis that doesn't exist.</summary>
+    public double? CpuRequestCores { get; set; }
+    /// <summary>Summed <c>resources.limits.cpu</c> in cores; null when undeclared.</summary>
+    public double? CpuLimitCores { get; set; }
+    /// <summary>Summed <c>resources.requests.memory</c> in bytes; null when undeclared.</summary>
+    public long? MemoryRequestBytes { get; set; }
+    /// <summary>Summed <c>resources.limits.memory</c> in bytes; null when undeclared.</summary>
+    public long? MemoryLimitBytes { get; set; }
+
     public string ReadyDisplay => $"{ReadyContainers}/{TotalContainers}";
 }
 

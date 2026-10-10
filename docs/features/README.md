@@ -27,6 +27,8 @@ Plan files are the shared intent record: any tool or later session reads them to
 - `api-client-workspace.md` — file visibility (reveal-in-explorer, labeled imports, preview/warnings, git honesty) plus linked collection roots: `.swebkit-api` folders on disk as first-class read/write collection sources with per-request files, content-stamp conflicts, git badges, and import-into-root — the Bruno-style workspace model.
 - `api-client-request-runs.md` — request runs: same-collection `dependsOnRequestIds` chains (topo-ordered, cycle-checked) plus folder/subtree and ctrl-click multi-select batch runs, executed server-side through a `POST /api/api-client/run` SSE stream with live step progress, stop-on-error, delay, and a run-results drawer.
 - `api-request-chains.md` — persisted named request chains spanning collections: ordered steps anywhere (internal + linked roots), cross-collection deps, run-scoped variable overlay for captures, chain editor + "Add to chain" UI, demo seed, pack export.
+- `aks-topbar-nav.md` — AKS top-bar declutter: the flat 18-tab strip replaced by 4 task-grouped dropdown menus (Workloads / Configuration / Network / Operations) via `AksNavBar` + `navGroups`; `aks-tab-*` testids and `?tab=` deep links preserved.
+- `aks-metrics-and-hpa-disable-fixes.md` — pod CPU/mem severity judged against per-pod requests/limits instead of fixed ceilings; HPA disable fixed for KEDA-adopted (ownerRef-only) HPAs, freeze no longer inflates to maxReplicas, demo mirrors the frozen bounds.
 
 ## Plan file contract
 

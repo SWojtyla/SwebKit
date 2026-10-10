@@ -140,6 +140,43 @@ export async function setDemoMode(page: Page, enabled: boolean) {
 }
 
 /**
+ * Opens an AKS resource view through the grouped nav menus. The `aks-tab-<id>` testids
+ * from the flat strip now live inside a dropdown that has to be opened first — this
+ * keeps every spec's navigation calls working through one seam instead of repeating
+ * the group→item choreography inline.
+ */
+const AKS_TAB_GROUPS: Record<string, string> = {
+    pods: "workloads",
+    deployments: "workloads",
+    statefulsets: "workloads",
+    jobs: "workloads",
+    cronjobs: "workloads",
+    configmaps: "config",
+    secrets: "config",
+    helm: "config",
+    services: "network",
+    ingresses: "network",
+    gateways: "network",
+    httproutes: "network",
+    gatewayclasses: "network",
+    envoy: "network",
+    events: "ops",
+    hpa: "ops",
+    portforward: "ops",
+    analysis: "ops",
+};
+
+export async function openAksTab(page: Page, tabId: string) {
+    const group = AKS_TAB_GROUPS[tabId];
+    if (!group) throw new Error(`Unknown AKS tab id: ${tabId}`);
+    const groupButton = page.getByTestId(`aks-nav-group-${group}`);
+    if ((await groupButton.getAttribute("aria-expanded")) !== "true") {
+        await groupButton.click();
+    }
+    await page.getByTestId(`aks-tab-${tabId}`).click();
+}
+
+/**
  * Resets the API client collections store to an empty state through the sidecar.
  * Use in test setup to keep drag-and-drop and ordering specs isolated from earlier tests.
  */

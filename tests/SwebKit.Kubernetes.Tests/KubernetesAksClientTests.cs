@@ -732,6 +732,11 @@ users:
     [InlineData("128Mi", 128L * 1024 * 1024)]
     [InlineData("1Gi", 1L * 1024 * 1024 * 1024)]
     [InlineData("256Ki", 256L * 1024)]
+    [InlineData("1.5Gi", 1610612736L)]
+    [InlineData("1Ti", 1L << 40)]
+    [InlineData("1G", 1_000_000_000L)]
+    [InlineData("512k", 512_000L)]
+    [InlineData("1000m", 1L)]          // milli-bytes: legal on quantities, truncates to bytes
     [InlineData("1048576", 1048576L)]
     [InlineData("0", 0)]
     public void ParseMemoryToBytes_ConvertsCorrectly(string input, long expected)
@@ -1177,6 +1182,113 @@ users:
     {
         Assert.Null(KubernetesAksClient.GetKedaScaledObjectName(null));
         Assert.Null(KubernetesAksClient.GetKedaScaledObjectName(new V1ObjectMeta()));
+    }
+
+    [Fact]
+    public void GetKedaScaledObjectName_ReturnsName_FromControllerScaledObjectOwnerReference()
+    {
+        // HPAs adopted via transfer-hpa-ownership carry no scaledobject.keda.sh/name label —
+        // the ScaledObject ownerReference (controller=true) is the only ownership marker, and
+        // missing it made "disable" freeze an HPA spec KEDA promptly reconciled back to active.
+        var meta = new V1ObjectMeta
+        {
+            Labels = new Dictionary<string, string> { ["app"] = "orders" },
+            OwnerReferences =
+            [
+                new V1OwnerReference
+                {
+                    ApiVersion = "keda.sh/v1alpha1",
+                    Kind = "ScaledObject",
+                    Name = "adopted-scaler",
+                    Uid = "uid-1",
+                    Controller = true
+                }
+            ]
+        };
+
+        Assert.Equal("adopted-scaler", KubernetesAksClient.GetKedaScaledObjectName(meta));
+    }
+
+    [Fact]
+    public void GetKedaScaledObjectName_LabelWinsOverOwnerReference()
+    {
+        var meta = new V1ObjectMeta
+        {
+            Labels = new Dictionary<string, string>
+            {
+                [AksScalingAnnotations.KedaScaledObjectNameLabel] = "label-scaler",
+            },
+            OwnerReferences =
+            [
+                new V1OwnerReference
+                {
+                    ApiVersion = "keda.sh/v1alpha1",
+                    Kind = "ScaledObject",
+                    Name = "ownerref-scaler",
+                    Uid = "uid-1",
+                    Controller = true
+                }
+            ]
+        };
+
+        Assert.Equal("label-scaler", KubernetesAksClient.GetKedaScaledObjectName(meta));
+    }
+
+    [Fact]
+    public void GetKedaScaledObjectName_ReturnsName_FromNonControllerScaledObjectOwnerReference()
+    {
+        var meta = new V1ObjectMeta
+        {
+            OwnerReferences =
+            [
+                new V1OwnerReference
+                {
+                    ApiVersion = "keda.sh/v1alpha1",
+                    Kind = "ScaledObject",
+                    Name = "plain-ownerref-scaler",
+                    Uid = "uid-1"
+                }
+            ]
+        };
+
+        Assert.Equal("plain-ownerref-scaler", KubernetesAksClient.GetKedaScaledObjectName(meta));
+    }
+
+    [Fact]
+    public void GetKedaScaledObjectName_IgnoresNonScaledObjectOwnerReferences()
+    {
+        var meta = new V1ObjectMeta
+        {
+            OwnerReferences =
+            [
+                new V1OwnerReference
+                {
+                    ApiVersion = "apps/v1",
+                    Kind = "Deployment",
+                    Name = "not-keda",
+                    Uid = "uid-1",
+                    Controller = true
+                }
+            ]
+        };
+
+        Assert.Null(KubernetesAksClient.GetKedaScaledObjectName(meta));
+    }
+
+    // ── ComputeFreezeReplicaTarget() ──
+    // The replica count a disabled HPA freezes at. Falling back to maxReplicas when status
+    // hasn't populated yet would scale the workload UP to the ceiling while claiming to be
+    // disabled — the fallback chain is current → desired → min, never max.
+
+    [Theory]
+    [InlineData(3, 5, 2, 3)]   // steady state: freeze where it stands
+    [InlineData(0, 4, 2, 4)]   // current not yet reported: honor the HPA's computed intent
+    [InlineData(0, 0, 2, 2)]   // no status at all: the configured floor, not maxReplicas
+    [InlineData(0, 0, 0, 1)]   // scale-to-zero HPA: clamp to 1 — minReplicas: 0 needs a gate
+    public void ComputeFreezeReplicaTarget_NeverInflatesToMax(
+        int current, int desired, int min, int expected)
+    {
+        Assert.Equal(expected, KubernetesAksClient.ComputeFreezeReplicaTarget(current, desired, min));
     }
 
     // ── ParseScaledJobs() ──

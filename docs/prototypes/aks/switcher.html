@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AKS prototype C — Breadcrumb + switcher</title>
+<style>
+  :root {
+    --bg:#12141c; --card:#1a1d29; --card2:#20242f; --border:#2a2e3d;
+    --fg:#eef0f6; --muted:#8a8f9f; --primary:#8b8cf8; --primary-soft:#8b8cf826;
+    --danger:#e5484d; --ok:#46c98e; --warn:#f5a524;
+  }
+  * { box-sizing:border-box; margin:0; font:13px/1.45 "Segoe UI",system-ui,sans-serif; }
+  body { background:var(--bg); color:var(--fg); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  button { font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
+  select, input[type=text] { background:var(--card2); border:1px solid var(--border); color:var(--fg); border-radius:6px; padding:3px 8px; font-size:12px; }
+
+  /* ── one line of chrome: breadcrumb + pins + status ── */
+  .bar { display:flex; align-items:center; gap:7px; padding:7px 12px; border-bottom:1px solid var(--border); background:var(--card); font-size:12.5px; flex-wrap:wrap; }
+  .seg { display:flex; align-items:center; gap:5px; padding:3px 9px; border-radius:6px; font-size:12.5px; font-weight:600; }
+  .seg:hover { background:var(--card2); }
+  .seg .caret { font-size:9px; color:var(--muted); }
+  .seg.res { color:var(--primary); background:var(--primary-soft); }
+  .sep { color:var(--muted); font-size:11px; }
+  select.seg { border:none; font-weight:600; padding:3px 6px; background:transparent; }
+  select.seg:hover { background:var(--card2); }
+  .pins { display:flex; align-items:center; gap:5px; margin-left:10px; padding-left:12px; border-left:1px solid var(--border); }
+  .pin { display:flex; align-items:center; gap:4px; font-size:11.5px; padding:2px 9px; border-radius:11px; border:1px solid var(--border); color:var(--muted); }
+  .pin:hover { border-color:var(--primary); color:var(--fg); }
+  .pin.on { border-color:var(--primary); color:var(--primary); background:var(--primary-soft); }
+  .pin.add { border-style:dashed; padding:2px 7px; }
+  .grow { flex:1; }
+  .kbd { font-size:10px; border:1px solid var(--border); border-radius:4px; padding:0 5px; color:var(--muted); background:var(--card2); }
+  .hint { color:var(--muted); font-size:11px; display:flex; align-items:center; gap:5px; }
+  .muted { color:var(--muted); }
+  .pill { border:1px solid var(--border); border-radius:6px; padding:3px 10px; font-size:12px; white-space:nowrap; }
+  .pill:hover { background:var(--card2); }
+  .conn { display:flex; align-items:center; gap:6px; color:var(--ok); font-size:12px; white-space:nowrap; }
+  .dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
+
+  /* ── switcher overlay (Ctrl+K palette) ── */
+  .scrim { position:fixed; inset:0; background:#0009; display:none; z-index:50; }
+  .scrim.open { display:block; }
+  .pal { position:fixed; top:14%; left:50%; transform:translateX(-50%); width:520px; max-width:92vw; background:var(--card2); border:1px solid var(--border); border-radius:11px; box-shadow:0 18px 50px #000c; display:none; z-index:51; overflow:hidden; }
+  .pal.open { display:block; }
+  .pal input { width:100%; border:none; border-bottom:1px solid var(--border); background:transparent; padding:11px 14px; font-size:14px; color:var(--fg); border-radius:0; }
+  .pal input:focus { outline:none; }
+  .plist { max-height:330px; overflow-y:auto; padding:6px; }
+  .psec { padding:7px 10px 3px; font-size:9.5px; font-weight:700; letter-spacing:1px; color:var(--muted); text-transform:uppercase; }
+  .pi { display:flex; align-items:center; gap:9px; width:100%; text-align:left; padding:6px 10px; border-radius:6px; }
+  .pi .g { width:16px; text-align:center; color:var(--muted); }
+  .pi .l { font-size:12.5px; font-weight:600; }
+  .pi .d { flex:1; font-size:10.5px; color:var(--muted); }
+  .pi .n { font-size:10px; background:var(--card); color:var(--muted); border-radius:8px; padding:1px 7px; }
+  .pi.hl { background:var(--primary-soft); }
+  .pi.hl .l, .pi.hl .n { color:var(--primary); }
+  .pfoot { padding:6px 12px; border-top:1px solid var(--border); font-size:10.5px; color:var(--muted); display:flex; gap:12px; }
+
+  /* ── content ── */
+  .main { flex:1; display:flex; flex-direction:column; min-height:0; }
+  .vhead { display:flex; align-items:center; gap:10px; padding:8px 14px; font-size:13px; }
+  .vhead .n { background:var(--card2); border-radius:9px; padding:1px 8px; font-size:11px; color:var(--muted); }
+  .listwrap { flex:1; overflow:auto; background:var(--card); border-top:1px solid var(--border); }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:left; padding:6px 10px; font-size:10px; font-weight:700; letter-spacing:.8px; color:var(--muted); text-transform:uppercase; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--card); }
+  td { padding:6px 10px; border-bottom:1px solid #232735; color:#cfd3de; }
+  td.mono { font-family:Consolas,monospace; font-size:11px; }
+  tbody tr:hover { background:var(--card2); }
+  .bad { color:var(--danger); } .warn { color:var(--warn); } .ok { color:var(--ok); }
+  .empty { text-align:center; color:var(--muted); padding:30px !important; }
+  .foot { display:flex; align-items:center; gap:10px; padding:5px 12px; border-top:1px solid var(--border); font-size:11px; color:var(--muted); background:var(--card); }
+  .backlink { position:fixed; bottom:10px; right:12px; font-size:11px; color:var(--muted); text-decoration:none; border:1px solid var(--border); border-radius:6px; padding:3px 10px; background:var(--card); z-index:60; }
+  .backlink:hover { color:var(--fg); border-color:var(--primary); }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <select class="seg" title="Cluster context">
+    <option>aks-prod-weu</option><option>aks-dev-weu</option><option>aks-staging</option>
+  </select>
+  <span class="sep">›</span>
+  <select class="seg" title="Namespace">
+    <option>ecommerce</option><option>platform</option><option>monitoring</option><option>* all namespaces</option>
+  </select>
+  <span class="sep">›</span>
+  <button class="seg res" id="resBtn" title="Switch resource (Ctrl+K)"><span id="resLabel">Pods</span><span class="caret">▾</span></button>
+  <span class="pins" id="pins"></span>
+  <span class="grow"></span>
+  <span class="hint"><span class="kbd">Ctrl</span>+<span class="kbd">K</span> switch view</span>
+  <button class="pill">Multi-Pod Logs</button>
+  <span class="muted">updated 12s ago</span>
+  <button class="pill" title="Auto-refresh every 10s — click for options">⟳ 10s ▾</button>
+  <span class="conn"><i class="dot" style="background:var(--ok)"></i> Connected</span>
+</header>
+
+<div class="main">
+  <div class="vhead"><b id="vtitle"></b><span class="n" id="vcount"></span></div>
+  <div class="listwrap" id="table"></div>
+  <div class="foot"><span id="foot"></span><span class="grow"></span><span>demo data</span></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="pal" id="pal" role="dialog" aria-label="Resource switcher">
+  <input type="text" id="pfilter" placeholder="Type a resource…  (pods, ingress, events)">
+  <div class="plist" id="plist"></div>
+  <div class="pfoot"><span>↑↓ navigate</span><span>↵ select</span><span>esc close</span></div>
+</div>
+
+<a class="backlink" href="index.html">« prototypes · C — breadcrumb + switcher</a>
+
+<script>
+const GROUPS = [
+  { id:"workloads", label:"Workloads", desc:"Things that run containers", items:[
+    ["pods","Pods",47,"⬡","running containers"],
+    ["deployments","Deployments",12,"≣","stateless replicas + rollouts"],
+    ["statefulsets","StatefulSets",3,"▦","stable identity, ordered scale"],
+    ["jobs","Jobs",5,"▸","run-to-completion tasks"],
+    ["cronjobs","CronJobs",7,"◷","scheduled tasks"]]},
+  { id:"config", label:"Configuration", desc:"Settings, secrets, packaged releases", items:[
+    ["configmaps","ConfigMaps",28,"☰","non-secret config data"],
+    ["secrets","Secrets",19,"⚿","credentials, tokens, TLS"],
+    ["helm","Helm releases",8,"⎈","installed charts"]]},
+  { id:"network", label:"Network", desc:"How traffic reaches the workloads", items:[
+    ["services","Services",14,"⇄","stable virtual IPs"],
+    ["ingresses","Ingresses",4,"⇥","L7 host/path routing"],
+    ["gateways","Gateways",3,"◈","Gateway API listeners"],
+    ["httproutes","HTTPRoutes",9,"⇢","Gateway API HTTP rules"],
+    ["gatewayclasses","GatewayClasses",2,"⬢","cluster-scoped gateway types"],
+    ["envoy","Envoy",1,"≋","proxy config + stats"]]},
+  { id:"ops", label:"Operations", desc:"Observe and operate the cluster", items:[
+    ["events","Events",23,"⚑","what the cluster is telling you"],
+    ["hpa","Autoscaling",6,"⇅","HPA + KEDA scaled objects"],
+    ["portforward","Port-Forward",0,"⇌","kubectl port-forward sessions"],
+    ["analysis","Analysis",0,"⌕","cluster health findings"]]},
+];
+const V=(cols,...rows)=>({cols,rows});
+const VIEWS={
+  pods:V(["NAME","READY","STATUS","RESTARTS","AGE"],
+    ["checkout-api-7d9f5b4xkm","2/2","Running","0","3d"],
+    ["checkout-api-7d9f5m2zqk","2/2","Running","1","3d"],
+    ["orders-svc-6c8d9w7pt2","1/1","Running","0","5h"],
+    ["payments-7f6c5r9vls8","0/1","CrashLoopBackOff","14","2h"],
+    ["search-idx-5b4x8kn2p7","1/1","Running","0","12d"],
+    ["inventory-8h2j4m6q9r","1/1","Running","0","7d"]),
+  deployments:V(["NAME","READY","UP-TO-DATE","AVAILABLE","AGE"],
+    ["checkout-api","3/3","3","3","41d"],["orders-svc","2/2","2","2","41d"],
+    ["payments","1/2","2","1","38d"],["web-frontend","4/4","4","4","90d"],["search-idx","1/1","1","1","60d"]),
+  statefulsets:V(["NAME","READY","AGE"],
+    ["redis-cache","3/3","120d"],["kafka","3/3","95d"],["postgres-ha","2/2","210d"]),
+  jobs:V(["NAME","COMPLETIONS","DURATION","AGE"],
+    ["nightly-etl-28403","1/1","4m12s","6h"],["migrate-schema-018","0/1","1m40s","22m"],["image-thumb-9912","1/1","38s","2d"]),
+  cronjobs:V(["NAME","SCHEDULE","SUSPEND","LAST RUN","AGE"],
+    ["nightly-etl","0 2 * * *","False","6h ago","34d"],["cert-rotate","0 4 * * 0","False","3d ago","150d"],
+    ["cache-warmer","*/15 * * * *","False","9m ago","80d"],["report-mailer","30 6 * * 1-5","True","—","60d"]),
+  configmaps:V(["NAME","DATA","AGE"],
+    ["checkout-config","7","41d"],["feature-flags","12","90d"],["nginx-conf","2","120d"],["grafana-dashboards","9","200d"]),
+  secrets:V(["NAME","TYPE","DATA","AGE"],
+    ["registry-pull","kubernetes.io/dockerconfigjson","1","210d"],["db-credentials","Opaque","3","41d"],
+    ["tls-wildcard","kubernetes.io/tls","2","60d"],["servicebus-conn","Opaque","1","90d"]),
+  helm:V(["NAME","CHART","REV","STATUS","UPDATED"],
+    ["ingress-nginx","ingress-nginx-4.9.0","14","deployed","9d ago"],["cert-manager","cert-manager-v1.14","6","deployed","30d ago"],
+    ["keda","keda-2.14","3","deployed","15d ago"],["prometheus","kube-prometheus-58","22","deployed","2d ago"]),
+  services:V(["NAME","TYPE","CLUSTER-IP","PORTS","AGE"],
+    ["checkout-api","ClusterIP","10.0.14.22","80/TCP","41d"],["web-frontend","LoadBalancer","10.0.3.9","443:30120/TCP","90d"],
+    ["orders-svc","ClusterIP","10.0.14.80","8080/TCP","41d"],["payments","ClusterIP","10.0.15.31","80/TCP","38d"]),
+  ingresses:V(["NAME","CLASS","HOSTS","ADDRESS","AGE"],
+    ["shop-web","nginx","shop.example.com","20.31.44.10","90d"],["api-gw","nginx","api.example.com","20.31.44.10","60d"],
+    ["grafana-int","internal","grafana.internal","10.0.9.4","150d"]),
+  gateways:V(["NAME","CLASS","ADDRESS","AGE"],
+    ["edge-gw","envoy","20.31.44.10","60d"],["internal-gw","envoy","10.0.9.4","60d"]),
+  httproutes:V(["NAME","HOSTNAMES","PARENT REFS","AGE"],
+    ["api-route","api.example.com","edge-gw","60d"],["shop-route","shop.example.com","edge-gw","60d"],
+    ["admin-route","admin.example.com","edge-gw","30d"]),
+  gatewayclasses:V(["NAME","CONTROLLER","AGE"],
+    ["envoy","gateway.envoyproxy.io/gatewayclass-controller","120d"],["istio","istio.io/gateway-controller","45d"]),
+  envoy:V(["NAME","REPLICAS","READY","AGE"],["envoy-proxy","3","3/3","120d"]),
+  events:V(["TYPE","REASON","OBJECT","MESSAGE","AGE"],
+    ["Warning","BackOff","pod/payments-7f6c5","Back-off restarting failed container","2m"],
+    ["Normal","Scheduled","pod/checkout-api-…","Successfully assigned to node-4","5h"],
+    ["Warning","Unhealthy","pod/search-idx-…","Liveness probe failed","18m"],
+    ["Normal","ScalingReplicaSet","deploy/payments","Scaled up to 2","40m"]),
+  hpa:V(["NAME","TARGETS","MIN","MAX","REPLICAS","AGE"],
+    ["checkout-api","38%/70%","2","10","3","41d"],["orders-svc","55%/75%","2","6","2","38d"],
+    ["keda-orders-scaler","queue: 120/50","0","20","2","30d"]),
+  portforward:V(["POD","LOCAL","REMOTE","STATUS","UPTIME"]),
+  analysis:V(["CHECK","SEVERITY","OBJECT","DETAIL"],
+    ["POD_UNHEALTHY","warning","payments-7f6c5","14 restarts in 2h — CrashLoopBackOff"],
+    ["SVC_NO_ENDPOINTS","critical","legacy-api","Service has no ready endpoints"],
+    ["HPA_MAXED","info","checkout-api","Running at max replicas (10)"]),
+};
+const EMPTY={portforward:"No active port-forwards — start one from a pod row.",};
+const ALL=GROUPS.flatMap(g=>g.items.map(([id,label,n,glyph,d])=>({id,label,n,glyph,d,g:g.id,gl:g.label})));
+const find=id=>ALL.find(t=>t.id===id);
+const $=s=>document.querySelector(s);
+let active="pods", recent=["pods","events"], pins=["pods","deployments","events"], hl=0;
+
+function tint(td,txt){
+  if(/CrashLoop|Failed|critical|BackOff/i.test(txt)) td.className="bad";
+  else if(/Warning|Unhealthy|warning/i.test(txt)) td.className="warn";
+  else if(/Running|deployed|Normal|False|Scheduled/i.test(txt)) td.className="ok";
+}
+function renderView(){
+  const m=find(active), v=VIEWS[active];
+  $("#resLabel").textContent=m.label;
+  $("#vtitle").textContent=m.label;
+  $("#vcount").textContent=m.n?`${m.n} in scope`:"";
+  $("#foot").textContent=`${m.n||v.rows.length} items · updated 12s ago`;
+  let h='<table><thead><tr>'+v.cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';
+  if(!v.rows.length) h+=`<tr><td class="empty" colspan="${v.cols.length}">${EMPTY[active]||"Nothing here"}</td></tr>`;
+  else v.rows.forEach(r=>{h+="<tr>"+r.map((c,i)=>{const cell=document.createElement("td");cell.textContent=c;if(i===0)cell.classList.add("mono");tint(cell,c);return cell.outerHTML;}).join('')+"</tr>";});
+  $("#table").innerHTML=h+"</tbody></table>";
+  renderPins();
+}
+function renderPins(){
+  const p=$("#pins"); p.innerHTML="";
+  pins.forEach(id=>{
+    const m=find(id), b=document.createElement("button");
+    b.className="pin"+(id===active?" on":"");
+    b.innerHTML=`${m.glyph} ${m.label}`;
+    b.onclick=()=>select(id);
+    p.appendChild(b);
+  });
+  const add=document.createElement("button");
+  add.className="pin add"; add.title="Pin current view"; add.textContent="＋";
+  add.onclick=()=>{if(!pins.includes(active)){pins.push(active);renderPins();}};
+  p.appendChild(add);
+}
+/* ── palette ── */
+let listItems=[];
+function openPal(){ $("#scrim").classList.add("open"); $("#pal").classList.add("open"); $("#pfilter").value=""; renderPal(""); $("#pfilter").focus(); }
+function closePal(){ $("#scrim").classList.remove("open"); $("#pal").classList.remove("open"); }
+function select(id){
+  active=id;
+  recent=[id,...recent.filter(r=>r!==id)].slice(0,3);
+  closePal(); renderView();
+}
+function renderPal(q){
+  q=q.trim().toLowerCase();
+  const box=$("#plist"); box.innerHTML=""; listItems=[];
+  const addItem=(m,sec)=>{
+    if(sec){const s=document.createElement("div");s.className="psec";s.textContent=sec;box.appendChild(s);sec=null;}
+    const b=document.createElement("button");
+    b.className="pi"; b.dataset.id=m.id;
+    b.innerHTML=`<span class="g">${m.glyph}</span><span class="l">${m.label}</span><span class="d">${m.d||""}</span><span class="n">${m.n||""}</span>`;
+    b.onclick=()=>select(m.id);
+    box.appendChild(b); listItems.push(b);
+  };
+  const match=m=>!q||m.label.toLowerCase().includes(q)||m.gl.toLowerCase().includes(q);
+  if(!q && recent.length){
+    let first=true;
+    recent.map(find).filter(Boolean).forEach(m=>{addItem(m,first?"Recent":null);first=false;});
+  }
+  GROUPS.forEach(g=>{
+    let first=true;
+    g.items.map(([id])=>find(id)).filter(match).forEach(m=>{addItem(m,first?(q?`${g.label}`:g.label):null);first=false;});
+  });
+  hl=0; highlight();
+  if(!listItems.length) box.innerHTML='<div class="psec">No matches</div>';
+}
+function highlight(){
+  listItems.forEach((b,i)=>b.classList.toggle("hl",i===hl));
+  if(listItems[hl]) listItems[hl].scrollIntoView({block:"nearest"});
+}
+$("#pfilter").addEventListener("input",e=>renderPal(e.target.value));
+$("#pfilter").addEventListener("keydown",e=>{
+  if(e.key==="ArrowDown"){hl=Math.min(hl+1,listItems.length-1);highlight();e.preventDefault();}
+  else if(e.key==="ArrowUp"){hl=Math.max(hl-1,0);highlight();e.preventDefault();}
+  else if(e.key==="Enter"&&listItems[hl]){select(listItems[hl].dataset.id);}
+  else if(e.key==="Escape"){closePal();}
+});
+$("#resBtn").onclick=openPal;
+$("#scrim").onclick=closePal;
+document.addEventListener("keydown",e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();openPal();}
+  else if(e.key==="/"&&!/input|select|textarea/i.test(document.activeElement.tagName)){e.preventDefault();openPal();}
+  else if(e.key==="Escape"){closePal();}
+});
+renderView();
+</script>
+</body>
+</html>

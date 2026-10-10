@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setDemoMode } from "./helpers";
+import { openAksTab, setDemoMode } from "./helpers";
 import { sidecarPort } from "./test-config";
 
 const sidecarUrl = `http://127.0.0.1:${sidecarPort}`;
@@ -99,7 +99,7 @@ test.describe("AKS multi-context", () => {
             "namespaces",
         );
 
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await expect(page.getByTestId("pods-table-body")).toBeVisible();
 
         await expect(page.getByTestId("pods-sort-context")).toBeVisible();
@@ -116,7 +116,7 @@ test.describe("AKS multi-context", () => {
         page,
     }) => {
         await attachStaging(page);
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await expect(page.getByTestId("pods-sort-context")).toBeVisible();
 
         await page.reload();
@@ -124,7 +124,7 @@ test.describe("AKS multi-context", () => {
         await expect(page.getByTestId("aks-context-select")).toContainText(
             "2 contexts",
         );
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await expect(page.getByTestId("pods-sort-context")).toBeVisible();
     });
 
@@ -143,7 +143,7 @@ test.describe("AKS multi-context", () => {
             },
         );
 
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
 
         await expect(
             page.getByTestId("pods-context-error-aks-ecommerce-staging"),
@@ -179,7 +179,7 @@ test.describe("AKS multi-context", () => {
         page,
     }) => {
         await attachStaging(page);
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await expect(page.getByTestId("pods-sort-context")).toBeVisible();
 
         await page.getByTestId("aks-context-select").click();

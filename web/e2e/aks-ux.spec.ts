@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setDemoMode } from "./helpers";
+import { openAksTab, setDemoMode } from "./helpers";
 
 const NAMESPACE = "ecommerce";
 
@@ -210,7 +210,7 @@ test.describe("AKS workspace UX", () => {
     }) => {
         await page.goto("/aks");
         await page.getByTestId("aks-namespace-select").selectOption(NAMESPACE);
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await expect(page.getByTestId("pods-table-body")).toBeVisible();
         await expect(
             page.getByTestId("aks-auto-refresh-checkbox"),
@@ -234,7 +234,7 @@ test.describe("AKS workspace UX", () => {
 
         await page.goto("/aks");
         await page.getByTestId("aks-namespace-select").selectOption(NAMESPACE);
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await page.getByTestId("pods-table-body").locator("tr").first().click();
 
         const output = page.getByTestId("log-output");
@@ -269,7 +269,7 @@ test.describe("AKS workspace UX", () => {
 
         await page.goto("/aks");
         await page.getByTestId("aks-namespace-select").selectOption(NAMESPACE);
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await page.getByTestId("pods-table-body").locator("tr").first().click();
 
         const output = page.getByTestId("log-output");
@@ -301,7 +301,7 @@ test.describe("AKS workspace UX", () => {
 
         await page.goto("/aks");
         await page.getByTestId("aks-namespace-select").selectOption(NAMESPACE);
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await page.getByTestId("pods-table-body").locator("tr").first().click();
 
         await expect(page.getByTestId("log-timestamp-select")).toBeVisible();
@@ -309,7 +309,7 @@ test.describe("AKS workspace UX", () => {
 
         // A view preference, not per-stream state, so it survives a reload.
         await page.reload();
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await page.getByTestId("pods-table-body").locator("tr").first().click();
         await expect(page.getByTestId("log-timestamp-select")).toHaveValue(
             "off",

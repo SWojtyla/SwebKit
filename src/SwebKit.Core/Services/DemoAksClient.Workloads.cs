@@ -95,6 +95,16 @@ public partial class DemoAksClient
                 var phase = isReady ? "Running" : (d.Status == "Unavailable" ? "Pending" : "Pending");
                 var status = isReady ? "Running" : (d.Status == "Unavailable" ? "CrashLoopBackOff" : "ImagePullBackOff");
 
+                // Per-deployment requests/limits so the pods table's usage-vs-basis coloring
+                // shows a realistic green/warning/red mix — the unhealthy deployments carry
+                // tighter limits that generated usage routinely pushes against.
+                var (cpuRequest, cpuLimit, memRequest, memLimit) = d.Name switch
+                {
+                    "inventory-worker" => (0.10, 0.20, 200L * 1024 * 1024, 384L * 1024 * 1024),
+                    "search-indexer" => (0.05, 0.10, 128L * 1024 * 1024, 192L * 1024 * 1024),
+                    _ => (0.25, 0.50, 512L * 1024 * 1024, 1024L * 1024 * 1024)
+                };
+
                 // Demo scenario: on tick 2, make one search-indexer pod appear "Failed"
                 // so PodHealthMonitorService detects a phase transition from Pending → Failed.
                 var isFailedDemoPod = tick == 2
@@ -123,7 +133,13 @@ public partial class DemoAksClient
                     {
                         ["app"] = d.Name,
                         ["pod-template-hash"] = suffix[..5]
-                    }
+                    },
+                    // Requests include the istio-proxy sidecar, mirroring what a real pod
+                    // spec would sum — usage in GetPodMetricsAsync covers both containers too.
+                    CpuRequestCores = cpuRequest + 0.05,
+                    CpuLimitCores = cpuLimit + 0.1,
+                    MemoryRequestBytes = memRequest + 64L * 1024 * 1024,
+                    MemoryLimitBytes = memLimit + 128L * 1024 * 1024
                 });
             }
         }

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AKS top-bar UX prototypes</title>
+<style>
+  :root { --bg:#12141c; --card:#1a1d29; --card2:#20242f; --border:#2a2e3d; --fg:#eef0f6; --muted:#8a8f9f; --primary:#8b8cf8; }
+  * { box-sizing:border-box; margin:0; font:14px/1.55 "Segoe UI",system-ui,sans-serif; }
+  body { background:var(--bg); color:var(--fg); max-width:960px; margin:0 auto; padding:40px 24px; }
+  h1 { font-size:22px; margin-bottom:6px; }
+  .sub { color:var(--muted); margin-bottom:28px; }
+  .card { display:block; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px 20px; margin-bottom:14px; color:inherit; text-decoration:none; }
+  .card:hover { border-color:var(--primary); }
+  .card h2 { font-size:16px; margin-bottom:4px; }
+  .card h2 span { color:var(--primary); font-size:12px; margin-left:8px; }
+  .card p { color:var(--muted); font-size:13px; }
+  .tags { margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; }
+  .tag { font-size:11px; border:1px solid var(--border); border-radius:12px; padding:2px 10px; color:var(--muted); }
+  .card.base { opacity:.75; border-style:dashed; }
+  table { width:100%; border-collapse:collapse; margin-top:26px; font-size:12px; }
+  th,td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-size:10px; letter-spacing:1px; text-transform:uppercase; }
+  td:first-child { color:var(--muted); }
+</style>
+</head>
+<body>
+<h1>AKS — top-bar prototypes</h1>
+<p class="sub">Three directions for decluttering the 18-resource nav (8 direct tabs + 6 hidden behind Network ▾ + 4 trailing). Click a card to open the interactive mock. Nothing is wired — evaluate the shape, not the pixels. Mock data only.</p>
+
+<a class="card" href="groups.html">
+  <h2>A — Grouped menus <span>category dropdowns</span></h2>
+  <p>The flat tab strip collapses into 4 labelled menus — <b>Workloads / Configuration / Network / Operations</b> — each opening a dropdown with item counts and one-line descriptions. The active view shows as a crumb (<i>Workloads › Pods</i>). Same horizontal-bar mental model, no second-class submenu.</p>
+  <div class="tags"><span class="tag">least re-learning</span><span class="tag">equal footing for all 18</span><span class="tag">counts up front</span></div>
+</a>
+
+<a class="card" href="rail.html">
+  <h2>B — Navigator rail <span>Lens-style sidebar</span></h2>
+  <p>Resource navigation moves into a collapsible left rail: grouped sections, live count badges, a filter box at the top. <b>All 18 resources visible at once, always</b>. The top bar slims down to scope (context / namespace) + refresh. Costs ~210px of horizontal space (collapsible to icons).</p>
+  <div class="tags"><span class="tag">best discoverability</span><span class="tag">1 click to anything</span><span class="tag">steals list width</span></div>
+</a>
+
+<a class="card" href="switcher.html">
+  <h2>C — Breadcrumb + switcher <span>progressive disclosure</span></h2>
+  <p>One line of chrome: <b>cluster › namespace › resource</b>, where each segment is a picker. The resource segment opens a Ctrl+K-style searchable switcher (recent items, grouped list, arrow-key navigation). A pinned-favourites strip keeps power users one click from their usual spots.</p>
+  <div class="tags"><span class="tag">max content space</span><span class="tag">keyboard-first</span><span class="tag">structure hidden behind search</span></div>
+</a>
+
+<a class="card base" href="current.html">
+  <h2>Baseline — today's bar <span>for comparison</span></h2>
+  <p>Replica of the current strip: 8 direct tabs, the Network ▾ second-row submenu, and 4 trailing tabs. Open it side-by-side with a concept to feel the difference at narrow widths.</p>
+</a>
+
+<table>
+  <tr><th></th><th>Nav items visible at rest</th><th>Clicks to reach HTTPRoutes</th><th>Structure discovery</th><th>Width at 1280px</th><th>Power-user speed</th></tr>
+  <tr><td>Today</td><td>13 buttons + hidden 6</td><td>2 (Network ▾ → item)</td><td>flat list, Network buried</td><td>wraps / scrolls</td><td>fast</td></tr>
+  <tr><td>A · Grouped menus</td><td>4 menus + current crumb</td><td>2 (Network ▾ → item)</td><td>grouped, on demand</td><td>comfortable</td><td>fast</td></tr>
+  <tr><td>B · Navigator rail</td><td>all 18, grouped</td><td>1</td><td>always visible + grouped</td><td>loses ~210px</td><td>fastest (mouse)</td></tr>
+  <tr><td>C · Switcher</td><td>crumb + pins</td><td>1 (type "http")</td><td>behind search</td><td>maximum</td><td>fastest (keyboard)</td></tr>
+</table>
+</body>
+</html>

@@ -65,6 +65,15 @@ export interface PodInfo extends AksScopedRow {
     startTime: string | null;
     containers: string[];
     labels: Record<string, string>;
+    /** Summed container cpu requests in cores — the severity basis the pods table
+     * colors usage against; null when no container declares one. */
+    cpuRequestCores: number | null;
+    /** Summed container cpu limits in cores. */
+    cpuLimitCores: number | null;
+    /** Summed container memory requests in bytes. */
+    memoryRequestBytes: number | null;
+    /** Summed container memory limits in bytes. */
+    memoryLimitBytes: number | null;
     readyDisplay: string;
 }
 

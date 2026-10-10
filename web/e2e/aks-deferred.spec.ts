@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setDemoMode } from "./helpers";
+import { openAksTab, setDemoMode } from "./helpers";
 
 test.describe("AKS deferred features", () => {
   test.beforeEach(async ({ page }) => {
@@ -91,7 +91,7 @@ test.describe("AKS deferred features", () => {
   test("yaml viewer edit mode toggle", async ({ page }) => {
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption("ecommerce");
-    await page.getByTestId("aks-tab-pods").click();
+    await openAksTab(page, "pods");
     await page.getByTestId("pods-table-body").locator("tr").first().click();
     await expect(page.getByTestId("pod-detail-panel")).toBeVisible();
     await page.getByTestId("pod-yaml-btn").click();
@@ -103,7 +103,7 @@ test.describe("AKS deferred features", () => {
   test("helm rollback is disabled pending a sidecar endpoint", async ({ page }) => {
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption("ecommerce");
-    await page.getByTestId("aks-tab-helm").click();
+    await openAksTab(page, "helm");
     await page.getByTestId("helm-table-body").locator("tr").first().click();
     await expect(page.getByTestId("helm-detail-panel")).toBeVisible();
     const rollbackButtons = page.locator('[data-testid^="helm-rollback-rev-"]');

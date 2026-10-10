@@ -9,6 +9,15 @@ import {
 import { useNavigate } from "react-router";
 import { Bell } from "lucide-react";
 import { useAksPods, useAksDeletePod, useAksPodMetrics } from "@/lib/hooks";
+import {
+    absoluteCpuSeverity,
+    absoluteMemorySeverity,
+    cpuUsageBasis,
+    memoryUsageBasis,
+    severityForRatio,
+    SEVERITY_BAR_CLASS,
+    SEVERITY_TEXT_CLASS,
+} from "@/lib/aksUsage";
 import { showNotification } from "@/lib/tauri-bridge";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
 import {
@@ -35,18 +44,6 @@ function formatCpu(cores: number): string {
 
 function formatMemory(bytes: number): string {
     return `${Math.round(bytes / (1024 * 1024))}Mi`;
-}
-
-function cpuClass(cores: number): string {
-    if (cores > 0.4) return "text-destructive";
-    if (cores > 0.15) return "text-warning";
-    return "text-success";
-}
-
-function memoryClass(mi: number): string {
-    if (mi > 400) return "text-destructive";
-    if (mi > 200) return "text-warning";
-    return "text-success";
 }
 
 function formatAge(startTime: string | null | undefined): string {
@@ -353,23 +350,30 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
                                 —
                             </span>
                         );
-                    const cpuPct = (usage.cpu * 1000) / CPU_CEILING_MILLICORES;
+                    const basis = cpuUsageBasis(pod);
+                    const ratio = basis
+                        ? usage.cpu / basis.value
+                        : (usage.cpu * 1000) / CPU_CEILING_MILLICORES;
+                    const severity = basis
+                        ? severityForRatio(ratio, basis.kind)
+                        : absoluteCpuSeverity(usage.cpu);
                     return (
                         <div
                             className="flex items-center gap-2"
-                            title={`${formatCpu(usage.cpu)} / ~${CPU_CEILING_MILLICORES}m`}
+                            title={
+                                basis
+                                    ? `${formatCpu(usage.cpu)} / ${formatCpu(basis.value)} ${basis.kind}`
+                                    : `${formatCpu(usage.cpu)} / ~${CPU_CEILING_MILLICORES}m (no requests/limits declared)`
+                            }
                         >
                             <span
-                                className={`text-xs font-mono ${cpuClass(usage.cpu)}`}
+                                className={`text-xs font-mono ${SEVERITY_TEXT_CLASS[severity]}`}
                             >
                                 {formatCpu(usage.cpu)}
                             </span>
                             <MetricBar
-                                value={cpuPct}
-                                className={cpuClass(usage.cpu).replace(
-                                    "text-",
-                                    "bg-",
-                                )}
+                                value={ratio}
+                                className={SEVERITY_BAR_CLASS[severity]}
                             />
                         </div>
                     );
@@ -390,24 +394,31 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
                                 —
                             </span>
                         );
+                    const basis = memoryUsageBasis(pod);
                     const memoryMi = usage.memory / (1024 * 1024);
-                    const memoryPct = memoryMi / MEMORY_CEILING_MI;
+                    const ratio = basis
+                        ? usage.memory / basis.value
+                        : memoryMi / MEMORY_CEILING_MI;
+                    const severity = basis
+                        ? severityForRatio(ratio, basis.kind)
+                        : absoluteMemorySeverity(memoryMi);
                     return (
                         <div
                             className="flex items-center gap-2"
-                            title={`${formatMemory(usage.memory)} / ~${MEMORY_CEILING_MI}Mi`}
+                            title={
+                                basis
+                                    ? `${formatMemory(usage.memory)} / ${formatMemory(basis.value)} ${basis.kind}`
+                                    : `${formatMemory(usage.memory)} / ~${MEMORY_CEILING_MI}Mi (no requests/limits declared)`
+                            }
                         >
                             <span
-                                className={`text-xs font-mono ${memoryClass(memoryMi)}`}
+                                className={`text-xs font-mono ${SEVERITY_TEXT_CLASS[severity]}`}
                             >
                                 {formatMemory(usage.memory)}
                             </span>
                             <MetricBar
-                                value={memoryPct}
-                                className={memoryClass(memoryMi).replace(
-                                    "text-",
-                                    "bg-",
-                                )}
+                                value={ratio}
+                                className={SEVERITY_BAR_CLASS[severity]}
                             />
                         </div>
                     );

@@ -418,6 +418,8 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                     .OrderByDescending(t => t!.FinishedAt)
                     .FirstOrDefault();
                 var (ownerKind, ownerName) = GetPodOwner(p.Metadata);
+                var (cpuRequest, memRequest) = SumPodResources(p.Spec?.Containers, r => r?.Requests);
+                var (cpuLimit, memLimit) = SumPodResources(p.Spec?.Containers, r => r?.Limits);
 
                 return new PodInfo
                 {
@@ -437,10 +439,51 @@ public partial class KubernetesAksClient : IAksClient, IAsyncDisposable
                     OwnerKind = ownerKind,
                     OwnerName = ownerName,
                     Containers = p.Spec?.Containers?.Select(c => c.Name).ToList() ?? [],
-                    Labels = p.Metadata.Labels is not null ? new Dictionary<string, string>(p.Metadata.Labels) : []
+                    Labels = p.Metadata.Labels is not null ? new Dictionary<string, string>(p.Metadata.Labels) : [],
+                    CpuRequestCores = cpuRequest,
+                    MemoryRequestBytes = memRequest,
+                    CpuLimitCores = cpuLimit,
+                    MemoryLimitBytes = memLimit
                 };
             }).ToList();
         }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sums one resource key (<c>"cpu"</c>/<c>"memory"</c>) across a pod's containers, picked
+    /// via <paramref name="selector"/> (requests or limits). Init containers are skipped —
+    /// the per-pod usage these sums are compared against only covers running containers.
+    /// Returns <see langword="null"/> for a resource no container declares.
+    /// </summary>
+    private static (double? Cpu, long? Memory) SumPodResources(
+        IList<V1Container>? containers,
+        Func<V1ResourceRequirements?, IDictionary<string, ResourceQuantity>?> selector)
+    {
+        if (containers is null || containers.Count == 0)
+            return (null, null);
+
+        double cpuCores = 0;
+        long memoryBytes = 0;
+        var anyCpu = false;
+        var anyMem = false;
+        foreach (var container in containers)
+        {
+            var values = selector(container.Resources);
+            if (values is null)
+                continue;
+            if (values.TryGetValue("cpu", out var cpu) && cpu is not null)
+            {
+                cpuCores += ParseCpuToMillicores(cpu.ToString());
+                anyCpu = true;
+            }
+            if (values.TryGetValue("memory", out var mem) && mem is not null)
+            {
+                memoryBytes += ParseMemoryToBytes(mem.ToString());
+                anyMem = true;
+            }
+        }
+
+        return (anyCpu ? cpuCores : null, anyMem ? memoryBytes : null);
     }
 
     /// <summary>

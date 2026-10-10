@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setDemoMode, scrollToRedisKey } from "./helpers";
+import { openAksTab, setDemoMode, scrollToRedisKey } from "./helpers";
 
 /**
  * Captures every /api/agent/chat (or /chat/stream) request body sent while this route is
@@ -77,7 +77,7 @@ test.describe("Contextual assistant entry points", () => {
 
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
-    await page.getByTestId("aks-tab-pods").click();
+    await openAksTab(page, "pods");
     const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
     await firstRow.click({ button: "right" });
     await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();
@@ -186,7 +186,7 @@ test.describe("Contextual assistant entry points", () => {
 
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
-    await page.getByTestId("aks-tab-pods").click();
+    await openAksTab(page, "pods");
     const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
     await firstRow.click({ button: "right" });
     await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();
@@ -206,7 +206,7 @@ test.describe("Contextual assistant entry points", () => {
 
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
-    await page.getByTestId("aks-tab-pods").click();
+    await openAksTab(page, "pods");
     const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
     await firstRow.click({ button: "right" });
     await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();
@@ -231,7 +231,7 @@ test.describe("Contextual assistant entry points", () => {
 
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
-    await page.getByTestId("aks-tab-pods").click();
+    await openAksTab(page, "pods");
     const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
     await firstRow.click({ button: "right" });
     await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();
@@ -246,7 +246,7 @@ test.describe("Contextual assistant entry points", () => {
 
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
-    await page.getByTestId("aks-tab-pods").click();
+    await openAksTab(page, "pods");
     const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
     await firstRow.click({ button: "right" });
     await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();
@@ -283,7 +283,7 @@ test.describe("Contextual assistant entry points", () => {
 
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
-    await page.getByTestId("aks-tab-pods").click();
+    await openAksTab(page, "pods");
     const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
     await firstRow.click({ button: "right" });
     await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();
@@ -312,7 +312,7 @@ test.describe("Contextual assistant entry points", () => {
 
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
-    await page.getByTestId("aks-tab-pods").click();
+    await openAksTab(page, "pods");
     const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
     await firstRow.click({ button: "right" });
     await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();
@@ -330,7 +330,7 @@ test.describe("Contextual assistant entry points", () => {
   test("closing the panel removes it from the DOM", async ({ page }) => {
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption({ label: "default" });
-    await page.getByTestId("aks-tab-pods").click();
+    await openAksTab(page, "pods");
     const firstRow = page.getByTestId("pods-table-body").locator("tr").first();
     await firstRow.click({ button: "right" });
     await page.getByTestId("ctx-item-ask-ai-about-this-pod").click();

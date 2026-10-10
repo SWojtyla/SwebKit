@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setDemoMode } from "./helpers";
+import { openAksTab, setDemoMode } from "./helpers";
 
 test.describe("AKS URL state", () => {
   test.beforeEach(async ({ page }) => {
@@ -13,7 +13,7 @@ test.describe("AKS URL state", () => {
   test("pods grid shows CPU and Memory columns with values in demo mode", async ({ page }) => {
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption("ecommerce");
-    await page.getByTestId("aks-tab-pods").click();
+    await openAksTab(page, "pods");
 
     const table = page.getByTestId("pods-table-body");
     await expect(table).toBeVisible();
@@ -49,7 +49,7 @@ test.describe("AKS URL state", () => {
     await page.goto("/aks");
     await page.getByTestId("aks-namespace-select").selectOption("ecommerce");
     await expect(page).toHaveURL(/ns=ecommerce/);
-    await page.getByTestId("aks-tab-pods").click();
+    await openAksTab(page, "pods");
 
     const table = page.getByTestId("pods-table-body");
     await expect(table).toBeVisible();
@@ -90,7 +90,7 @@ test.describe("AKS URL state", () => {
 
     await expect(page).toHaveURL(/ns=ecommerce/);
 
-    await page.getByTestId("aks-tab-pods").click();
+    await openAksTab(page, "pods");
     await expect(page.getByTestId("pods-table-body")).toBeVisible();
     await expect(page).toHaveURL(/tab=pods/);
 

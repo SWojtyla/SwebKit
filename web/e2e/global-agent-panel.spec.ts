@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mockAgentChatStreamDone, setDemoMode } from "./helpers";
+import { mockAgentChatStreamDone, openAksTab, setDemoMode } from "./helpers";
 
 test.describe("Global AI Agent panel", () => {
     test.beforeEach(async ({ page }) => {
@@ -42,7 +42,7 @@ test.describe("Global AI Agent panel", () => {
         await page.getByTestId("global-agent-panel-toggle").click();
         await expect(page.getByTestId("global-agent-panel")).toBeVisible();
 
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await expect(page.getByTestId("global-agent-panel")).toBeVisible();
 
         await page.getByTestId("context-title").click();
