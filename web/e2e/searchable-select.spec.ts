@@ -2,56 +2,97 @@ import { test, expect } from "@playwright/test";
 import { setDemoMode } from "./helpers";
 
 test.describe("shared SearchableSelect", () => {
-  test.beforeEach(async ({ page }) => {
-    await setDemoMode(page, true);
-  });
+    test.beforeEach(async ({ page }) => {
+        await setDemoMode(page, true);
+    });
 
-  test.afterEach(async ({ page }) => {
-    await setDemoMode(page, false);
-  });
+    test.afterEach(async ({ page }) => {
+        await setDemoMode(page, false);
+    });
 
-  test("service bus namespace picker filters and selects via keyboard", async ({ page }) => {
-    await page.goto("/service-bus");
+    test("service bus namespace picker filters and selects via keyboard", async ({
+        page,
+    }) => {
+        await page.goto("/service-bus");
 
-    await page.getByTestId("sb-namespace-button").click();
-    const filter = page.getByTestId("sb-namespace-filter");
-    await expect(filter).toBeFocused();
+        await page.getByTestId("sb-namespace-button").click();
+        const filter = page.getByTestId("sb-namespace-filter");
+        await expect(filter).toBeFocused();
 
-    // Both demo namespaces are listed with role=option and their FQDN subtitle.
-    await expect(page.getByRole("option", { name: "orders-dev" })).toBeVisible();
-    await expect(page.getByRole("option", { name: "payments-dev" })).toBeVisible();
+        // Both demo namespaces are listed with role=option and their FQDN subtitle.
+        await expect(
+            page.getByRole("option", { name: "orders-dev" }),
+        ).toBeVisible();
+        await expect(
+            page.getByRole("option", { name: "payments-dev" }),
+        ).toBeVisible();
 
-    await filter.fill("payments");
-    await expect(page.getByRole("option")).toHaveCount(1);
+        await filter.fill("payments");
+        await expect(page.getByRole("option")).toHaveCount(1);
 
-    // Enter picks the highlighted option and applies the namespace.
-    await page.keyboard.press("Enter");
-    await expect(page.getByRole("listbox")).not.toBeVisible();
-    await expect(page.getByTestId("sb-namespace-button")).toContainText("payments-dev");
-  });
+        // Enter picks the highlighted option and applies the namespace.
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("listbox")).not.toBeVisible();
+        await expect(page.getByTestId("sb-namespace-button")).toContainText(
+            "payments-dev",
+        );
+    });
 
-  test("escape closes the dropdown and returns focus to the trigger", async ({ page }) => {
-    await page.goto("/service-bus");
-    const button = page.getByTestId("sb-namespace-button");
-    await button.click();
-    await expect(page.getByRole("listbox")).toBeVisible();
+    test("namespace popover anchors to the trigger's right edge without overflowing the page", async ({
+        page,
+    }) => {
+        await page.goto("/service-bus");
+        const button = page.getByTestId("sb-namespace-button");
+        await button.click();
+        const listbox = page.getByRole("listbox");
+        await expect(listbox).toBeVisible();
 
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("listbox")).not.toBeVisible();
-    await expect(button).toBeFocused();
-  });
+        const b = await button.boundingBox();
+        const l = await listbox.boundingBox();
+        expect(b).not.toBeNull();
+        expect(l).not.toBeNull();
+        // Right edges flush — a left-anchored popover stuck out ~90px past the
+        // window's right edge and forced a horizontal scrollbar / layout shift.
+        expect(Math.abs(l!.x + l!.width - (b!.x + b!.width))).toBeLessThan(2);
+        expect(l!.x).toBeGreaterThanOrEqual(0);
+        expect(l!.x + l!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+        const widths = await page.evaluate(() => ({
+            scroll: document.documentElement.scrollWidth,
+            client: document.documentElement.clientWidth,
+        }));
+        expect(widths.scroll).toBeLessThanOrEqual(widths.client + 1);
+    });
 
-  test("sql connection picker shows server subtitles and switches connection", async ({ page }) => {
-    await page.goto("/sql");
-    await page.getByTestId("sql-connection-button").click();
+    test("escape closes the dropdown and returns focus to the trigger", async ({
+        page,
+    }) => {
+        await page.goto("/service-bus");
+        const button = page.getByTestId("sb-namespace-button");
+        await button.click();
+        await expect(page.getByRole("listbox")).toBeVisible();
 
-    // The optgroup label from the old native select is now a subtitle on each option.
-    const prod = page.getByRole("option", { name: "orders-prod-sql" });
-    await expect(prod).toContainText("orders-prod-sql.database.windows.net");
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("listbox")).not.toBeVisible();
+        await expect(button).toBeFocused();
+    });
 
-    await prod.click();
-    await expect(page).toHaveURL(/connection=demo-sql-2/);
-    // The label is database || displayName, same as the old native options.
-    await expect(page.getByTestId("sql-connection-button")).toContainText("orders");
-  });
+    test("sql connection picker shows server subtitles and switches connection", async ({
+        page,
+    }) => {
+        await page.goto("/sql");
+        await page.getByTestId("sql-connection-button").click();
+
+        // The optgroup label from the old native select is now a subtitle on each option.
+        const prod = page.getByRole("option", { name: "orders-prod-sql" });
+        await expect(prod).toContainText(
+            "orders-prod-sql.database.windows.net",
+        );
+
+        await prod.click();
+        await expect(page).toHaveURL(/connection=demo-sql-2/);
+        // The label is database || displayName, same as the old native options.
+        await expect(page.getByTestId("sql-connection-button")).toContainText(
+            "orders",
+        );
+    });
 });

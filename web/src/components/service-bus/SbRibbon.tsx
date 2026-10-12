@@ -274,6 +274,7 @@ export function SbRibbon(p: SbRibbonProps) {
                         ]}
                         listAriaLabel="Service Bus namespaces"
                         buttonClassName="min-w-[14rem]"
+                        align="end"
                     />
                     <button
                         type="button"
