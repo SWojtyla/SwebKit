@@ -198,20 +198,26 @@ describe("logs param codec", () => {
 describe("nav rail collapsed-group prefs", () => {
     const storage = (initial: string | null = null) => {
         let value = initial;
+        let key = "";
         return {
             getItem: () => value,
-            setItem: (_k: string, v: string) => {
+            setItem: (k: string, v: string) => {
+                key = k;
                 value = v;
             },
             get current() {
                 return value;
             },
+            get lastKey() {
+                return key;
+            },
         };
     };
 
-    it("round-trips a collapsed set", () => {
+    it("round-trips a collapsed set under the pref key", () => {
         const s = storage();
         saveNavCollapsedGroups(new Set(["network", "ops"]), s);
+        expect(s.lastKey).toBe(NAV_COLLAPSED_GROUPS_PREF);
         expect([...loadNavCollapsedGroups(s)].sort()).toEqual([
             "network",
             "ops",
