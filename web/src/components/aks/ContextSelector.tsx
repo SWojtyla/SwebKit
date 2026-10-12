@@ -14,9 +14,10 @@ interface ContextSelectorProps {
 
 /**
  * Multi-select context picker: every checked context feeds the merged view and gets
- * its own namespace group in the namespace picker. There is no "primary" — clicking a
- * row toggles it like the checkbox does; Ctrl/Cmd+click (or the dot button) selects
- * just that one.
+ * its own namespace group in the namespace picker. There is no "primary".
+ *
+ * Click semantics mirror the namespace picker beside it: clicking a row selects
+ * just that one cluster and closes; the checkbox toggles it into the merged set.
  */
 export function ContextSelector({
     contexts,
@@ -89,7 +90,8 @@ export function ContextSelector({
             setHighlight((h) => Math.max(h - 1, 0));
         } else if (e.key === "Enter" && sortedFiltered[highlight]) {
             e.preventDefault();
-            onToggle(sortedFiltered[highlight].name);
+            onSelectOnly(sortedFiltered[highlight].name);
+            close();
         }
     };
 
@@ -162,9 +164,11 @@ export function ContextSelector({
                                     id={`aks-context-option-row-${i}`}
                                     role="option"
                                     aria-selected={isSelected}
-                                    onClick={() =>
-                                        !isLastSelected && onToggle(ctx.name)
-                                    }
+                                    title={`Select only ${ctx.name} — or tick the box to combine clusters`}
+                                    onClick={() => {
+                                        onSelectOnly(ctx.name);
+                                        close();
+                                    }}
                                     onMouseEnter={() => setHighlight(i)}
                                     className={`w-full cursor-pointer rounded px-2 py-1.5 text-left text-sm hover:bg-accent ${i === highlight ? "bg-accent/40" : ""}`}
                                     data-testid={`aks-context-option-${ctx.name}`}
@@ -221,8 +225,8 @@ export function ContextSelector({
                         })}
                     </div>
                     <div className="border-t px-2 py-1.5 text-[11px] text-muted-foreground">
-                        Checked clusters feed the merged view · the button on
-                        the right selects only that cluster
+                        Click a row to select just it · tick boxes to combine
+                        clusters in the merged view
                     </div>
                 </div>
             )}

@@ -245,7 +245,11 @@ export function AksWorkspaceProvider({
         const valid = [...new Set(candidate)].filter((c) =>
             contexts.some((k) => k.name === c),
         );
-        if (valid.length > 1)
+        // Restore any saved set — including a single non-default context. The old
+        // `> 1` gate silently forgot a one-cluster choice: on the next visit the
+        // selection fell back to the default no matter what was picked last.
+        const isDefaultOnly = valid.length === 1 && valid[0] === defaultContext;
+        if (valid.length > 0 && !isDefaultOnly)
             updateParams(
                 { ctxs: encodeContextParam(valid) },
                 { replace: true },
