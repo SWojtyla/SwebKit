@@ -44,6 +44,7 @@ scripts/logs/
 
 # Throwaway appdata roots created by e2e runs
 src-sidecar/.e2e-appdata*/
+.e2e-sidecar/
 
 # Playwright
 **/test-results/

@@ -12,26 +12,26 @@ const sidecarUrl = `http://127.0.0.1:${sidecarPort}`;
  * because there's nothing to scroll to yet.
  */
 async function scrollVirtualListIntoView(
-  page: Page,
-  containerTestId: string,
-  targetTestId: string,
+    page: Page,
+    containerTestId: string,
+    targetTestId: string,
 ) {
-  const container = page.getByTestId(containerTestId);
-  const target = page.getByTestId(targetTestId);
+    const container = page.getByTestId(containerTestId);
+    const target = page.getByTestId(targetTestId);
 
-  for (let i = 0; i < 60; i++) {
-    if ((await target.count()) > 0) break;
-    const reachedEnd = await container.evaluate((el) => {
-      const before = el.scrollTop;
-      el.scrollTop = before + el.clientHeight;
-      return el.scrollTop === before;
-    });
-    await page.waitForTimeout(30);
-    if (reachedEnd) break;
-  }
+    for (let i = 0; i < 60; i++) {
+        if ((await target.count()) > 0) break;
+        const reachedEnd = await container.evaluate((el) => {
+            const before = el.scrollTop;
+            el.scrollTop = before + el.clientHeight;
+            return el.scrollTop === before;
+        });
+        await page.waitForTimeout(30);
+        if (reachedEnd) break;
+    }
 
-  await expect(target).toBeVisible();
-  return target;
+    await expect(target).toBeVisible();
+    return target;
 }
 
 /**
@@ -41,12 +41,16 @@ async function scrollVirtualListIntoView(
  * happen before scrolling can ever reach it.
  */
 export async function expandAllRedisNamespaces(page: Page) {
-  await page.getByTestId("redis-expand-all").click();
+    await page.getByTestId("redis-expand-all").click();
 }
 
 export async function scrollToRedisKey(page: Page, key: string) {
-  await expandAllRedisNamespaces(page);
-  return scrollVirtualListIntoView(page, "redis-key-tree-scroll", `redis-key-${key}`);
+    await expandAllRedisNamespaces(page);
+    return scrollVirtualListIntoView(
+        page,
+        "redis-key-tree-scroll",
+        `redis-key-${key}`,
+    );
 }
 
 /**
@@ -56,94 +60,104 @@ export async function scrollToRedisKey(page: Page, key: string) {
  * Use this instead of hand-rolling the SSE `data: ...\n\n` framing in every spec.
  */
 export async function mockAgentChatStreamDone(
-  page: Page,
-  reply: {
-    text: string;
-    elapsedMs?: number;
-    status?: string;
-    error?: boolean;
-    steps?: { type: string; toolName?: string; summary?: string; elapsed?: string; isFailure?: boolean }[];
-    summarized?: boolean;
-    contextUsagePercent?: number;
-  },
-) {
-  const event = {
-    kind: "done",
-    result: {
-      text: reply.text,
-      elapsedMs: reply.elapsedMs ?? 1,
-      status: reply.status ?? "done",
-      error: reply.error ?? false,
-      steps: reply.steps ?? [],
-      summarized: reply.summarized ?? false,
-      contextUsagePercent: reply.contextUsagePercent ?? 0,
+    page: Page,
+    reply: {
+        text: string;
+        elapsedMs?: number;
+        status?: string;
+        error?: boolean;
+        steps?: {
+            type: string;
+            toolName?: string;
+            summary?: string;
+            elapsed?: string;
+            isFailure?: boolean;
+        }[];
+        summarized?: boolean;
+        contextUsagePercent?: number;
     },
-  };
-  await page.route("**/api/agent/chat/stream", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "text/event-stream",
-      body: `data: ${JSON.stringify(event)}\n\n`,
+) {
+    const event = {
+        kind: "done",
+        result: {
+            text: reply.text,
+            elapsedMs: reply.elapsedMs ?? 1,
+            status: reply.status ?? "done",
+            error: reply.error ?? false,
+            steps: reply.steps ?? [],
+            summarized: reply.summarized ?? false,
+            contextUsagePercent: reply.contextUsagePercent ?? 0,
+        },
+    };
+    await page.route("**/api/agent/chat/stream", async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: "text/event-stream",
+            body: `data: ${JSON.stringify(event)}\n\n`,
+        });
     });
-  });
 }
 
 async function getSidecarDemoMode(page: Page): Promise<boolean> {
-  const res = await page.request.get(`${sidecarUrl}/api/demo-mode`);
-  const body = (await res.json()) as { isDemoMode?: boolean };
-  return body.isDemoMode === true;
+    const res = await page.request.get(`${sidecarUrl}/api/demo-mode`);
+    const body = (await res.json()) as { isDemoMode?: boolean };
+    return body.isDemoMode === true;
 }
 
 async function setSidecarDemoMode(page: Page, enabled: boolean): Promise<void> {
-  await page.request.post(`${sidecarUrl}/api/demo-mode?enabled=${enabled}`);
+    await page.request.post(`${sidecarUrl}/api/demo-mode?enabled=${enabled}`);
 }
 
-async function waitForDemoProfile(page: Page, enabled: boolean, timeout = 10_000): Promise<void> {
-  const expected = enabled ? 2 : 0;
-  const started = Date.now();
-  while (Date.now() - started < timeout) {
-    const res = await page.request.get(`${sidecarUrl}/api/config/profiles`);
-    const body = (await res.json()) as { serviceBusNamespaces?: unknown[] };
-    const count = body.serviceBusNamespaces?.length ?? 0;
-    if (count === expected) return;
-    await page.waitForTimeout(200);
-  }
-  throw new Error(`Timed out waiting for demo profile (enabled=${enabled})`);
+async function waitForDemoProfile(
+    page: Page,
+    enabled: boolean,
+    timeout = 10_000,
+): Promise<void> {
+    const expected = enabled ? 2 : 0;
+    const started = Date.now();
+    while (Date.now() - started < timeout) {
+        const res = await page.request.get(`${sidecarUrl}/api/config/profiles`);
+        const body = (await res.json()) as { serviceBusNamespaces?: unknown[] };
+        const count = body.serviceBusNamespaces?.length ?? 0;
+        if (count === expected) return;
+        await page.waitForTimeout(200);
+    }
+    throw new Error(`Timed out waiting for demo profile (enabled=${enabled})`);
 }
 
 export async function setDemoMode(page: Page, enabled: boolean) {
-  // Drive the sidecar directly so tests don't depend on the UI's optimistic
-  // mutation state or React Query cache timing.
-  const currentlyOn = await getSidecarDemoMode(page);
-  if (currentlyOn !== enabled) {
-    await setSidecarDemoMode(page, enabled);
-    if (enabled) {
-      // Demo mode overlays exactly 2 Service Bus namespaces, so this is a
-      // reliable signal the sidecar is serving the demo profile.
-      await waitForDemoProfile(page, true);
+    // Drive the sidecar directly so tests don't depend on the UI's optimistic
+    // mutation state or React Query cache timing.
+    const currentlyOn = await getSidecarDemoMode(page);
+    if (currentlyOn !== enabled) {
+        await setSidecarDemoMode(page, enabled);
+        if (enabled) {
+            // Demo mode overlays exactly 2 Service Bus namespaces, so this is a
+            // reliable signal the sidecar is serving the demo profile.
+            await waitForDemoProfile(page, true);
+        }
     }
-  }
 
-  await page.goto("/");
-  const toggle = page.getByTestId("demo-mode-toggle");
-  await toggle.waitFor();
+    await page.goto("/");
+    const toggle = page.getByTestId("demo-mode-toggle");
+    await toggle.waitFor();
 
-  // Force the UI to converge on the correct state. The toggle reads from
-  // /api/demo-mode and the dashboard card from /api/config/profiles.
-  await expect(toggle).toContainText(enabled ? "Demo" : "Live", { timeout: 10000 });
-  if (enabled) {
-    await expect(page.getByTestId("service-card-service-bus")).toContainText(
-      "2 namespaces",
-      { timeout: 10000 },
-    );
-  }
+    // Force the UI to converge on the correct state. The toggle reads from
+    // /api/demo-mode and the dashboard card from /api/config/profiles.
+    await expect(toggle).toContainText(enabled ? "Demo" : "Live", {
+        timeout: 10000,
+    });
+    if (enabled) {
+        await expect(
+            page.getByTestId("service-card-service-bus"),
+        ).toContainText("2 namespaces", { timeout: 10000 });
+    }
 }
 
 /**
- * Opens an AKS resource view through the grouped nav menus. The `aks-tab-<id>` testids
- * from the flat strip now live inside a dropdown that has to be opened first — this
- * keeps every spec's navigation calls working through one seam instead of repeating
- * the group→item choreography inline.
+ * Opens an AKS resource view through the navigator rail. `aks-tab-<id>` items sit
+ * inside collapsible group sections — clicking a collapsed header (aria-expanded
+ * false) expands it first, so this works whatever the rail's persisted state is.
  */
 const AKS_TAB_GROUPS: Record<string, string> = {
     pods: "workloads",
@@ -181,7 +195,7 @@ export async function openAksTab(page: Page, tabId: string) {
  * Use in test setup to keep drag-and-drop and ordering specs isolated from earlier tests.
  */
 export async function resetCollections(page: Page) {
-  await page.request.put(`${sidecarUrl}/api/config/collections`, {
-    data: { schemaVersion: 1, collections: [] },
-  });
+    await page.request.put(`${sidecarUrl}/api/config/collections`, {
+        data: { schemaVersion: 1, collections: [] },
+    });
 }
