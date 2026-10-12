@@ -46,18 +46,6 @@ scripts/logs/
 src-sidecar/.e2e-appdata*/
 .e2e-sidecar/
 
-# Throwaway sidecar build output used by local e2e runs (keeps the user's dev
-# sidecar binaries untouched)
-.e2e-sidecar/
-
-# Throwaway sidecar build output used by local e2e runs (keeps the user's dev
-# sidecar binaries untouched)
-.e2e-sidecar/
-
-# Throwaway sidecar build output used by local e2e runs (keeps the user's dev
-# sidecar binaries untouched)
-.e2e-sidecar/
-
 # Playwright
 **/test-results/
 **/playwright-report/
