@@ -233,22 +233,8 @@ export function SbRibbon(p: SbRibbonProps) {
         <div className="border-b" data-testid="sb-ribbon">
             {/* Tab strip — namespace picker lives here because it's global context, not a per-tab command. */}
             <div className="flex items-center gap-1 px-2 pt-1">
-                {TABS.map((t) => (
-                    <button
-                        key={t.id}
-                        type="button"
-                        data-testid={t.testId}
-                        onClick={() => selectTab(t.id)}
-                        className={`rounded-t-md border-b-2 px-3 py-1 text-xs font-medium ${
-                            tab === t.id && !collapsed
-                                ? "border-primary text-foreground"
-                                : "border-transparent text-muted-foreground hover:text-foreground"
-                        }`}
-                    >
-                        {t.label}
-                    </button>
-                ))}
-                <div className="flex-1" />
+                {/* Selector leads the row like the account pickers in the other
+                    features (Storage/SQL put theirs next to the page title). */}
                 <div className="flex items-center gap-2 pb-1">
                     <span className="text-[11px] text-muted-foreground">
                         Namespace
@@ -274,8 +260,26 @@ export function SbRibbon(p: SbRibbonProps) {
                         ]}
                         listAriaLabel="Service Bus namespaces"
                         buttonClassName="min-w-[14rem]"
-                        align="end"
                     />
+                </div>
+                <div className="mx-1 h-5 w-px self-center bg-border" />
+                {TABS.map((t) => (
+                    <button
+                        key={t.id}
+                        type="button"
+                        data-testid={t.testId}
+                        onClick={() => selectTab(t.id)}
+                        className={`rounded-t-md border-b-2 px-3 py-1 text-xs font-medium ${
+                            tab === t.id && !collapsed
+                                ? "border-primary text-foreground"
+                                : "border-transparent text-muted-foreground hover:text-foreground"
+                        }`}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+                <div className="flex-1" />
+                <div className="flex items-center gap-2 pb-1">
                     <button
                         type="button"
                         data-testid="sb-ribbon-collapse"

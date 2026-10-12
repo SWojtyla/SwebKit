@@ -38,23 +38,28 @@ test.describe("shared SearchableSelect", () => {
         );
     });
 
-    test("namespace popover anchors to the trigger's right edge without overflowing the page", async ({
+    test("namespace picker sits left of the tabs and its popover stays in view", async ({
         page,
     }) => {
         await page.goto("/service-bus");
         const button = page.getByTestId("sb-namespace-button");
+        const homeTab = page.getByTestId("sb-tab-home");
+        const b = await button.boundingBox();
+        const t = await homeTab.boundingBox();
+        expect(b).not.toBeNull();
+        expect(t).not.toBeNull();
+        // Left-aligned like the account pickers in the other features — the
+        // picker used to float at the row's right edge.
+        expect(b!.x).toBeLessThan(t!.x);
+
         await button.click();
         const listbox = page.getByRole("listbox");
         await expect(listbox).toBeVisible();
-
-        const b = await button.boundingBox();
         const l = await listbox.boundingBox();
-        expect(b).not.toBeNull();
         expect(l).not.toBeNull();
-        // Right edges flush — a left-anchored popover stuck out ~90px past the
-        // window's right edge and forced a horizontal scrollbar / layout shift.
-        expect(Math.abs(l!.x + l!.width - (b!.x + b!.width))).toBeLessThan(2);
-        expect(l!.x).toBeGreaterThanOrEqual(0);
+        // Popover drops from the trigger's left edge and never overhangs the
+        // window — an overflowing popover forced a horizontal layout shift.
+        expect(Math.abs(l!.x - b!.x)).toBeLessThan(2);
         expect(l!.x + l!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
         const widths = await page.evaluate(() => ({
             scroll: document.documentElement.scrollWidth,

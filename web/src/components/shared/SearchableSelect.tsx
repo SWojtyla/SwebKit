@@ -46,13 +46,6 @@ interface SearchableSelectProps<
     buttonClassName?: string;
     /** Popover width class (default "w-80"). */
     popoverClassName?: string;
-    /**
-     * Popover anchor edge. "start" (default) drops down from the trigger's left
-     * edge; "end" aligns its right edge with the trigger's — required when the
-     * trigger sits at the viewport's right edge, or a left-anchored popover
-     * overflows and forces a layout shift/scrollbar on the page.
-     */
-    align?: "start" | "end";
 }
 
 /**
@@ -83,7 +76,6 @@ export function SearchableSelect<
     listAriaLabel,
     buttonClassName = "min-w-[12rem]",
     popoverClassName = "w-80",
-    align = "start",
 }: SearchableSelectProps<T>) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState("");
@@ -227,7 +219,7 @@ export function SearchableSelect<
 
             {open && (
                 <div
-                    className={`absolute z-50 mt-1 rounded-md border bg-popover shadow-md ${align === "end" ? "right-0" : "left-0"} ${popoverClassName}`}
+                    className={`absolute left-0 z-50 mt-1 rounded-md border bg-popover shadow-md ${popoverClassName}`}
                     role="listbox"
                     aria-label={listAriaLabel}
                 >
