@@ -26,6 +26,11 @@ export default defineConfig({
     build: {
         target: "es2022",
         sourcemap: false,
+        // Heavy chunks (elk ~1.4 MB, AksPage ~0.5 MB, the shared vendor chunk) are
+        // all lazy-loaded route/on-demand code, not startup payload — in a desktop
+        // app they read from disk, so their size is acceptable. Keep the warning as
+        // a tripwire for NEW regressions above the current max instead of noise.
+        chunkSizeWarningLimit: 1500,
         rollupOptions: {
             output: {
                 // Split the heaviest third-party deps out of the app chunk so no single
