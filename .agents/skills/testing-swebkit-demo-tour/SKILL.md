@@ -17,15 +17,15 @@ None.
 ## Starting the app for the tour
 
 1. Sidecar:
-   ```bash
-   cd /home/ubuntu/repos/SwebKit/src-sidecar
-   dotnet run --project SwebKit.Sidecar.csproj --urls "http://127.0.0.1:5199"
-   ```
+    ```bash
+    cd /home/ubuntu/repos/SwebKit/src-sidecar
+    dotnet run --project SwebKit.Sidecar.csproj --urls "http://127.0.0.1:5199"
+    ```
 2. Web app:
-   ```bash
-   cd /home/ubuntu/repos/SwebKit/web
-   npm run dev
-   ```
+    ```bash
+    cd /home/ubuntu/repos/SwebKit/web
+    npm run dev
+    ```
 3. Open http://localhost:1420 in Chrome.
 
 ## Tour controls
@@ -41,30 +41,36 @@ None.
 
 ## Expected tour route/data evidence
 
-| # | Step | Route | Demo data to assert |
-|---|------|-------|----------------------|
-| 1 | AI Cockpit | `/` | Health tiles show `Ready`, deployments > 0, service cards show `2 namespaces`, `1 cache`, `1 account` |
-| 2 | Kubernetes | `/aks` | Deployment table with pods counts and `Available`/`Progressing`/`Unavailable` rows |
-| 3 | Rows: click vs. right-click | `/aks` | Same AKS page — spotlight on the resource table convention |
-| 4 | Service Bus | `/service-bus` | Namespace dropdown contains `orders-dev` and `payments-dev` |
-| 5 | Redis | `/redis` | Cache selector shows `Demo Cache` and key tree with ~17 keys |
-| 6 | Storage | `/storage` | Container buttons `configs`, `exports`, `fixtures` |
-| 7 | API Client | `/api-client` | Collection tree includes `Demo API Samples`, `JSONPlaceholder`, `HTTPBin`, `GitHub API` |
-| 8 | AI Agent | `/agent` | Agent input visible, no crash (empty conversation) |
-| 9 | Monitoring | `/monitoring` | `Alert Rules (0)` and `Alert History (0)` tabs visible |
-| 10 | PRD day: read-only production | `/sql?connection=demo-sql-prd` | `sql-schema-partial` banner + declared-objects tree — queries work, catalog browsing is denied (no VIEW DEFINITION) |
-| 11 | Access gaps report | `/settings?tab=access` | Access report shows a `Denied` row for `sql.metadata` on `orders-prd-sql` with a SQL-grant remedy |
+| #   | Step                            | Route          | Try-it hint           | Demo data to assert                                                        |
+| --- | ------------------------------- | -------------- | --------------------- | -------------------------------------------------------------------------- |
+| 1   | Welcome to the cockpit          | `/`            | —                     | Health tiles show `Ready`, deployments > 0, service cards populated        |
+| 2   | Command palette                 | `/`            | Ctrl+K                | `command-palette-trigger` in top bar                                       |
+| 3   | AKS: pick your clusters         | `/aks`         | attach 2nd cluster    | `aks-context-select` opens; demo contexts listed                           |
+| 4   | Namespaces, grouped per cluster | `/aks`         | pick per-cluster ns   | `aks-namespace-select` groups by cluster when 2+ attached                  |
+| 5   | Rows: click vs. right-click     | `/aks`         | —                     | Same AKS page — spotlight on the resource table convention                 |
+| 6   | Logs, shell, port-forward       | `/aks`         | open pod logs         | Resource table rows present                                                |
+| 7   | Service Bus explorer            | `/service-bus` | peek a queue          | Namespace dropdown contains `orders-dev` and `payments-dev`                |
+| 8   | Filters that understand values  | `/service-bus` | date rule on TimeSent | Messages carry `NServiceBus.TimeSent` + `attempt` props                    |
+| 9   | Dead-letter triage              | `/service-bus` | flip to DLQ           | `sb-view-selector` with `sb-view-dlq` option                               |
+| 10  | Redis explorer                  | `/redis`       | —                     | Cache selector shows `Demo Cache`, key tree ~17 keys                       |
+| 11  | Blob storage                    | `/storage`     | —                     | Container buttons `configs`, `exports`, `fixtures`                         |
+| 12  | SQL workbench                   | `/sql`         | run saved query       | `sql-title` + schema tree on `demo-sql`                                    |
+| 13  | API Client                      | `/api-client`  | send demo request     | Collections `Demo API Samples`, `JSONPlaceholder`, `HTTPBin`, `GitHub API` |
+| 14  | AI Agent                        | `/agent`       | ask about health      | Agent input visible, no crash                                              |
+| 15  | Monitoring & AI reports         | `/monitoring`  | open a report card    | Rules/history tabs; AI Reports kanban                                      |
+| 16  | Make it yours                   | `/`            | —                     | Pins + deep links callout                                                  |
 
-Steps 10–11 carry `scenarioId: "prd-day"` in `DEMO_TOUR_STEPS` — the restricted demo connection
-(`demo-sql-prd`) is what makes them truthful: the denied Access-report row and the hidden schema
-are real demo restrictions, not scripted UI.
+The "PRD day" walkthrough was removed (2026-10): `demo-sql-prd` and the Access report
+still exist as a feature (Settings → Access, `access.spec.ts`), just not tour stops.
+Steps with `tryIt` render a `demo-tour-try-it` hint block — suggestions only, Next is
+never gated. `demo-tour.ts` `DemoTourStep` no longer carries `scenarioId`/`connection`.
 
 ## Key test assertions
 
 - Starting the tour auto-enables demo mode: the top-right toggle text changes from `Live` to `Demo` / `Demo Mode ON` and dashboard metrics update within a few seconds.
-- Each `Next` click advances the progress text (e.g. `1 / 12` to `2 / 12`) and navigates to the route above.
+- Each `Next` click advances the progress text (e.g. `1 / 16` to `2 / 16`) and navigates to the route above.
 - `Back` returns to the previous step and route.
-- `Stop` removes `demo-tour-card` immediately and leaves the current page rendered.
+- `Stop` (or `Escape`) removes `demo-tour-card` immediately and leaves the current page rendered.
 
 ## Common gotchas
 
