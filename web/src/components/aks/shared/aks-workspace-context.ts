@@ -22,11 +22,36 @@ export const navGroups = [
         label: "Workloads",
         desc: "Things that run containers",
         items: [
-            { id: "pods", label: "Pods", glyph: "⬡", desc: "running containers" },
-            { id: "deployments", label: "Deployments", glyph: "≣", desc: "stateless replicas + rollouts" },
-            { id: "statefulsets", label: "StatefulSets", glyph: "▦", desc: "stable identity, ordered scale" },
-            { id: "jobs", label: "Jobs", glyph: "▸", desc: "run-to-completion tasks" },
-            { id: "cronjobs", label: "CronJobs", glyph: "◷", desc: "scheduled tasks" },
+            {
+                id: "pods",
+                label: "Pods",
+                glyph: "⬡",
+                desc: "running containers",
+            },
+            {
+                id: "deployments",
+                label: "Deployments",
+                glyph: "≣",
+                desc: "stateless replicas + rollouts",
+            },
+            {
+                id: "statefulsets",
+                label: "StatefulSets",
+                glyph: "▦",
+                desc: "stable identity, ordered scale",
+            },
+            {
+                id: "jobs",
+                label: "Jobs",
+                glyph: "▸",
+                desc: "run-to-completion tasks",
+            },
+            {
+                id: "cronjobs",
+                label: "CronJobs",
+                glyph: "◷",
+                desc: "scheduled tasks",
+            },
         ],
     },
     {
@@ -34,10 +59,25 @@ export const navGroups = [
         label: "Configuration",
         desc: "Settings, secrets, packaged releases",
         items: [
-            { id: "configmaps", label: "ConfigMaps", glyph: "☰", desc: "non-secret config data" },
-            { id: "secrets", label: "Secrets", glyph: "⚿", desc: "credentials, tokens, TLS" },
+            {
+                id: "configmaps",
+                label: "ConfigMaps",
+                glyph: "☰",
+                desc: "non-secret config data",
+            },
+            {
+                id: "secrets",
+                label: "Secrets",
+                glyph: "⚿",
+                desc: "credentials, tokens, TLS",
+            },
             // The URL id stays "helm" — same tab, menu label spells out what it lists.
-            { id: "helm", label: "Helm releases", glyph: "⎈", desc: "installed charts" },
+            {
+                id: "helm",
+                label: "Helm releases",
+                glyph: "⎈",
+                desc: "installed charts",
+            },
         ],
     },
     {
@@ -45,12 +85,42 @@ export const navGroups = [
         label: "Network",
         desc: "How traffic reaches the workloads",
         items: [
-            { id: "services", label: "Services", glyph: "⇄", desc: "stable virtual IPs" },
-            { id: "ingresses", label: "Ingresses", glyph: "⇥", desc: "L7 host/path routing" },
-            { id: "gateways", label: "Gateways", glyph: "◈", desc: "Gateway API listeners" },
-            { id: "httproutes", label: "HTTPRoutes", glyph: "⇢", desc: "Gateway API HTTP rules" },
-            { id: "gatewayclasses", label: "GatewayClasses", glyph: "⬢", desc: "cluster-scoped gateway types" },
-            { id: "envoy", label: "Envoy", glyph: "≋", desc: "proxy config + stats" },
+            {
+                id: "services",
+                label: "Services",
+                glyph: "⇄",
+                desc: "stable virtual IPs",
+            },
+            {
+                id: "ingresses",
+                label: "Ingresses",
+                glyph: "⇥",
+                desc: "L7 host/path routing",
+            },
+            {
+                id: "gateways",
+                label: "Gateways",
+                glyph: "◈",
+                desc: "Gateway API listeners",
+            },
+            {
+                id: "httproutes",
+                label: "HTTPRoutes",
+                glyph: "⇢",
+                desc: "Gateway API HTTP rules",
+            },
+            {
+                id: "gatewayclasses",
+                label: "GatewayClasses",
+                glyph: "⬢",
+                desc: "cluster-scoped gateway types",
+            },
+            {
+                id: "envoy",
+                label: "Envoy",
+                glyph: "≋",
+                desc: "proxy config + stats",
+            },
         ],
     },
     {
@@ -58,17 +128,72 @@ export const navGroups = [
         label: "Operations",
         desc: "Observe and operate the cluster",
         items: [
-            { id: "events", label: "Events", glyph: "⚑", desc: "what the cluster is telling you" },
+            {
+                id: "events",
+                label: "Events",
+                glyph: "⚑",
+                desc: "what the cluster is telling you",
+            },
             // The URL id stays "hpa" so existing deep links keep working; the tab covers
             // all autoscaling (plain HPAs, KEDA ScaledObjects and ScaledJobs).
-            { id: "hpa", label: "Autoscaling", glyph: "⇅", desc: "HPA + KEDA scaled objects" },
-            { id: "portforward", label: "Port-Forward", glyph: "⇌", desc: "kubectl port-forward sessions" },
-            { id: "analysis", label: "Analysis", glyph: "⌕", desc: "cluster health findings" },
+            {
+                id: "hpa",
+                label: "Autoscaling",
+                glyph: "⇅",
+                desc: "HPA + KEDA scaled objects",
+            },
+            {
+                id: "portforward",
+                label: "Port-Forward",
+                glyph: "⇌",
+                desc: "kubectl port-forward sessions",
+            },
+            {
+                id: "analysis",
+                label: "Analysis",
+                glyph: "⌕",
+                desc: "cluster health findings",
+            },
         ],
     },
 ] as const;
 
 export type NavGroupId = (typeof navGroups)[number]["id"];
+
+// ── Navigator rail prefs ───────────────────────────────────────────────────────
+
+export const NAV_COLLAPSED_GROUPS_PREF = "aks-nav-rail-collapsed-groups";
+export const NAV_RAIL_MIN_PREF = "aks-nav-rail-minimized";
+
+/**
+ * Persisted collapsed-section set for `AksNavRail`. Anything that isn't a known
+ * group id is dropped, so a stale pref from an older grouping can't wedge a
+ * section shut forever.
+ */
+export function loadNavCollapsedGroups(storage: {
+    getItem(key: string): string | null;
+}): Set<NavGroupId> {
+    try {
+        const raw = storage.getItem(NAV_COLLAPSED_GROUPS_PREF);
+        const parsed: unknown = raw ? JSON.parse(raw) : [];
+        return new Set(
+            Array.isArray(parsed)
+                ? parsed.filter((x): x is NavGroupId =>
+                      navGroups.some((g) => g.id === x),
+                  )
+                : [],
+        );
+    } catch {
+        return new Set();
+    }
+}
+
+export function saveNavCollapsedGroups(
+    collapsed: ReadonlySet<NavGroupId>,
+    storage: { setItem(key: string, value: string): void },
+): void {
+    storage.setItem(NAV_COLLAPSED_GROUPS_PREF, JSON.stringify([...collapsed]));
+}
 
 // One menu-item descriptor — flatMap over `as const` tuples can't unify on its own.
 export type AksNavItem = (typeof navGroups)[number]["items"][number];
@@ -371,11 +496,6 @@ export interface AksClusterValue {
 export interface AksNavValue {
     activeTab: TabId;
     setActiveTab: (tab: TabId) => void;
-    /** Id of the nav group whose dropdown is open (see `navGroups`), null when closed. */
-    openNavGroup: NavGroupId | null;
-    setOpenNavGroup: (
-        group: NavGroupId | null | ((v: NavGroupId | null) => NavGroupId | null),
-    ) => void;
     selectedNamespaces: NsSelection[];
     setSelectedNamespaces: (namespaces: NsSelection[]) => void;
     /**
