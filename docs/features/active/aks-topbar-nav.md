@@ -1,6 +1,10 @@
 # AKS top-bar declutter — grouped menus
 
-State: Review
+State: Done
+
+> Superseded by `aks-rail-nav.md` — the dropdown menus became a left navigator
+> rail with collapsible sections. This doc stays as the record of the grouping
+> model (`navGroups`, testids, deep links) the rail builds on.
 
 ## Goal
 

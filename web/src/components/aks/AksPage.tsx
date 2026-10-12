@@ -34,7 +34,7 @@ import { SecretDetailPanel } from "./SecretDetailPanel";
 import { ConfigMapDetailPanel } from "./ConfigMapDetailPanel";
 import { HttpRouteDetailPanel } from "./HttpRouteDetailPanel";
 import { MultiPodLogView } from "./MultiPodLogView";
-import { AksNavBar } from "./AksNavBar";
+import { AksNavRail } from "./AksNavRail";
 import { ContextMenu } from "./ContextMenu";
 import { ContainerDetailPanel } from "./ContainerDetailPanel";
 import { PodShellPanel } from "./PodShellPanel";
@@ -297,14 +297,12 @@ function AksPageContent() {
                 />
             )}
 
-            {/* Resource nav — grouped dropdown menus, one row, no layout shift */}
-            <AksNavBar />
-
-            {/* Content */}
+            {/* Content — navigator rail + resource view */}
             <div
                 className="flex flex-1 overflow-hidden"
                 data-testid="aks-content"
             >
+                <AksNavRail />
                 <div className="flex min-w-0 flex-1 flex-col">
                     <div className="flex-1 overflow-auto">
                         {ws.profileLoaded &&

@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
     encodeContextParam,
     encodeNamespaceSelection,
+    loadNavCollapsedGroups,
     makeLogsParam,
     makeScopedKey,
     makeYamlKey,
+    NAV_COLLAPSED_GROUPS_PREF,
     parseContextParam,
     parseLogsParam,
     parseNamespaceSelection,
     parseScopedKey,
     parseYamlKey,
+    saveNavCollapsedGroups,
 } from "./aks-workspace-context";
 
 // The multi-context URL contract. Bare `ns`/`ns/name` tokens belong to the primary
@@ -192,3 +195,43 @@ describe("logs param codec", () => {
     });
 });
 
+describe("nav rail collapsed-group prefs", () => {
+    const storage = (initial: string | null = null) => {
+        let value = initial;
+        let key = "";
+        return {
+            getItem: () => value,
+            setItem: (k: string, v: string) => {
+                key = k;
+                value = v;
+            },
+            get current() {
+                return value;
+            },
+            get lastKey() {
+                return key;
+            },
+        };
+    };
+
+    it("round-trips a collapsed set under the pref key", () => {
+        const s = storage();
+        saveNavCollapsedGroups(new Set(["network", "ops"]), s);
+        expect(s.lastKey).toBe(NAV_COLLAPSED_GROUPS_PREF);
+        expect([...loadNavCollapsedGroups(s)].sort()).toEqual([
+            "network",
+            "ops",
+        ]);
+    });
+
+    it("drops unknown group ids so a stale pref can't wedge a section", () => {
+        const s = storage('["network","bogus-group",42,null]');
+        expect([...loadNavCollapsedGroups(s)]).toEqual(["network"]);
+    });
+
+    it("returns empty for missing or corrupt prefs", () => {
+        expect(loadNavCollapsedGroups(storage(null)).size).toBe(0);
+        expect(loadNavCollapsedGroups(storage("{not json")).size).toBe(0);
+        expect(loadNavCollapsedGroups(storage('{"a":1}')).size).toBe(0);
+    });
+});

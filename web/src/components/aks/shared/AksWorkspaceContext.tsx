@@ -74,7 +74,6 @@ import type {
     AksOverlaysValue,
     AksQueriesValue,
     ContextMenuState,
-    NavGroupId,
     NsSelection,
     PendingConfirm,
     TabId,
@@ -91,7 +90,6 @@ export function AksWorkspaceProvider({
     const [searchParams] = useSearchParams();
     const queryClient = useQueryClient();
 
-    const [openNavGroup, setOpenNavGroup] = useState<NavGroupId | null>(null);
     // Auto-refresh is on by default: a cluster view that silently goes stale is
     // worse than one that costs a list call every 10s, and every operator turned it
     // on manually anyway. Persisted so the choice survives a restart.
@@ -1013,8 +1011,6 @@ export function AksWorkspaceProvider({
         () => ({
             activeTab,
             setActiveTab,
-            openNavGroup,
-            setOpenNavGroup,
             selectedNamespaces,
             setSelectedNamespaces,
             queryTargets,
@@ -1044,7 +1040,6 @@ export function AksWorkspaceProvider({
         [
             activeTab,
             setActiveTab,
-            openNavGroup,
             selectedNamespaces,
             setSelectedNamespaces,
             queryTargets,
