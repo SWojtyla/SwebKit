@@ -74,7 +74,6 @@ import type {
     AksOverlaysValue,
     AksQueriesValue,
     ContextMenuState,
-    NavGroupId,
     NsSelection,
     PendingConfirm,
     TabId,
@@ -91,7 +90,6 @@ export function AksWorkspaceProvider({
     const [searchParams] = useSearchParams();
     const queryClient = useQueryClient();
 
-    const [openNavGroup, setOpenNavGroup] = useState<NavGroupId | null>(null);
     // Auto-refresh is on by default: a cluster view that silently goes stale is
     // worse than one that costs a list call every 10s, and every operator turned it
     // on manually anyway. Persisted so the choice survives a restart.
@@ -247,7 +245,11 @@ export function AksWorkspaceProvider({
         const valid = [...new Set(candidate)].filter((c) =>
             contexts.some((k) => k.name === c),
         );
-        if (valid.length > 1)
+        // Restore any saved set — including a single non-default context. The old
+        // `> 1` gate silently forgot a one-cluster choice: on the next visit the
+        // selection fell back to the default no matter what was picked last.
+        const isDefaultOnly = valid.length === 1 && valid[0] === defaultContext;
+        if (valid.length > 0 && !isDefaultOnly)
             updateParams(
                 { ctxs: encodeContextParam(valid) },
                 { replace: true },
@@ -1013,8 +1015,6 @@ export function AksWorkspaceProvider({
         () => ({
             activeTab,
             setActiveTab,
-            openNavGroup,
-            setOpenNavGroup,
             selectedNamespaces,
             setSelectedNamespaces,
             queryTargets,
@@ -1044,7 +1044,6 @@ export function AksWorkspaceProvider({
         [
             activeTab,
             setActiveTab,
-            openNavGroup,
             selectedNamespaces,
             setSelectedNamespaces,
             queryTargets,

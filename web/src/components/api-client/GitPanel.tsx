@@ -56,6 +56,7 @@ type Unavailable =
     | { kind: "no-tauri" }
     | { kind: "no-repo" }
     | { kind: "not-a-repo"; path: string }
+    | { kind: "not-authorized"; path: string }
     | { kind: "git-missing" }
     | { kind: "error"; message: string };
 
@@ -126,13 +127,6 @@ export function GitPanel({
         });
     }, [initialRepo]);
 
-    // A path persisted from a previous session is not in the in-memory AllowedRoots
-    // yet; ask Rust to re-admit it from its own grant list (DEC-G3).
-    useEffect(() => {
-        if (!repoPath || !isGitAvailable()) return;
-        void restoreAllowedRoot(repoPath);
-    }, [repoPath]);
-
     const refresh = useCallback(async () => {
         if (!isGitAvailable()) {
             setUnavailable({ kind: "no-tauri" });
@@ -146,7 +140,15 @@ export function GitPanel({
         setLoading(true);
         setInlineError(null);
         try {
-            await restoreAllowedRoot(repoPath);
+            // The allowed-roots grant list only holds folders the user picked in
+            // an OS dialog. A repo the sidecar discovered (e.g. a linked API
+            // root registered from config) is a real repo yet unauthorized here —
+            // `gitIsRepo` would swallow the denial and lie "not a Git repository".
+            if (!(await restoreAllowedRoot(repoPath))) {
+                setUnavailable({ kind: "not-authorized", path: repoPath });
+                setStatus(null);
+                return;
+            }
 
             if (!(await gitIsRepo(repoPath))) {
                 setUnavailable({ kind: "not-a-repo", path: repoPath });
@@ -191,6 +193,23 @@ export function GitPanel({
             );
             if (!dir) return;
             persist(addRepo(repoState, dir));
+        } catch (e) {
+            setInlineError(e instanceof Error ? e.message : String(e));
+        }
+    };
+
+    // The only honest way to grant a folder is the OS dialog itself — picking the
+    // blocked repo's directory registers it in AllowedRoots, after which the
+    // normal refresh path works. Picking the same path leaves `repoPath`
+    // unchanged, so refresh is invoked manually (the effect wouldn't refire).
+    const authorizeRepo = async () => {
+        try {
+            const dir = await pickDirectory(
+                `Authorize this repository — select ${repoPath}`,
+            );
+            if (!dir) return;
+            persist(addRepo(repoState, dir));
+            void refresh();
         } catch (e) {
             setInlineError(e instanceof Error ? e.message : String(e));
         }
@@ -296,6 +315,16 @@ export function GitPanel({
                 <p className="text-sm text-muted-foreground">
                     {unavailableMessage(unavailable)}
                 </p>
+                {unavailable.kind === "not-authorized" && (
+                    <button
+                        onClick={authorizeRepo}
+                        className="flex items-center gap-1 rounded border border-primary/50 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20"
+                        data-testid="git-authorize-repo"
+                    >
+                        <FolderOpen className="h-3.5 w-3.5" />
+                        Authorize this folder…
+                    </button>
+                )}
                 {unavailable.kind !== "no-tauri" &&
                     unavailable.kind !== "git-missing" && (
                         <button
@@ -809,6 +838,8 @@ function unavailableMessage(state: Unavailable): string {
             return "Choose the repository that holds your API collections to review and commit changes.";
         case "not-a-repo":
             return `${state.path} is not a Git repository.`;
+        case "not-authorized":
+            return `SwebKit hasn't been granted file access to ${state.path}. Pick the folder once to authorize it — the grant sticks.`;
         case "git-missing":
             return "Git was not found on this system. Install Git and restart SwebKit.";
         case "error":

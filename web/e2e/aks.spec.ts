@@ -47,7 +47,7 @@ test.describe("AKS", () => {
         await expect(page.getByTestId("events-list")).toBeVisible();
     });
 
-    test("grouped nav menus open, track the active view, and dismiss", async ({
+    test("navigator rail groups collapse, filter, and track the active view", async ({
         page,
     }) => {
         await page.goto("/aks");
@@ -55,7 +55,8 @@ test.describe("AKS", () => {
             .getByTestId("aks-namespace-select")
             .selectOption("ecommerce");
 
-        // Four group buttons replace the 18-tab strip; the current view shows on the right.
+        // The rail shows all four sections expanded; the current view is pinned
+        // in the footer.
         await expect(page.getByTestId("aks-nav-group-workloads")).toBeVisible();
         await expect(page.getByTestId("aks-nav-group-config")).toBeVisible();
         await expect(page.getByTestId("aks-nav-group-network")).toBeVisible();
@@ -64,25 +65,39 @@ test.describe("AKS", () => {
             "Deployments",
         );
 
-        // Menu opens under the group, lists items with descriptions, and the
-        // deep "HTTPRoutes" view is one click away inside Network.
-        await page.getByTestId("aks-nav-group-network").click();
-        await expect(page.getByTestId("aks-nav-menu-network")).toBeVisible();
+        // The deep "HTTPRoutes" view is one click away inside Network.
         await page.getByTestId("aks-tab-httproutes").click();
         await expect(page.getByTestId("httproutes-table-body")).toBeVisible();
         await expect(page.getByTestId("aks-nav-current")).toHaveText(
             /Network\s*›\s*HTTPRoutes/,
         );
 
-        // Selecting an item closes its menu; Esc closes an open one without switching.
-        await expect(page.getByTestId("aks-nav-menu-network")).toHaveCount(0);
-        await page.getByTestId("aks-nav-group-ops").click();
-        await expect(page.getByTestId("aks-nav-menu-ops")).toBeVisible();
-        await page.keyboard.press("Escape");
-        await expect(page.getByTestId("aks-nav-menu-ops")).toHaveCount(0);
+        // Collapsing a section hides its items but keeps the header; the active
+        // item's group can collapse too — the footer keeps the anchor.
+        await page.getByTestId("aks-nav-group-network").click();
+        await expect(page.getByTestId("aks-tab-httproutes")).toHaveCount(0);
         await expect(page.getByTestId("aks-nav-current")).toContainText(
             "HTTPRoutes",
         );
+        await page.getByTestId("aks-nav-group-network").click();
+        await expect(page.getByTestId("aks-tab-httproutes")).toBeVisible();
+
+        // The filter narrows items across groups and Enter opens the first hit.
+        await page.getByTestId("aks-nav-filter").fill("httpr");
+        await expect(page.getByTestId("aks-tab-services")).toHaveCount(0);
+        await expect(page.getByTestId("aks-tab-httproutes")).toBeVisible();
+        await page.getByTestId("aks-nav-filter").fill("pods");
+        await page.getByTestId("aks-nav-filter").press("Enter");
+        await expect(page.getByTestId("pods-table-body")).toBeVisible();
+        await expect(page.getByTestId("aks-nav-current")).toContainText("Pods");
+
+        // Minimizing shrinks the rail to glyphs; the footer keeps the glyph of
+        // the active view.
+        await page.getByTestId("aks-nav-minimize").click();
+        await expect(page.getByTestId("aks-nav-filter")).toHaveCount(0);
+        await expect(page.getByTestId("aks-tab-pods")).toBeVisible();
+        await page.getByTestId("aks-nav-minimize").click();
+        await expect(page.getByTestId("aks-nav-filter")).toBeVisible();
     });
 
     test("new resource tabs are visible and functional", async ({ page }) => {

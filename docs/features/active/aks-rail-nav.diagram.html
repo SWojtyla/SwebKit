@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AKS navigator rail — plan diagram</title>
+<style>
+  :root {
+    --bg: #f7f8fa; --card: #ffffff; --ink: #1d2430; --muted: #5b6472;
+    --line: #d5dae3; --accent: #2563eb; --accent-soft: #dbe7ff;
+    --good: #1a7f4b; --good-soft: #ddf3e6; --warn: #a16207; --warn-soft: #fbeec8;
+    --bad: #b42318; --bad-soft: #fde3df; --code: #eef1f6;
+  }
+  [data-theme="dark"] {
+    --bg: #10141c; --card: #171d29; --ink: #e6eaf2; --muted: #9aa4b6;
+    --line: #2c3647; --accent: #6ea0ff; --accent-soft: #1c2c4d;
+    --good: #4cc38a; --good-soft: #173526; --warn: #e3b341; --warn-soft: #3a2f12;
+    --bad: #f26d61; --bad-soft: #3d1c18; --code: #1e2634;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #10141c; --card: #171d29; --ink: #e6eaf2; --muted: #9aa4b6;
+    --line: #2c3647; --accent: #6ea0ff; --accent-soft: #1c2c4d;
+    --good: #4cc38a; --good-soft: #173526; --warn: #e3b341; --warn-soft: #3a2f12;
+    --bad: #f26d61; --bad-soft: #3d1c18; --code: #1e2634;
+  } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+         background: var(--bg); color: var(--ink); line-height: 1.55; }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  h2 { font-size: 1.05rem; margin: 40px 0 10px; }
+  .lead { color: var(--muted); max-width: 70ch; margin: 0 0 8px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+          padding: 16px 18px; margin: 12px 0; }
+  .grid { display: grid; gap: 12px; }
+  .two { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+  .tag { display: inline-block; font-size: .68rem; font-weight: 600; letter-spacing: .04em;
+         text-transform: uppercase; padding: 2px 8px; border-radius: 999px; margin-bottom: 6px; }
+  .tag.a { background: var(--accent-soft); color: var(--accent); }
+  .tag.b { background: var(--good-soft); color: var(--good); }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); }
+  .tag.bad { background: var(--bad-soft); color: var(--bad); }
+  ul { margin: 8px 0 0; padding-left: 18px; }
+  li { margin: 3px 0; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: .85em;
+         background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  .muted { color: var(--muted); }
+  svg { display: block; width: 100%; height: auto; }
+  .lbl { font: 12px ui-sans-serif, system-ui; fill: var(--ink); }
+  .sub { font: 10.5px ui-sans-serif, system-ui; fill: var(--muted); }
+  .mono { font: 11px ui-monospace, Consolas, monospace; fill: var(--muted); }
+  .fill-accent { fill: var(--accent-soft); stroke: var(--accent); }
+  .fill-good { fill: var(--good-soft); stroke: var(--good); }
+  .fill-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .fill-bad { fill: var(--bad-soft); stroke: var(--bad); }
+  .box { fill: var(--card); stroke: var(--line); }
+  .arrow { stroke: var(--muted); stroke-width: 1.4; fill: none; marker-end: url(#ah); }
+  .arrow.dashed { stroke-dasharray: 5 4; }
+  .arrow.bad { stroke: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>AKS navigator rail</h1>
+  <p class="lead">The grouped dropdown menus become a permanent left rail —
+    <code>docs/prototypes/aks/rail.html</code> brought to life, with collapsible
+    group sections (the one thing the prototype lacked). Bundled fix: the Git
+    drawer now shows the real "not authorized" state instead of lying
+    "not a Git repository".</p>
+
+  <h2>Current vs proposed layout</h2>
+  <div class="card">
+    <svg viewBox="0 0 940 300" role="img" aria-label="Layout comparison">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+        </marker>
+      </defs>
+
+      <!-- BEFORE: top bar + dropdown -->
+      <text x="10" y="20" class="sub">BEFORE — AksNavBar (horizontal dropdowns)</text>
+      <rect x="10" y="30" width="440" height="30" rx="6" class="box"/>
+      <text x="20" y="49" class="mono">scope bar: context · namespace · refresh</text>
+      <rect x="10" y="66" width="440" height="26" rx="6" class="box"/>
+      <rect x="16" y="70" width="86" height="18" rx="4" class="fill-warn"/>
+      <text x="26" y="83" class="sub">Workloads ▾</text>
+      <rect x="108" y="70" width="96" height="18" rx="4" class="box"/>
+      <text x="118" y="83" class="sub">Configuration</text>
+      <rect x="210" y="70" width="72" height="18" rx="4" class="box"/>
+      <text x="220" y="83" class="sub">Network</text>
+      <rect x="288" y="70" width="82" height="18" rx="4" class="box"/>
+      <text x="298" y="83" class="sub">Operations</text>
+      <text x="378" y="83" class="sub">… › Pods</text>
+      <rect x="16" y="94" width="190" height="118" rx="6" class="fill-warn" opacity="0.5"/>
+      <text x="26" y="112" class="sub">dropdown floats over</text>
+      <text x="26" y="128" class="lbl">· Pods</text>
+      <text x="26" y="144" class="lbl">· Deployments</text>
+      <text x="26" y="160" class="lbl">· StatefulSets</text>
+      <text x="26" y="176" class="sub">…closes on pick/Esc</text>
+      <rect x="10" y="216" width="440" height="70" rx="6" class="box"/>
+      <text x="20" y="240" class="sub">content — every view hidden behind a</text>
+      <text x="20" y="256" class="sub">menu until opened; grouping invisible</text>
+      <text x="20" y="272" class="sub">when the menu is closed</text>
+
+      <!-- AFTER: left rail -->
+      <text x="500" y="20" class="sub">AFTER — AksNavRail (always visible, collapsible)</text>
+      <rect x="500" y="30" width="440" height="30" rx="6" class="box"/>
+      <text x="510" y="49" class="mono">scope bar: context · namespace · refresh</text>
+      <rect x="500" y="66" width="150" height="220" rx="6" class="fill-accent" opacity="0.45"/>
+      <rect x="506" y="72" width="138" height="18" rx="4" class="box"/>
+      <text x="512" y="85" class="mono">filter… [«]</text>
+      <text x="510" y="108" class="sub">▾ WORKLOADS ●</text>
+      <text x="518" y="126" class="lbl">⬡ Pods</text>
+      <text x="518" y="142" class="lbl">≣ Deployments</text>
+      <text x="518" y="158" class="lbl">▦ StatefulSets</text>
+      <text x="510" y="180" class="sub">▸ NETWORK</text>
+      <text x="518" y="196" class="sub">(items hidden)</text>
+      <text x="510" y="218" class="sub">▾ CONFIG · ▸ OPS</text>
+      <rect x="506" y="252" width="138" height="28" rx="4" class="box"/>
+      <text x="512" y="270" class="sub">Workloads › Pods</text>
+      <rect x="656" y="66" width="284" height="220" rx="6" class="box"/>
+      <text x="668" y="90" class="sub">content — one click to any of the 18</text>
+      <text x="668" y="106" class="sub">views; collapse a section to shrink it;</text>
+      <text x="668" y="122" class="sub">« minimizes the rail to glyphs</text>
+      <text x="668" y="156" class="mono">aks-nav-group-network ▾▸</text>
+      <text x="668" y="174" class="mono">aks-tab-pods · aks-tab-…</text>
+    </svg>
+  </div>
+
+  <h2>Collapse semantics</h2>
+  <div class="card">
+    <svg viewBox="0 0 940 190" role="img" aria-label="Collapse state model">
+      <rect x="10" y="16" width="200" height="46" rx="6" class="box"/>
+      <text x="22" y="35" class="lbl">collapsed: Set&lt;groupId&gt;</text>
+      <text x="22" y="52" class="sub">persisted in localStorage</text>
+
+      <rect x="300" y="16" width="280" height="46" rx="6" class="fill-accent"/>
+      <text x="312" y="35" class="lbl">render-time adjustment</text>
+      <text x="312" y="52" class="sub">activeTab changed → uncollapse its group</text>
+
+      <rect x="670" y="16" width="250" height="46" rx="6" class="fill-good"/>
+      <text x="682" y="35" class="lbl">user toggles a section</text>
+      <text x="682" y="52" class="sub">always honored — even the active one</text>
+
+      <path class="arrow" d="M210 39 H300"/>
+      <path class="arrow" d="M580 39 H670"/>
+
+      <rect x="10" y="92" width="910" height="80" rx="6" class="box"/>
+      <text x="24" y="114" class="lbl">Precedence inside one render</text>
+      <text x="24" y="134" class="sub">filter text → show matches in every group · minimized rail → all items as glyphs · else → collapsed set</text>
+      <text x="24" y="154" class="sub">footer aks-nav-current keeps "Group › Item" visible even when the active item's section is collapsed</text>
+    </svg>
+  </div>
+
+  <h2>Bundled fix — why the Git drawer lied</h2>
+  <div class="card">
+    <svg viewBox="0 0 940 210" role="img" aria-label="Git grant bug flow">
+      <text x="10" y="20" class="sub">Tree badge — .NET sidecar, no grant gate</text>
+      <rect x="10" y="30" width="280" height="52" rx="6" class="fill-good"/>
+      <text x="22" y="50" class="mono">git rev-parse --show-toplevel</text>
+      <text x="22" y="70" class="sub">root.isGitRepository ✓ → "dev ·218" badge</text>
+
+      <text x="370" y="20" class="sub">Git drawer — Tauri AllowedRoots gate</text>
+      <rect x="370" y="30" width="270" height="52" rx="6" class="fill-bad"/>
+      <text x="382" y="50" class="mono">restoreAllowedRoot(path) → false</text>
+      <text x="382" y="70" class="sub">repo never OS-picked → not granted</text>
+
+      <rect x="700" y="30" width="230" height="52" rx="6" class="fill-bad"/>
+      <text x="712" y="50" class="mono">is_repo_impl → Ok(false)</text>
+      <text x="712" y="70" class="sub">denial swallowed → "not a Git repo" ✗</text>
+
+      <path class="arrow bad" d="M640 56 H700"/>
+
+      <rect x="370" y="110" width="270" height="60" rx="6" class="fill-good"/>
+      <text x="382" y="130" class="lbl">FIX: honor restoreAllowedRoot's result</text>
+      <text x="382" y="148" class="sub">unauthorized → dedicated not-authorized</text>
+      <text x="382" y="163" class="sub">state + "Authorize this folder…" CTA</text>
+
+      <rect x="700" y="110" width="230" height="60" rx="6" class="fill-good"/>
+      <text x="712" y="130" class="lbl">pick_directory = real grant</text>
+      <text x="712" y="148" class="sub">OS dialog is the only legit channel;</text>
+      <text x="712" y="163" class="sub">grant persists → drawer works</text>
+      <path class="arrow" d="M640 140 H700"/>
+      <path class="arrow" d="M500 82 V110"/>
+    </svg>
+  </div>
+
+  <h2>What didn't change</h2>
+  <div class="grid two">
+    <div class="card">
+      <span class="tag b">kept</span>
+      <ul>
+        <li><code>navGroups</code> + <code>TabId</code> + <code>?tab=</code> deep links — same flat tab set</li>
+        <li><code>aks-tab-&lt;id&gt;</code>, <code>aks-nav-group-&lt;id&gt;</code> (+<code>aria-expanded</code>), <code>aks-nav-menu-&lt;id&gt;</code>, <code>aks-nav-current</code> testids — <code>openAksTab</code> untouched</li>
+        <li>No per-item counts (page-level fetch is pods-only; 17 badges aren't worth 17 queries)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag warn">removed</span>
+      <ul>
+        <li><code>AksNavBar.tsx</code> — replaced by <code>AksNavRail.tsx</code></li>
+        <li><code>openNavGroup</code>/<code>setOpenNavGroup</code> on <code>AksNavValue</code> — dropdown state is dead</li>
+      </ul>
+    </div>
+  </div>
+</main>
+</body>
+</html>

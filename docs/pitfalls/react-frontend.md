@@ -485,3 +485,12 @@ runs before the servers start.
 `src-tauri` has a lib target, so `cargo test --lib` works with no extra tooling. Extract parsing
 logic into pure functions (`parse_porcelain_v2`) so it can be tested against captured real command
 output instead of requiring a repository fixture.
+
+## Verification
+
+### `npx tsc --noEmit` is not the build — always run `npm run build` before shipping
+
+The repo's `tsconfig.json` is a solution file (references `tsconfig.app.json` + `tsconfig.node.json`),
+so `tsc --noEmit` at the root typechecks nothing — it exits 0 while `tsc -b` fails on real errors like
+`TS6133` unused imports in `*.test.ts`. The MSI build (`scripts/tauri/build-msi.ps1`) runs
+`npm run build` = `tsc -b && vite build`; that is the command that must pass, not `--noEmit`.
