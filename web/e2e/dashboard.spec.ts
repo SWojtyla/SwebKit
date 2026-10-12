@@ -8,243 +8,344 @@ import { setDemoMode } from "./helpers";
  * the sidecar's stored config.
  */
 async function patchDefaultNamespace(page: Page, defaultNamespace: string) {
-  await page.route("**/api/config/profiles", async (route) => {
-    try {
-      const response = await route.fetch();
-      const body = await response.json();
-      body.config = { ...body.config, aksConfig: { ...body.config?.aksConfig, defaultNamespace } };
-      await route.fulfill({ response, json: body });
-    } catch {
-      // The page can navigate away mid-flight, disposing the response. Letting
-      // the original request through keeps that from failing the test.
-      await route.continue().catch(() => {});
-    }
-  });
+    await page.route("**/api/config/profiles", async (route) => {
+        try {
+            const response = await route.fetch();
+            const body = await response.json();
+            body.config = {
+                ...body.config,
+                aksConfig: { ...body.config?.aksConfig, defaultNamespace },
+            };
+            await route.fulfill({ response, json: body });
+        } catch {
+            // The page can navigate away mid-flight, disposing the response. Letting
+            // the original request through keeps that from failing the test.
+            await route.continue().catch(() => {});
+        }
+    });
 }
 
 /** Records the paths of every /api/aks/ request the page makes from now on. */
 function collectAksRequests(page: Page): string[] {
-  const paths: string[] = [];
-  page.on("request", (req) => {
-    const { pathname } = new URL(req.url());
-    if (pathname.startsWith("/api/aks/")) paths.push(pathname);
-  });
-  return paths;
+    const paths: string[] = [];
+    page.on("request", (req) => {
+        const { pathname } = new URL(req.url());
+        if (pathname.startsWith("/api/aks/")) paths.push(pathname);
+    });
+    return paths;
 }
 
 test.describe("Dashboard", () => {
-  test.beforeEach(async ({ page }) => {
-    await setDemoMode(page, false);
-  });
-
-  test("loads and shows sidecar connection", async ({ page }) => {
-    await page.goto("/");
-    await expect(page.getByTestId("dashboard-title")).toHaveText("AI Cockpit");
-    await expect(page.getByTestId("sidecar-status-text")).toContainText("Connected");
-  });
-
-  test("navigates to AKS and Settings from dashboard", async ({ page }) => {
-    await page.goto("/");
-    await page.getByTestId("service-card-aks").click();
-    await expect(page).toHaveURL(/\/aks$/);
-    await page.getByTestId("nav-dashboard").click();
-    await expect(page).toHaveURL(/\/$/);
-    await page.getByTestId("settings-quick-link").click();
-    await expect(page).toHaveURL(/\/settings$/);
-  });
-
-  test("toggles demo mode and updates service bus namespace count", async ({ page }) => {
-    await page.goto("/");
-    await expect(page.getByTestId("service-card-service-bus")).toContainText("0 namespaces");
-    await setDemoMode(page, true);
-    await page.goto("/");
-    await expect(page.getByTestId("service-card-service-bus")).toContainText("2 namespaces");
-  });
-
-  test("shows health tiles for each service", async ({ page }) => {
-    await setDemoMode(page, true);
-    await page.goto("/");
-    await expect(page.getByTestId("health-tiles")).toBeVisible();
-    await expect(page.getByTestId("health-tile-service-bus")).toBeVisible();
-    await expect(page.getByTestId("health-tile-aks")).toBeVisible();
-    await expect(page.getByTestId("health-tile-redis")).toBeVisible();
-    await expect(page.getByTestId("health-tile-storage")).toBeVisible();
-  });
-
-  // Regression: the dashboard used to query a hardcoded "default" namespace.
-  // Most users have no RBAC there, so those calls returned 403 after ~37s while
-  // holding browser connections, stalling every other page. It must use the
-  // namespace from the profile instead, and must not pay for the slow
-  // cluster-scoped namespace listing *for its own tile* when it already knows
-  // which one to use — the startup warm-up (useWorkspaceWarmup) does fire one
-  // namespaces call in the background to pre-warm the AKS page, so exactly one
-  // is expected; a second would mean the dashboard fell back to listing.
-  test("queries the configured AKS namespace instead of a hardcoded default", async ({ page }) => {
-    await patchDefaultNamespace(page, "team-alpha");
-    await setDemoMode(page, true);
-
-    // Collect only after demo mode is settled, so this measures one clean
-    // dashboard load rather than the toggle's navigation as well.
-    const aksPaths = collectAksRequests(page);
-    await page.goto("/");
-    await expect(page.getByTestId("watch-tile-deployments")).toBeVisible();
-
-    await expect
-      .poll(() => aksPaths.some((p) => p.startsWith("/api/aks/team-alpha/")))
-      .toBe(true);
-    expect(aksPaths.filter((p) => p.startsWith("/api/aks/default/"))).toEqual([]);
-    expect(aksPaths.filter((p) => p === "/api/aks/namespaces")).toHaveLength(1);
-  });
-
-  // The opposite branch: with no namespace configured the dashboard still has to
-  // discover one, so the listing call must not be gated away entirely.
-  test("falls back to listing namespaces when none is configured", async ({ page }) => {
-    await patchDefaultNamespace(page, "");
-    // The demo namespace list starts with "default", which would make this
-    // indistinguishable from the old hardcoded behaviour. Serve a list that
-    // contains no "default" so the assertion can only pass if the dashboard
-    // really is using the discovered namespaces.
-    await page.route("**/api/aks/namespaces", async (route) => {
-      try {
-        const response = await route.fetch();
-        await route.fulfill({ response, json: ["zeta-ns", "beta-ns"] });
-      } catch {
-        await route.continue().catch(() => {});
-      }
+    test.beforeEach(async ({ page }) => {
+        await setDemoMode(page, false);
     });
-    await setDemoMode(page, true);
 
-    const aksPaths = collectAksRequests(page);
-    await page.goto("/");
-    await expect(page.getByTestId("watch-tile-deployments")).toBeVisible();
+    test("loads and shows sidecar connection", async ({ page }) => {
+        await page.goto("/");
+        await expect(page.getByTestId("dashboard-title")).toHaveText(
+            "AI Cockpit",
+        );
+        await expect(page.getByTestId("sidecar-status-text")).toContainText(
+            "Connected",
+        );
+    });
 
-    await expect.poll(() => aksPaths.includes("/api/aks/namespaces")).toBe(true);
-    await expect
-      .poll(() => aksPaths.some((p) => p.startsWith("/api/aks/zeta-ns/")))
-      .toBe(true);
-    expect(aksPaths.filter((p) => p.startsWith("/api/aks/default/"))).toEqual([]);
-  });
+    test("navigates to AKS and Settings from dashboard", async ({ page }) => {
+        await page.goto("/");
+        await page.getByTestId("service-card-aks").click();
+        await expect(page).toHaveURL(/\/aks$/);
+        await page.getByTestId("nav-dashboard").click();
+        await expect(page).toHaveURL(/\/$/);
+        await page.getByTestId("settings-quick-link").click();
+        await expect(page).toHaveURL(/\/settings$/);
+    });
 
-  test("shows watch tiles with metrics", async ({ page }) => {
-    await setDemoMode(page, true);
-    await page.goto("/");
-    await expect(page.getByTestId("watch-tiles")).toBeVisible();
-    await expect(page.getByTestId("watch-tile-deployments")).toBeVisible();
-    await expect(page.getByTestId("watch-tile-pods")).toBeVisible();
-    await expect(page.getByTestId("watch-tile-containers")).toBeVisible();
-    await expect(page.getByTestId("watch-tile-cache-hit-rate")).toBeVisible();
-  });
+    test("toggles demo mode and updates service bus namespace count", async ({
+        page,
+    }) => {
+        await page.goto("/");
+        await expect(
+            page.getByTestId("service-card-service-bus"),
+        ).toContainText("0 namespaces");
+        await setDemoMode(page, true);
+        await page.goto("/");
+        await expect(
+            page.getByTestId("service-card-service-bus"),
+        ).toContainText("2 namespaces");
+    });
 
-  test("pins a resource and shows it in the pinned list", async ({ page }) => {
-    await setDemoMode(page, true);
-    await page.goto("/");
-    await expect(page.getByTestId("service-cards")).toBeVisible();
-    await page.getByTestId("pin-resource-redis").click();
-    await expect(page.getByTestId("pinned-resource-redis")).toBeVisible();
-    await expect(page.getByTestId("pin-resource-redis")).toHaveAttribute("aria-label", "Unpin Redis");
-  });
+    test("shows health tiles for each service", async ({ page }) => {
+        await setDemoMode(page, true);
+        await page.goto("/");
+        await expect(page.getByTestId("health-tiles")).toBeVisible();
+        await expect(page.getByTestId("health-tile-service-bus")).toBeVisible();
+        await expect(page.getByTestId("health-tile-aks")).toBeVisible();
+        await expect(page.getByTestId("health-tile-redis")).toBeVisible();
+        await expect(page.getByTestId("health-tile-storage")).toBeVisible();
+    });
 
-  test("starts demo tour and navigates to the next stop", async ({ page }) => {
-    await page.goto("/");
-    await page.getByTestId("demo-tour-start").click();
-    await expect(page.getByTestId("demo-tour-card")).toBeVisible();
-    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("AI Cockpit");
-    await page.getByTestId("demo-tour-next").click();
-    await expect(page).toHaveURL(/\/aks$/);
-    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("Kubernetes");
-    await page.getByTestId("demo-tour-stop").click();
-    await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
-  });
+    // Regression: the dashboard used to query a hardcoded "default" namespace.
+    // Most users have no RBAC there, so those calls returned 403 after ~37s while
+    // holding browser connections, stalling every other page. It must use the
+    // namespace from the profile instead, and must not pay for the slow
+    // cluster-scoped namespace listing *for its own tile* when it already knows
+    // which one to use — the startup warm-up (useWorkspaceWarmup) does fire one
+    // namespaces call in the background to pre-warm the AKS page, so exactly one
+    // is expected; a second would mean the dashboard fell back to listing.
+    test("queries the configured AKS namespace instead of a hardcoded default", async ({
+        page,
+    }) => {
+        await patchDefaultNamespace(page, "team-alpha");
+        await setDemoMode(page, true);
 
-  test("demo tour calls out AKS's left-click vs. right-click row convention", async ({ page }) => {
-    await page.goto("/");
-    await page.getByTestId("demo-tour-start").click();
-    await page.getByTestId("demo-tour-next").click();
-    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("Kubernetes");
-    await page.getByTestId("demo-tour-next").click();
-    // Still on /aks — this step just re-spotlights the same page's resource table.
-    await expect(page).toHaveURL(/\/aks$/);
-    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("Rows: click vs. right-click");
-    await expect(page.getByTestId("demo-tour-step-description")).toContainText("Left-click");
-    await expect(page.getByTestId("demo-tour-step-description")).toContainText("Right-click");
-    await page.getByTestId("demo-tour-stop").click();
-    await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
-  });
+        // Collect only after demo mode is settled, so this measures one clean
+        // dashboard load rather than the toggle's navigation as well.
+        const aksPaths = collectAksRequests(page);
+        await page.goto("/");
+        await expect(page.getByTestId("watch-tile-deployments")).toBeVisible();
 
-  // The "PRD day" scenario is the tour's access-awareness story: the restricted demo SQL
-  // connection (demo-sql-prd) really has no VIEW DEFINITION, and the Access report's denied
-  // row is the same row a real user would see — nothing about the walkthrough is faked.
-  test("demo tour PRD-day stops land on the restricted SQL connection and the Access gaps report", async ({ page }) => {
-    await setDemoMode(page, true);
-    await page.goto("/");
-    await page.getByTestId("demo-tour-start").click();
-    await expect(page.getByTestId("demo-tour-card")).toBeVisible();
+        await expect
+            .poll(() =>
+                aksPaths.some((p) => p.startsWith("/api/aks/team-alpha/")),
+            )
+            .toBe(true);
+        expect(
+            aksPaths.filter((p) => p.startsWith("/api/aks/default/")),
+        ).toEqual([]);
+        expect(
+            aksPaths.filter((p) => p === "/api/aks/namespaces"),
+        ).toHaveLength(1);
+    });
 
-    // The prd-day stops are near the end — walk forward until the SQL one is reached
-    // (bounded so a missing step fails fast instead of looping forever).
-    for (let i = 0; i < 20; i++) {
-      const title = await page.getByTestId("demo-tour-step-title").textContent();
-      if (title === "PRD day: read-only production") break;
-      await page.getByTestId("demo-tour-next").click();
-    }
+    // The opposite branch: with no namespace configured the dashboard still has to
+    // discover one, so the listing call must not be gated away entirely.
+    test("falls back to listing namespaces when none is configured", async ({
+        page,
+    }) => {
+        await patchDefaultNamespace(page, "");
+        // The demo namespace list starts with "default", which would make this
+        // indistinguishable from the old hardcoded behaviour. Serve a list that
+        // contains no "default" so the assertion can only pass if the dashboard
+        // really is using the discovered namespaces.
+        await page.route("**/api/aks/namespaces", async (route) => {
+            try {
+                const response = await route.fetch();
+                await route.fulfill({ response, json: ["zeta-ns", "beta-ns"] });
+            } catch {
+                await route.continue().catch(() => {});
+            }
+        });
+        await setDemoMode(page, true);
 
-    await expect(page).toHaveURL(/\/sql\?connection=demo-sql-prd/);
-    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("PRD day: read-only production");
-    // The real metadata-hidden state of the restricted demo connection: the catalog is
-    // hidden (no VIEW DEFINITION), so the tree is declared-objects-only.
-    await expect(page.getByTestId("sql-schema-partial")).toBeVisible();
+        const aksPaths = collectAksRequests(page);
+        await page.goto("/");
+        await expect(page.getByTestId("watch-tile-deployments")).toBeVisible();
 
-    await page.getByTestId("demo-tour-next").click();
-    await expect(page).toHaveURL(/\/settings\?tab=access/);
-    await expect(page.getByTestId("demo-tour-step-title")).toHaveText("Access gaps report");
-    await expect(page.getByTestId("access-report")).toBeVisible();
-    await expect(page.getByTestId("access-report")).toContainText("Denied");
+        await expect
+            .poll(() => aksPaths.includes("/api/aks/namespaces"))
+            .toBe(true);
+        await expect
+            .poll(() => aksPaths.some((p) => p.startsWith("/api/aks/zeta-ns/")))
+            .toBe(true);
+        expect(
+            aksPaths.filter((p) => p.startsWith("/api/aks/default/")),
+        ).toEqual([]);
+    });
 
-    // Finishing the last stop ends the tour.
-    await page.getByTestId("demo-tour-next").click();
-    await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
-  });
+    test("shows watch tiles with metrics", async ({ page }) => {
+        await setDemoMode(page, true);
+        await page.goto("/");
+        await expect(page.getByTestId("watch-tiles")).toBeVisible();
+        await expect(page.getByTestId("watch-tile-deployments")).toBeVisible();
+        await expect(page.getByTestId("watch-tile-pods")).toBeVisible();
+        await expect(page.getByTestId("watch-tile-containers")).toBeVisible();
+        await expect(
+            page.getByTestId("watch-tile-cache-hit-rate"),
+        ).toBeVisible();
+    });
 
-  test("runs cross-feature demo scenario in a focused visualization workspace", async ({ page }) => {
-    await page.goto("/");
-    await page.getByTestId("cross-feature-demo-button").click();
-    await expect(page).toHaveURL(/\/agent/);
-    await expect(page.locator("text=My order-api is failing in AKS")).toBeVisible();
+    test("pins a resource and shows it in the pinned list", async ({
+        page,
+    }) => {
+        await setDemoMode(page, true);
+        await page.goto("/");
+        await expect(page.getByTestId("service-cards")).toBeVisible();
+        await page.getByTestId("pin-resource-redis").click();
+        await expect(page.getByTestId("pinned-resource-redis")).toBeVisible();
+        await expect(page.getByTestId("pin-resource-redis")).toHaveAttribute(
+            "aria-label",
+            "Unpin Redis",
+        );
+    });
 
-    const workspace = page.getByTestId("visualization-panel");
-    await expect(workspace).toBeVisible();
-    await expect(page.getByTestId("agent-visualization-count")).toHaveText("3");
-    await expect(page.getByTestId("agent-messages").getByTestId("mermaid-diagram")).toHaveCount(0);
-    await expect(workspace.getByTestId("mermaid-diagram")).toBeVisible();
-    await expect(page.getByTestId("topology-graph")).toHaveCount(0);
+    test("starts demo tour and navigates to the next stop", async ({
+        page,
+    }) => {
+        await page.goto("/");
+        await page.getByTestId("demo-tour-start").click();
+        await expect(page.getByTestId("demo-tour-card")).toBeVisible();
+        await expect(page.getByTestId("demo-tour-step-title")).toHaveText(
+            "Welcome to the cockpit",
+        );
+        await page.getByTestId("demo-tour-next").click();
+        // Second stop stays on the dashboard — the command palette stop.
+        await expect(page.getByTestId("demo-tour-step-title")).toHaveText(
+            "Command palette",
+        );
+        await expect(page.getByTestId("demo-tour-try-it")).toBeVisible();
+        await page.getByTestId("demo-tour-next").click();
+        await expect(page).toHaveURL(/\/aks$/);
+        await expect(page.getByTestId("demo-tour-step-title")).toHaveText(
+            "AKS: pick your clusters",
+        );
+        await page.getByTestId("demo-tour-stop").click();
+        await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
+    });
 
-    await page.getByRole("tab", { name: "Topology of the impacted system" }).click();
-    await expect(page.getByTestId("topology-graph")).toBeVisible();
-    await expect(workspace.getByTestId("mermaid-diagram")).toHaveCount(0);
+    test("demo tour calls out AKS's left-click vs. right-click row convention", async ({
+        page,
+    }) => {
+        await page.goto("/");
+        await page.getByTestId("demo-tour-start").click();
+        for (let i = 0; i < 4; i++) {
+            await page.getByTestId("demo-tour-next").click();
+        }
+        // Still on /aks — this step just re-spotlights the same page's resource table.
+        await expect(page).toHaveURL(/\/aks$/);
+        await expect(page.getByTestId("demo-tour-step-title")).toHaveText(
+            "Rows: click vs. right-click",
+        );
+        await expect(
+            page.getByTestId("demo-tour-step-description"),
+        ).toContainText("Left-click");
+        await expect(
+            page.getByTestId("demo-tour-step-description"),
+        ).toContainText("Right-click");
+        await page.getByTestId("demo-tour-stop").click();
+        await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
+    });
 
-    await page.getByRole("tab", { name: "Incident timeline" }).click();
-    await expect(page.getByTestId("timeline-view")).toBeVisible();
-    await expect(page.getByTestId("topology-graph")).toHaveCount(0);
+    test("demo tour walks every stop in order and Escape exits", async ({
+        page,
+    }) => {
+        await page.goto("/");
+        await page.getByTestId("demo-tour-start").click();
+        await expect(page.getByTestId("demo-tour-card")).toBeVisible();
 
-    await page.getByTestId("agent-visualization-close").click();
-    await expect(workspace).toHaveCount(0);
-    await expect(page.getByTestId("agent-toggle-visuals")).toBeFocused();
-    await expect(page.getByTestId("agent-messages").getByTestId("mermaid-diagram")).toBeVisible();
+        const stops: { title: string; url: RegExp }[] = [
+            { title: "Welcome to the cockpit", url: /\/$/ },
+            { title: "Command palette", url: /\/$/ },
+            { title: "AKS: pick your clusters", url: /\/aks$/ },
+            { title: "Namespaces, grouped per cluster", url: /\/aks$/ },
+            { title: "Rows: click vs. right-click", url: /\/aks$/ },
+            { title: "Logs, shell, port-forward", url: /\/aks$/ },
+            { title: "Service Bus explorer", url: /\/service-bus$/ },
+            { title: "Filters that understand values", url: /\/service-bus$/ },
+            { title: "Dead-letter triage", url: /\/service-bus$/ },
+            { title: "Redis explorer", url: /\/redis$/ },
+            { title: "Blob storage", url: /\/storage$/ },
+            { title: "SQL workbench", url: /\/sql$/ },
+            { title: "API Client", url: /\/api-client$/ },
+            { title: "AI Agent", url: /\/agent$/ },
+            { title: "Monitoring & AI reports", url: /\/monitoring$/ },
+            { title: "Make it yours", url: /\/$/ },
+        ];
 
-    await page.setViewportSize({ width: 900, height: 700 });
-    await page.getByTestId("agent-toggle-visuals").click();
-    const resizer = page.getByTestId("resizer-0");
-    await expect(resizer).toHaveAttribute("role", "separator");
-    await expect(resizer).toHaveAttribute("aria-label", "Resize conversation and visualization");
-    const visualPanel = page.getByTestId("panel-1");
-    const widthBeforeResize = await visualPanel.evaluate((element) => element.getBoundingClientRect().width);
-    await resizer.focus();
-    await page.keyboard.press("ArrowLeft");
-    await page.keyboard.press("ArrowLeft");
-    await expect.poll(() => visualPanel.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(widthBeforeResize);
-    await expect.poll(() => page.evaluate(() => localStorage.getItem("panel-widths:agent-visualization-workspace"))).not.toBeNull();
-    await page.keyboard.press("Escape");
-    await expect(workspace).toHaveCount(0);
-    await expect(page.getByTestId("agent-toggle-visuals")).toBeFocused();
-  });
+        for (let i = 0; i < stops.length; i++) {
+            await expect(page.getByTestId("demo-tour-step-title")).toHaveText(
+                stops[i].title,
+            );
+            await expect(page).toHaveURL(stops[i].url);
+            await expect(page.getByTestId("demo-tour-progress")).toHaveText(
+                `${i + 1} / ${stops.length}`,
+            );
+            if (i < stops.length - 1) {
+                await page.getByTestId("demo-tour-next").click();
+            }
+        }
+
+        // Finish on the last stop ends the tour.
+        await page.getByTestId("demo-tour-next").click();
+        await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
+
+        // Escape exits an in-progress tour.
+        await page.getByTestId("demo-tour-start").click();
+        await expect(page.getByTestId("demo-tour-card")).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(page.getByTestId("demo-tour-card")).toHaveCount(0);
+    });
+
+    test("runs cross-feature demo scenario in a focused visualization workspace", async ({
+        page,
+    }) => {
+        await page.goto("/");
+        await page.getByTestId("cross-feature-demo-button").click();
+        await expect(page).toHaveURL(/\/agent/);
+        await expect(
+            page.locator("text=My order-api is failing in AKS"),
+        ).toBeVisible();
+
+        const workspace = page.getByTestId("visualization-panel");
+        await expect(workspace).toBeVisible();
+        await expect(page.getByTestId("agent-visualization-count")).toHaveText(
+            "3",
+        );
+        await expect(
+            page.getByTestId("agent-messages").getByTestId("mermaid-diagram"),
+        ).toHaveCount(0);
+        await expect(workspace.getByTestId("mermaid-diagram")).toBeVisible();
+        await expect(page.getByTestId("topology-graph")).toHaveCount(0);
+
+        await page
+            .getByRole("tab", { name: "Topology of the impacted system" })
+            .click();
+        await expect(page.getByTestId("topology-graph")).toBeVisible();
+        await expect(workspace.getByTestId("mermaid-diagram")).toHaveCount(0);
+
+        await page.getByRole("tab", { name: "Incident timeline" }).click();
+        await expect(page.getByTestId("timeline-view")).toBeVisible();
+        await expect(page.getByTestId("topology-graph")).toHaveCount(0);
+
+        await page.getByTestId("agent-visualization-close").click();
+        await expect(workspace).toHaveCount(0);
+        await expect(page.getByTestId("agent-toggle-visuals")).toBeFocused();
+        await expect(
+            page.getByTestId("agent-messages").getByTestId("mermaid-diagram"),
+        ).toBeVisible();
+
+        await page.setViewportSize({ width: 900, height: 700 });
+        await page.getByTestId("agent-toggle-visuals").click();
+        const resizer = page.getByTestId("resizer-0");
+        await expect(resizer).toHaveAttribute("role", "separator");
+        await expect(resizer).toHaveAttribute(
+            "aria-label",
+            "Resize conversation and visualization",
+        );
+        const visualPanel = page.getByTestId("panel-1");
+        const widthBeforeResize = await visualPanel.evaluate(
+            (element) => element.getBoundingClientRect().width,
+        );
+        await resizer.focus();
+        await page.keyboard.press("ArrowLeft");
+        await page.keyboard.press("ArrowLeft");
+        await expect
+            .poll(() =>
+                visualPanel.evaluate(
+                    (element) => element.getBoundingClientRect().width,
+                ),
+            )
+            .toBeGreaterThan(widthBeforeResize);
+        await expect
+            .poll(() =>
+                page.evaluate(() =>
+                    localStorage.getItem(
+                        "panel-widths:agent-visualization-workspace",
+                    ),
+                ),
+            )
+            .not.toBeNull();
+        await page.keyboard.press("Escape");
+        await expect(workspace).toHaveCount(0);
+        await expect(page.getByTestId("agent-toggle-visuals")).toBeFocused();
+    });
 });

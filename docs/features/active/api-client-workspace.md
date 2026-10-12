@@ -142,6 +142,15 @@ rootName?; rootPath? }` — assigned by the frontend when flattening
 - Git drawer: linked roots inside a git repo appear as preconfigured repos —
   `repositoryRoot` + `apiSubpath` = relative path to `.swebkit-api`. Root
   section's Git button opens the drawer with that repo selected.
+- Git grants: the Tauri `AllowedRoots` list only holds folders picked through
+  the OS dialog (persisted in `granted-roots.json`). `restore_allowed_root`
+  accepts an exact match or a granted ancestor — matching `is_allowed`'s
+  descendant rule — so one dialog pick survives restarts and repo switching.
+  The drawer's Authorize button validates that the picked folder covers the
+  repo being authorized; picking an unrelated folder keeps the current repo
+  selection instead of silently switching to it. The toolbar Git button binds
+  to the selected collection's `origin.rootId` (its linked root's
+  `repositoryRoot`), not the globally last-used repo.
 - Linked collections are read/write peers — drag/drop, reorder, rename, delete
   all work through the endpoints, not the whole-store PUT.
 
