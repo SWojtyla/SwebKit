@@ -434,9 +434,9 @@ public partial class KubernetesAksClient
     /// </summary>
     private static void ApplyScalingMetadata(HpaInfo info, V1ObjectMeta? meta)
     {
-        if (meta?.Labels is { } labels
-            && labels.TryGetValue(AksScalingAnnotations.KedaScaledObjectNameLabel, out var scaledObject)
-            && !string.IsNullOrWhiteSpace(scaledObject))
+        // Route through GetKedaScaledObjectName so listing and mutation detect KEDA ownership
+        // identically — including label-less adopted HPAs, which only carry the ownerReference.
+        if (GetKedaScaledObjectName(meta) is { } scaledObject)
         {
             info.IsKedaManaged = true;
             info.ScaledObjectName = scaledObject;
@@ -549,11 +549,12 @@ public partial class KubernetesAksClient
             var minReplicas = v2?.Spec?.MinReplicas ?? v1?.Spec?.MinReplicas ?? 1;
             var maxReplicas = v2?.Spec?.MaxReplicas ?? v1?.Spec?.MaxReplicas ?? 1;
             var currentReplicas = v2?.Status?.CurrentReplicas ?? v1?.Status?.CurrentReplicas ?? 0;
+            var desiredReplicas = v2?.Status?.DesiredReplicas ?? v1?.Status?.DesiredReplicas ?? 0;
 
             string patchJson;
             if (!enabled)
             {
-                var freeze = currentReplicas > 0 ? currentReplicas : Math.Max(maxReplicas, 1);
+                var freeze = ComputeFreezeReplicaTarget(currentReplicas, desiredReplicas, minReplicas);
                 patchJson = JsonSerializer.Serialize(new
                 {
                     metadata = new
@@ -661,13 +662,35 @@ public partial class KubernetesAksClient
     /// Returns the name of the KEDA ScaledObject that owns this HPA — carried on the generated
     /// HPA via the <c>scaledobject.keda.sh/name</c> label — or <c>null</c> for a plain autoscaler.
     /// </summary>
+    /// <remarks>
+    /// The label is only stamped on HPAs KEDA generated itself. An HPA adopted through
+    /// <c>scaledobject.keda.sh/transfer-hpa-ownership</c> carries no such label — its only
+    /// ownership marker is the ScaledObject <c>ownerReference</c> (controller=true). Missing
+    /// that case made "disable scaling" freeze the HPA's spec directly, which KEDA's reconcile
+    /// loop then rewrote from the ScaledObject — the HPA stayed visibly "disabled" (our
+    /// annotation survived) while autoscaling kept running.
+    /// </remarks>
     internal static string? GetKedaScaledObjectName(V1ObjectMeta? meta)
     {
-        return meta?.Labels is { } labels
+        if (meta?.Labels is { } labels
             && labels.TryGetValue(AksScalingAnnotations.KedaScaledObjectNameLabel, out var name)
-            && !string.IsNullOrWhiteSpace(name)
-            ? name
-            : null;
+            && !string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+
+        var ownerRefs = meta?.OwnerReferences;
+        if (ownerRefs is null || ownerRefs.Count == 0)
+            return null;
+
+        return ownerRefs
+            .FirstOrDefault(o =>
+                o.Controller == true &&
+                string.Equals(o.Kind, "ScaledObject", StringComparison.Ordinal))
+            ?.Name
+            ?? ownerRefs
+                .FirstOrDefault(o => string.Equals(o.Kind, "ScaledObject", StringComparison.Ordinal))
+                ?.Name;
     }
 
     /// <summary>
@@ -723,6 +746,19 @@ public partial class KubernetesAksClient
     }
 
     /// <summary>
+    /// Replica count a disabled HPA freezes at. <c>status.currentReplicas</c> is 0 on a fresh
+    /// HPA whose status hasn't populated yet and on scale-to-zero workloads — the old fallback
+    /// (<c>maxReplicas</c>) scaled the workload UP to the ceiling while claiming "disabled".
+    /// Desired replicas is the HPA's own computed intent; failing that, the configured minimum
+    /// keeps the floor without inflating. Clamped ≥1 because <c>minReplicas: 0</c> needs the
+    /// HPAScaleToZero gate most clusters don't run.
+    /// </summary>
+    internal static int ComputeFreezeReplicaTarget(int currentReplicas, int desiredReplicas, int minReplicas)
+        => currentReplicas > 0 ? currentReplicas
+            : desiredReplicas > 0 ? desiredReplicas
+            : Math.Max(minReplicas, 1);
+
+    /// <summary>
     /// Parses the SwebKit "{min}/{max}" bounds stash written when a plain HPA was frozen. Falls back to
     /// the HPA's current bounds when the stash is missing or malformed (e.g. the HPA was disabled
     /// outside SwebKit) so re-enabling still produces a valid, non-frozen HPA where possible.
@@ -761,13 +797,43 @@ public partial class KubernetesAksClient
 
     internal static long ParseMemoryToBytes(string mem)
     {
-        if (mem.EndsWith("Ki", StringComparison.Ordinal))
-            return long.TryParse(mem[..^2], NumberStyles.Any, CultureInfo.InvariantCulture, out var ki) ? ki * 1024 : 0;
-        if (mem.EndsWith("Mi", StringComparison.Ordinal))
-            return long.TryParse(mem[..^2], NumberStyles.Any, CultureInfo.InvariantCulture, out var mi) ? mi * 1024 * 1024 : 0;
-        if (mem.EndsWith("Gi", StringComparison.Ordinal))
-            return long.TryParse(mem[..^2], NumberStyles.Any, CultureInfo.InvariantCulture, out var gi) ? gi * 1024 * 1024 * 1024 : 0;
-        return long.TryParse(mem, NumberStyles.Any, CultureInfo.InvariantCulture, out var bytes) ? bytes : 0;
+        // Binary suffixes (Ki..Ei, powers of 1024) — what metrics-server and declared
+        // requests/limits overwhelmingly use.
+        (string Suffix, long Multiplier)[] binary =
+        [
+            ("Ki", 1L << 10), ("Mi", 1L << 20), ("Gi", 1L << 30),
+            ("Ti", 1L << 40), ("Pi", 1L << 50), ("Ei", 1L << 60)
+        ];
+        foreach (var (suffix, multiplier) in binary)
+        {
+            if (mem.EndsWith(suffix, StringComparison.Ordinal))
+                return double.TryParse(mem[..^2], NumberStyles.Any, CultureInfo.InvariantCulture, out var bin)
+                    ? (long)(bin * multiplier)
+                    : 0;
+        }
+
+        // Decimal SI suffixes (k..E, powers of 1000) — also legal on declared
+        // quantities ("memory: 1G"). Long-overlong values saturate silently.
+        (char Suffix, long Multiplier)[] decimalSi =
+        [
+            ('k', 1_000L), ('M', 1_000_000L), ('G', 1_000_000_000L),
+            ('T', 1_000_000_000_000L), ('P', 1_000_000_000_000_000L), ('E', 1_000_000_000_000_000_000L)
+        ];
+        foreach (var (suffix, multiplier) in decimalSi)
+        {
+            if (mem.Length > 0 && mem[^1] == suffix)
+                return double.TryParse(mem[..^1], NumberStyles.Any, CultureInfo.InvariantCulture, out var dec)
+                    ? (long)(dec * multiplier)
+                    : 0;
+        }
+
+        // "m" = milli-bytes — legal on quantities, useless in practice, but parse it correctly.
+        if (mem.Length > 0 && mem[^1] == 'm')
+            return double.TryParse(mem[..^1], NumberStyles.Any, CultureInfo.InvariantCulture, out var milli)
+                ? (long)(milli / 1_000.0)
+                : 0;
+
+        return double.TryParse(mem, NumberStyles.Any, CultureInfo.InvariantCulture, out var bytes) ? (long)bytes : 0;
     }
 
     // ── Jobs and CronJobs ───────────────────────────────────────────────────

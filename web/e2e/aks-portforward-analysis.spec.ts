@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setDemoMode } from "./helpers";
+import { openAksTab, setDemoMode } from "./helpers";
 
 test.describe("AKS Port-Forward & Analysis", () => {
     test.beforeEach(async ({ page }) => {
@@ -16,7 +16,7 @@ test.describe("AKS Port-Forward & Analysis", () => {
         await page
             .getByTestId("aks-namespace-select")
             .selectOption({ label: "default" });
-        await page.getByTestId("aks-tab-portforward").click();
+        await openAksTab(page, "portforward");
         await expect(page.getByTestId("port-forward-panel")).toBeVisible();
         await expect(page.getByTestId("port-forward-empty")).toBeVisible();
     });
@@ -26,7 +26,7 @@ test.describe("AKS Port-Forward & Analysis", () => {
         await page
             .getByTestId("aks-namespace-select")
             .selectOption({ label: "default" });
-        await page.getByTestId("aks-tab-portforward").click();
+        await openAksTab(page, "portforward");
         await page.getByTestId("port-forward-add").click();
         await expect(page.getByTestId("port-forward-form")).toBeVisible();
         await page.getByTestId("port-forward-cancel").click();
@@ -40,7 +40,7 @@ test.describe("AKS Port-Forward & Analysis", () => {
         await page
             .getByTestId("aks-namespace-select")
             .selectOption({ label: "default" });
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await page.getByTestId("pods-table-body").locator("tr").first().click();
         await page.getByTestId("pod-port-forward-btn").click();
 
@@ -66,7 +66,7 @@ test.describe("AKS Port-Forward & Analysis", () => {
         await page
             .getByTestId("aks-namespace-select")
             .selectOption({ label: "default" });
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         const firstRow = page
             .getByTestId("pods-table-body")
             .locator("tr")
@@ -92,7 +92,7 @@ test.describe("AKS Port-Forward & Analysis", () => {
         await page
             .getByTestId("aks-namespace-select")
             .selectOption({ label: "default" });
-        await page.getByTestId("aks-tab-analysis").click();
+        await openAksTab(page, "analysis");
         await expect(page.getByTestId("aks-analysis-panel")).toBeVisible();
         await expect(page.getByTestId("aks-ingress-analysis")).toBeVisible();
         await expect(page.getByTestId("aks-probe-analysis")).toBeVisible();

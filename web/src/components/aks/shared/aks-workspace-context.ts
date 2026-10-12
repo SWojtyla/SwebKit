@@ -10,39 +10,87 @@ import type {
     KubeContextInfo,
 } from "@/lib/types";
 
-export const directTabs = [
-    { id: "deployments", label: "Deployments" },
-    { id: "statefulsets", label: "StatefulSets" },
-    { id: "pods", label: "Pods" },
-    { id: "configmaps", label: "ConfigMaps" },
-    { id: "secrets", label: "Secrets" },
-    { id: "helm", label: "Helm" },
-    { id: "jobs", label: "Jobs" },
-    { id: "cronjobs", label: "CronJobs" },
+/**
+ * The 18 resource views grouped by task — what the flat tab strip (8 direct tabs +
+ * a "Network ▾" second row + 4 trailing) couldn't say: which views belong together.
+ * The dropdown menus are a view over this same flat TabId set, so `?tab=` deep links
+ * keep working unchanged.
+ */
+export const navGroups = [
+    {
+        id: "workloads",
+        label: "Workloads",
+        desc: "Things that run containers",
+        items: [
+            { id: "pods", label: "Pods", glyph: "⬡", desc: "running containers" },
+            { id: "deployments", label: "Deployments", glyph: "≣", desc: "stateless replicas + rollouts" },
+            { id: "statefulsets", label: "StatefulSets", glyph: "▦", desc: "stable identity, ordered scale" },
+            { id: "jobs", label: "Jobs", glyph: "▸", desc: "run-to-completion tasks" },
+            { id: "cronjobs", label: "CronJobs", glyph: "◷", desc: "scheduled tasks" },
+        ],
+    },
+    {
+        id: "config",
+        label: "Configuration",
+        desc: "Settings, secrets, packaged releases",
+        items: [
+            { id: "configmaps", label: "ConfigMaps", glyph: "☰", desc: "non-secret config data" },
+            { id: "secrets", label: "Secrets", glyph: "⚿", desc: "credentials, tokens, TLS" },
+            // The URL id stays "helm" — same tab, menu label spells out what it lists.
+            { id: "helm", label: "Helm releases", glyph: "⎈", desc: "installed charts" },
+        ],
+    },
+    {
+        id: "network",
+        label: "Network",
+        desc: "How traffic reaches the workloads",
+        items: [
+            { id: "services", label: "Services", glyph: "⇄", desc: "stable virtual IPs" },
+            { id: "ingresses", label: "Ingresses", glyph: "⇥", desc: "L7 host/path routing" },
+            { id: "gateways", label: "Gateways", glyph: "◈", desc: "Gateway API listeners" },
+            { id: "httproutes", label: "HTTPRoutes", glyph: "⇢", desc: "Gateway API HTTP rules" },
+            { id: "gatewayclasses", label: "GatewayClasses", glyph: "⬢", desc: "cluster-scoped gateway types" },
+            { id: "envoy", label: "Envoy", glyph: "≋", desc: "proxy config + stats" },
+        ],
+    },
+    {
+        id: "ops",
+        label: "Operations",
+        desc: "Observe and operate the cluster",
+        items: [
+            { id: "events", label: "Events", glyph: "⚑", desc: "what the cluster is telling you" },
+            // The URL id stays "hpa" so existing deep links keep working; the tab covers
+            // all autoscaling (plain HPAs, KEDA ScaledObjects and ScaledJobs).
+            { id: "hpa", label: "Autoscaling", glyph: "⇅", desc: "HPA + KEDA scaled objects" },
+            { id: "portforward", label: "Port-Forward", glyph: "⇌", desc: "kubectl port-forward sessions" },
+            { id: "analysis", label: "Analysis", glyph: "⌕", desc: "cluster health findings" },
+        ],
+    },
 ] as const;
 
-export const networkTabs = [
-    { id: "services", label: "Services" },
-    { id: "ingresses", label: "Ingresses" },
-    { id: "gatewayclasses", label: "GatewayClasses" },
-    { id: "gateways", label: "Gateways" },
-    { id: "httproutes", label: "HTTPRoutes" },
-    { id: "envoy", label: "Envoy" },
-] as const;
+export type NavGroupId = (typeof navGroups)[number]["id"];
 
-export const extraTabs = [
-    // The URL id stays "hpa" so existing deep links keep working; the tab now
-    // covers all autoscaling (plain HPAs, KEDA ScaledObjects and ScaledJobs).
-    { id: "hpa", label: "Autoscaling" },
-    { id: "events", label: "Events" },
-    { id: "portforward", label: "Port-Forward" },
-    { id: "analysis", label: "Analysis" },
-] as const;
+// One menu-item descriptor — flatMap over `as const` tuples can't unify on its own.
+export type AksNavItem = (typeof navGroups)[number]["items"][number];
 
-const allTabs = [...directTabs, ...networkTabs, ...extraTabs] as const;
-export type TabId = (typeof allTabs)[number]["id"];
+const allTabs: readonly AksNavItem[] = navGroups.flatMap(
+    (g) => g.items as readonly AksNavItem[],
+);
+export type TabId = AksNavItem["id"];
 
-export const networkTabIds = new Set<string>(networkTabs.map((t) => t.id));
+/** The nav group a tab lives under, or null for an id outside the grouping. */
+export function navGroupForTab(tab: TabId): (typeof navGroups)[number] | null {
+    return navGroups.find((g) => g.items.some((i) => i.id === tab)) ?? null;
+}
+
+/** The item descriptor for a tab id — label + glyph + one-line description. */
+export function navItemForTab(tab: TabId) {
+    for (const g of navGroups) {
+        const item = g.items.find((i) => i.id === tab);
+        if (item) return item;
+    }
+    return null;
+}
 
 /**
  * One namespace pick inside one selected context. `context` is the resolved kubeconfig
@@ -323,8 +371,11 @@ export interface AksClusterValue {
 export interface AksNavValue {
     activeTab: TabId;
     setActiveTab: (tab: TabId) => void;
-    networkMenuOpen: boolean;
-    setNetworkMenuOpen: (open: boolean | ((v: boolean) => boolean)) => void;
+    /** Id of the nav group whose dropdown is open (see `navGroups`), null when closed. */
+    openNavGroup: NavGroupId | null;
+    setOpenNavGroup: (
+        group: NavGroupId | null | ((v: NavGroupId | null) => NavGroupId | null),
+    ) => void;
     selectedNamespaces: NsSelection[];
     setSelectedNamespaces: (namespaces: NsSelection[]) => void;
     /**

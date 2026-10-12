@@ -35,6 +35,22 @@ public class DemoAksClientTests
     }
 
     [Fact]
+    public async Task GetPodsAsync_PodsCarryDeclaredResources()
+    {
+        // The pods table colors usage against the pod's own requests/limits — demo data
+        // has to exercise that path, not fall back to the global ceiling.
+        var pods = await _client.GetPodsAsync("ecommerce");
+
+        Assert.All(pods, p =>
+        {
+            Assert.True(p.CpuRequestCores > 0);
+            Assert.True(p.CpuLimitCores > p.CpuRequestCores);
+            Assert.True(p.MemoryRequestBytes > 0);
+            Assert.True(p.MemoryLimitBytes > p.MemoryRequestBytes);
+        });
+    }
+
+    [Fact]
     public async Task GetPodsAsync_LabelSelector_FiltersPods()
     {
         var all = await _client.GetPodsAsync("default");
@@ -555,6 +571,51 @@ public class DemoAksClientTests
         var reread = (await _client.GetHpasAsync("default")).ToList();
         Assert.True(reread.Single(h => h.Name == target.Name).IsScalingDisabled);
         Assert.All(reread.Where(h => h.Name != target.Name), h => Assert.False(h.IsScalingDisabled));
+    }
+
+    [Fact]
+    public async Task SetHpaScalingEnabledAsync_DisableFreezesBoundsAtCurrentReplicas()
+    {
+        var before = (await _client.GetHpasAsync("default")).ToList();
+        var target = before.First(h => !h.IsKedaManaged);
+
+        await _client.SetHpaScalingEnabledAsync("default", target.Name, enabled: false);
+
+        var frozen = (await _client.GetHpasAsync("default")).Single(h => h.Name == target.Name);
+        Assert.True(frozen.IsScalingDisabled);
+        Assert.Equal(frozen.CurrentReplicas, frozen.MinReplicas);
+        Assert.Equal(frozen.CurrentReplicas, frozen.MaxReplicas);
+    }
+
+    [Fact]
+    public async Task SetHpaScalingEnabledAsync_EnableRestoresFrozenBounds()
+    {
+        var target = (await _client.GetHpasAsync("default")).First(h => !h.IsKedaManaged);
+        var originalMin = target.MinReplicas;
+        var originalMax = target.MaxReplicas;
+
+        await _client.SetHpaScalingEnabledAsync("default", target.Name, enabled: false);
+        await _client.SetHpaScalingEnabledAsync("default", target.Name, enabled: true);
+
+        var restored = (await _client.GetHpasAsync("default")).Single(h => h.Name == target.Name);
+        Assert.False(restored.IsScalingDisabled);
+        Assert.Equal(originalMin, restored.MinReplicas);
+        Assert.Equal(originalMax, restored.MaxReplicas);
+    }
+
+    [Fact]
+    public async Task SetHpaScalingEnabledAsync_KedaHpa_KeepsGeneratedBoundsWhileDisabled()
+    {
+        // Pausing the owning ScaledObject stops the reconcile loop without rewriting the
+        // generated HPA's spec — the bounds stay put, unlike a frozen plain HPA.
+        var keda = (await _client.GetHpasAsync("default")).Single(h => h.IsKedaManaged);
+
+        await _client.SetHpaScalingEnabledAsync("default", keda.Name, enabled: false);
+
+        var disabled = (await _client.GetHpasAsync("default")).Single(h => h.Name == keda.Name);
+        Assert.True(disabled.IsScalingDisabled);
+        Assert.Equal(keda.MinReplicas, disabled.MinReplicas);
+        Assert.Equal(keda.MaxReplicas, disabled.MaxReplicas);
     }
 
     [Fact]

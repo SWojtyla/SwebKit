@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setDemoMode } from "./helpers";
+import { openAksTab, setDemoMode } from "./helpers";
 
 test.describe("AKS", () => {
     test.beforeEach(async ({ page }) => {
@@ -31,21 +31,58 @@ test.describe("AKS", () => {
             .getByTestId("aks-namespace-select")
             .selectOption("ecommerce");
 
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await expect(page.getByTestId("pods-table-body")).toBeVisible();
 
-        await page.getByTestId("aks-tab-network").click();
-        await page.getByTestId("aks-tab-services").click();
+        await openAksTab(page, "services");
         await expect(page.getByTestId("services-table-body")).toBeVisible();
 
-        await page.getByTestId("aks-tab-helm").click();
+        await openAksTab(page, "helm");
         await expect(page.getByTestId("helm-table-body")).toBeVisible();
 
-        await page.getByTestId("aks-tab-secrets").click();
+        await openAksTab(page, "secrets");
         await expect(page.getByTestId("secrets-table-body")).toBeVisible();
 
-        await page.getByTestId("aks-tab-events").click();
+        await openAksTab(page, "events");
         await expect(page.getByTestId("events-list")).toBeVisible();
+    });
+
+    test("grouped nav menus open, track the active view, and dismiss", async ({
+        page,
+    }) => {
+        await page.goto("/aks");
+        await page
+            .getByTestId("aks-namespace-select")
+            .selectOption("ecommerce");
+
+        // Four group buttons replace the 18-tab strip; the current view shows on the right.
+        await expect(page.getByTestId("aks-nav-group-workloads")).toBeVisible();
+        await expect(page.getByTestId("aks-nav-group-config")).toBeVisible();
+        await expect(page.getByTestId("aks-nav-group-network")).toBeVisible();
+        await expect(page.getByTestId("aks-nav-group-ops")).toBeVisible();
+        await expect(page.getByTestId("aks-nav-current")).toContainText(
+            "Deployments",
+        );
+
+        // Menu opens under the group, lists items with descriptions, and the
+        // deep "HTTPRoutes" view is one click away inside Network.
+        await page.getByTestId("aks-nav-group-network").click();
+        await expect(page.getByTestId("aks-nav-menu-network")).toBeVisible();
+        await page.getByTestId("aks-tab-httproutes").click();
+        await expect(page.getByTestId("httproutes-table-body")).toBeVisible();
+        await expect(page.getByTestId("aks-nav-current")).toHaveText(
+            /Network\s*›\s*HTTPRoutes/,
+        );
+
+        // Selecting an item closes its menu; Esc closes an open one without switching.
+        await expect(page.getByTestId("aks-nav-menu-network")).toHaveCount(0);
+        await page.getByTestId("aks-nav-group-ops").click();
+        await expect(page.getByTestId("aks-nav-menu-ops")).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(page.getByTestId("aks-nav-menu-ops")).toHaveCount(0);
+        await expect(page.getByTestId("aks-nav-current")).toContainText(
+            "HTTPRoutes",
+        );
     });
 
     test("new resource tabs are visible and functional", async ({ page }) => {
@@ -54,23 +91,22 @@ test.describe("AKS", () => {
             .getByTestId("aks-namespace-select")
             .selectOption("ecommerce");
 
-        await page.getByTestId("aks-tab-statefulsets").click();
+        await openAksTab(page, "statefulsets");
         await expect(page.getByTestId("statefulsets-table-body")).toBeVisible();
 
-        await page.getByTestId("aks-tab-cronjobs").click();
+        await openAksTab(page, "cronjobs");
         await expect(page.getByTestId("cronjobs-table-body")).toBeVisible();
 
-        await page.getByTestId("aks-tab-jobs").click();
+        await openAksTab(page, "jobs");
         await expect(page.getByTestId("jobs-table-body")).toBeVisible();
 
-        await page.getByTestId("aks-tab-configmaps").click();
+        await openAksTab(page, "configmaps");
         await expect(page.getByTestId("configmaps-table-body")).toBeVisible();
 
-        await page.getByTestId("aks-tab-network").click();
-        await page.getByTestId("aks-tab-ingresses").click();
+        await openAksTab(page, "ingresses");
         await expect(page.getByTestId("ingresses-table-body")).toBeVisible();
 
-        await page.getByTestId("aks-tab-hpa").click();
+        await openAksTab(page, "hpa");
         await expect(page.getByTestId("hpas-table-body")).toBeVisible();
     });
 
@@ -81,7 +117,7 @@ test.describe("AKS", () => {
         await page
             .getByTestId("aks-namespace-select")
             .selectOption("ecommerce");
-        await page.getByTestId("aks-tab-hpa").click();
+        await openAksTab(page, "hpa");
         await expect(page.getByTestId("hpas-table-body")).toBeVisible();
         await expect(
             page.getByTestId("hpas-table-body").locator("tr"),
@@ -102,6 +138,41 @@ test.describe("AKS", () => {
         await expect(page.getByTestId("yaml-viewer")).toBeVisible();
     });
 
+    test("disabling an hpa freezes its bounds at the current replicas", async ({
+        page,
+    }) => {
+        await page.goto("/aks");
+        await page
+            .getByTestId("aks-namespace-select")
+            .selectOption("ecommerce");
+        await openAksTab(page, "hpa");
+        await expect(page.getByTestId("hpas-table-body")).toBeVisible();
+
+        // order-api-hpa runs 3 replicas inside bounds 2–8. "Disabled" must mean
+        // the autoscaler can no longer move it — the row shows the frozen 3–3 window.
+        // (payment-gateway-hpa is deleted by the earlier test — demo state persists
+        // across tests in the same sidecar instance.)
+        const row = page.getByTestId("hpa-row-order-api-hpa");
+        await expect(row).toContainText("2–8");
+
+        await page.getByTestId("hpa-actions-order-api-hpa").click();
+        await page.getByTestId("ctx-item-disable-autoscaling").click();
+        await expect(page.getByTestId("aks-confirm-bar")).toBeVisible();
+        await page.getByTestId("aks-confirm-yes").click();
+
+        await expect(row).toContainText("Disabled");
+        await expect(row).toContainText("3–3");
+
+        // Re-enabling restores the original bounds — the stash isn't lost on toggle.
+        await page.getByTestId("hpa-actions-order-api-hpa").click();
+        await page.getByTestId("ctx-item-enable-autoscaling").click();
+        await expect(page.getByTestId("aks-confirm-bar")).toBeVisible();
+        await page.getByTestId("aks-confirm-yes").click();
+
+        await expect(row).toContainText("2–8");
+        await expect(row).not.toContainText("Disabled");
+    });
+
     test("autoscaling tab also lists and controls KEDA ScaledJobs", async ({
         page,
     }) => {
@@ -109,7 +180,7 @@ test.describe("AKS", () => {
         await page
             .getByTestId("aks-namespace-select")
             .selectOption("ecommerce");
-        await page.getByTestId("aks-tab-hpa").click();
+        await openAksTab(page, "hpa");
         await expect(page.getByTestId("hpas-table-body")).toBeVisible();
 
         // KEDA ScaledJobs never appear as HPAs — they get their own section.
@@ -138,7 +209,7 @@ test.describe("AKS", () => {
         await page
             .getByTestId("aks-namespace-select")
             .selectOption("ecommerce");
-        await page.getByTestId("aks-tab-cronjobs").click();
+        await openAksTab(page, "cronjobs");
         await expect(page.getByTestId("cronjobs-table-body")).toBeVisible();
 
         // The Next Run column shows a real local-time value for active jobs.
@@ -179,7 +250,7 @@ test.describe("AKS", () => {
         await page
             .getByTestId("aks-namespace-select")
             .selectOption("ecommerce");
-        await page.getByTestId("aks-tab-cronjobs").click();
+        await openAksTab(page, "cronjobs");
         await expect(page.getByTestId("cronjobs-table-body")).toBeVisible();
 
         // Trigger via the right-click menu — the demo client persists the created Job.
@@ -193,13 +264,13 @@ test.describe("AKS", () => {
         );
 
         // The created job is discoverable on the Jobs tab.
-        await page.getByTestId("aks-tab-jobs").click();
+        await openAksTab(page, "jobs");
         await expect(page.getByTestId("jobs-table-body")).toContainText(
             "inventory-sync-manual-",
         );
 
         // Suspend goes through the confirm bar, then the row flips to suspended.
-        await page.getByTestId("aks-tab-cronjobs").click();
+        await openAksTab(page, "cronjobs");
         await expect(page.getByTestId("cronjobs-table-body")).toBeVisible();
         await page
             .getByTestId("cronjob-row-report-generator")
@@ -218,7 +289,7 @@ test.describe("AKS", () => {
             .getByTestId("aks-namespace-select")
             .selectOption("ecommerce");
 
-        await page.getByTestId("aks-tab-pods").click();
+        await openAksTab(page, "pods");
         await expect(page.getByTestId("pods-table-body")).toBeVisible();
 
         await page.getByTestId("pods-table-body").locator("tr").first().click();
@@ -232,7 +303,7 @@ test.describe("AKS", () => {
             .getByTestId("aks-namespace-select")
             .selectOption("ecommerce");
 
-        await page.getByTestId("aks-tab-helm").click();
+        await openAksTab(page, "helm");
         await expect(page.getByTestId("helm-table-body")).toBeVisible();
 
         await page.getByTestId("helm-table-body").locator("tr").first().click();
@@ -248,8 +319,7 @@ test.describe("AKS", () => {
         await page
             .getByTestId("aks-namespace-select")
             .selectOption("ecommerce");
-        await page.getByTestId("aks-tab-network").click();
-        await page.getByTestId("aks-tab-httproutes").click();
+        await openAksTab(page, "httproutes");
         await expect(page.getByTestId("httproutes-table-body")).toBeVisible();
 
         // Row click opens the detail panel (not the YAML viewer).
@@ -294,8 +364,7 @@ test.describe("AKS", () => {
         await page
             .getByTestId("aks-namespace-select")
             .selectOption("ecommerce");
-        await page.getByTestId("aks-tab-network").click();
-        await page.getByTestId("aks-tab-envoy").click();
+        await openAksTab(page, "envoy");
         await expect(page.getByTestId("envoy-tab")).toBeVisible();
 
         // BackendTrafficPolicy is the default kind — the connection-limit

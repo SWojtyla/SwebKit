@@ -22,6 +22,10 @@ public partial class DemoAksClient
     // Keys ("{ns}/{hpaName}") -> (min, max) overrides applied this session.
     private readonly Dictionary<string, (int Min, int Max)> _hpaReplicaOverrides = new(StringComparer.Ordinal);
 
+    // Original (min, max) stashed when a plain HPA was frozen by SetHpaScalingEnabledAsync —
+    // mirrors the original-bounds annotation the real client writes on freeze.
+    private readonly Dictionary<string, (int Min, int Max)> _frozenHpaBounds = new(StringComparer.Ordinal);
+
     private readonly HashSet<string> _deletedHpas = new(StringComparer.Ordinal);
 
     // KEDA ScaledJob session state — same keying as the HPA overrides.
@@ -43,10 +47,7 @@ public partial class DemoAksClient
         ("ad-hoc-backfill-001", "Active", 1, 0, 0, 3, 12, null, null, null)
     ];
 
-    public async Task<IReadOnlyList<HpaInfo>> GetHpasAsync(string ns, CancellationToken ct = default)
-    {
-        await Task.Delay(200, ct).ConfigureAwait(false);
-        var hpas = new List<HpaInfo>
+    private static List<HpaInfo> BuildDemoHpas(string ns) => new()
         {
             new()
             {
@@ -118,6 +119,11 @@ public partial class DemoAksClient
             }
         };
 
+    public async Task<IReadOnlyList<HpaInfo>> GetHpasAsync(string ns, CancellationToken ct = default)
+    {
+        await Task.Delay(200, ct).ConfigureAwait(false);
+        var hpas = BuildDemoHpas(ns);
+
         lock (_scalingLock)
         {
             for (var i = hpas.Count - 1; i >= 0; i--)
@@ -150,9 +156,32 @@ public partial class DemoAksClient
         lock (_scalingLock)
         {
             if (enabled)
+            {
                 _disabledHpaKeys.Remove(key);
+                // Re-enabling a frozen plain HPA restores the bounds it was disabled with.
+                if (_frozenHpaBounds.Remove(key, out var original))
+                    _hpaReplicaOverrides[key] = original;
+                else
+                    _hpaReplicaOverrides.Remove(key);
+            }
             else
+            {
                 _disabledHpaKeys.Add(key);
+                var hpa = BuildDemoHpas(ns).FirstOrDefault(h =>
+                    string.Equals(h.Name, hpaName, StringComparison.OrdinalIgnoreCase));
+                // KEDA-managed HPAs keep their generated bounds — pausing the ScaledObject
+                // stops the reconcile loop without rewriting the HPA spec. Plain HPAs get
+                // frozen at their current replica count like the real client does.
+                if (hpa is { IsKedaManaged: false })
+                {
+                    if (!_frozenHpaBounds.ContainsKey(key))
+                        _frozenHpaBounds[key] = _hpaReplicaOverrides.TryGetValue(key, out var existing)
+                            ? existing
+                            : (hpa.MinReplicas, hpa.MaxReplicas);
+                    var freeze = hpa.CurrentReplicas > 0 ? hpa.CurrentReplicas : Math.Max(hpa.MinReplicas, 1);
+                    _hpaReplicaOverrides[key] = (freeze, freeze);
+                }
+            }
         }
 
         return Task.CompletedTask;
