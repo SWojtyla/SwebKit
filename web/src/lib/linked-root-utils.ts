@@ -26,6 +26,20 @@ export function samePath(
     return normalizePath(a).toLowerCase() === normalizePath(b).toLowerCase();
 }
 
+/** True when `path` equals `ancestor` or sits inside it. Matches the Rust
+ *  grant semantics (`starts_with` on canonical paths): an OS-dialog grant for a
+ *  parent directory covers everything under it — used to check that an
+ *  authorize-picker answer actually covers the path being authorized. */
+export function isWithinPath(
+    path: string | null | undefined,
+    ancestor: string | null | undefined,
+): boolean {
+    if (!path || !ancestor) return false;
+    const p = normalizePath(path).toLowerCase();
+    const a = normalizePath(ancestor).toLowerCase();
+    return p === a || p.startsWith(`${a}/`);
+}
+
 /** `apiRootPath` relative to `repositoryRoot` (POSIX separators) — the value the
  *  Git panel persists as `apiSubpath`. Returns null when the api root sits outside
  *  the repository. */

@@ -185,9 +185,27 @@ function ApiClientPageContent() {
                 <div className="ml-auto" />
                 <button
                     onClick={() => {
-                        // Opening from the toolbar means "last used repo", not a
-                        // linked root's — clear any badge-pinned selection.
-                        ctx.setGitInitialRepo(null);
+                        // Open on the repo backing the selected linked collection —
+                        // falling back to the last-used repo made the drawer show a
+                        // repository unrelated to what the user was looking at.
+                        const origin = ctx.selectedCollection?.origin;
+                        const root =
+                            origin?.kind === "linked"
+                                ? ctx.linkedRoots.find(
+                                      (r) => r.id === origin.rootId,
+                                  )
+                                : undefined;
+                        ctx.setGitInitialRepo(
+                            root?.repositoryRoot
+                                ? {
+                                      path: root.repositoryRoot,
+                                      apiSubpath: apiSubpathWithin(
+                                          root.repositoryRoot,
+                                          root.apiRootPath,
+                                      ),
+                                  }
+                                : null,
+                        );
                         ctx.setShowGitPanel(!ctx.showGitPanel);
                     }}
                     className={`flex items-center gap-1 rounded border px-2 py-1 text-xs ${ctx.showGitPanel ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}

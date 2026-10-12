@@ -1,9 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
+import { execSync } from "child_process";
 import {
     existsSync,
+    mkdirSync,
     mkdtempSync,
     readdirSync,
     readFileSync,
+    realpathSync,
     rmSync,
     writeFileSync,
 } from "fs";
@@ -280,5 +283,86 @@ test.describe("API Client linked roots", () => {
         // without re-conflicting (the reload hands it a fresh stamp).
         await page.waitForTimeout(2500);
         await expect(page.getByTestId("conflict-banner")).toHaveCount(0);
+    });
+
+    test("git toggle binds the drawer to the selected collection's repo — not the last-used one", async ({
+        page,
+    }) => {
+        // Two linked roots in *different* git repos: switching collections must
+        // retarget the panel instead of mixing one repo's state into the other.
+        // `realpathSync` resolves the 8.3 short names in tmpdir() — git's
+        // `--show-toplevel` reports the long form, so compare canonical paths.
+        const repoA = realpathSync.native(makeTempRoot());
+        const repoB = realpathSync.native(makeTempRoot());
+        execSync("git init", { cwd: repoA });
+        execSync("git init", { cwd: repoB });
+        const apiA = join(repoA, "api-a");
+        const apiB = join(repoB, "api-b");
+        mkdirSync(apiA, { recursive: true });
+        mkdirSync(apiB, { recursive: true });
+        const rootA = await createLinkedRoot(page, apiA);
+        const rootB = await createLinkedRoot(page, apiB);
+        await page.reload();
+
+        const norm = (p: string) =>
+            p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+        const storedState = () =>
+            page.evaluate(() => localStorage.getItem("api-client-git-repos"));
+
+        const nodeA = await createLinkedRequest(
+            page,
+            rootA.id,
+            "Repo A Req",
+            "Collection A",
+        );
+        await nodeA.click();
+        await page.getByTestId("api-client-git-toggle").click();
+        await expect(page.getByTestId("api-client-git-panel")).toBeVisible();
+        await expect
+            .poll(async () => {
+                const s = JSON.parse((await storedState()) ?? "{}") as {
+                    selectedPath?: string;
+                };
+                return s.selectedPath ? norm(s.selectedPath) : null;
+            })
+            .toBe(norm(repoA));
+        const stateA = JSON.parse((await storedState()) ?? "{}") as {
+            repos: { path: string; apiSubpath: string | null }[];
+        };
+        expect(
+            stateA.repos.find((r) => norm(r.path) === norm(repoA))?.apiSubpath,
+        ).toBe("api-a/.swebkit-api");
+
+        await page.getByTestId("api-client-git-close").click();
+
+        const nodeB = await createLinkedRequest(
+            page,
+            rootB.id,
+            "Repo B Req",
+            "Collection B",
+        );
+        await nodeB.click();
+        await page.getByTestId("api-client-git-toggle").click();
+        await expect
+            .poll(async () => {
+                const s = JSON.parse((await storedState()) ?? "{}") as {
+                    selectedPath?: string;
+                };
+                return s.selectedPath ? norm(s.selectedPath) : null;
+            })
+            .toBe(norm(repoB));
+        const stateB = JSON.parse((await storedState()) ?? "{}") as {
+            repos: { path: string; apiSubpath: string | null }[];
+            selectedPath: string | null;
+        };
+        // Both repos stay listed, each with its own subpath — only the
+        // selection moved.
+        expect(norm(stateB.selectedPath!)).toBe(norm(repoB));
+        expect(
+            stateB.repos.find((r) => norm(r.path) === norm(repoA))?.apiSubpath,
+        ).toBe("api-a/.swebkit-api");
+        expect(
+            stateB.repos.find((r) => norm(r.path) === norm(repoB))?.apiSubpath,
+        ).toBe("api-b/.swebkit-api");
     });
 });

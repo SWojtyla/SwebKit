@@ -559,9 +559,17 @@ fn persist_granted_root(app: &tauri::AppHandle, root: &Path) {
     }
 }
 
+/// True when a persisted grant covers `candidate` — equal to a granted root or
+/// inside one. Mirrors `AllowedRoots::is_allowed` semantics: exact-equality used
+/// to reject ancestor grants, so a directory under a previously granted parent
+/// still reported "not authorized" and re-prompted the picker every time.
+fn grant_covers(grants: &[PathBuf], candidate: &Path) -> bool {
+    grants.iter().any(|root| candidate.starts_with(root))
+}
+
 /// Re-admits a path the user previously picked through an OS dialog.
 ///
-/// Rejects anything not on the persisted grant list, so this is a restore
+/// Rejects anything not covered by the persisted grant list, so this is a restore
 /// mechanism, not a way for the frontend to authorize a new path.
 #[tauri::command]
 pub async fn restore_allowed_root(
@@ -572,7 +580,7 @@ pub async fn restore_allowed_root(
     let Ok(canonical) = std::fs::canonicalize(&path) else {
         return Ok(false);
     };
-    if !load_granted_roots(&app).iter().any(|r| r == &canonical) {
+    if !grant_covers(&load_granted_roots(&app), &canonical) {
         return Ok(false);
     }
     roots.allow(canonical);
@@ -843,5 +851,50 @@ mod reveal_tests {
         assert_eq!(args, vec!["/tmp".to_string()]);
         let (_, dir_args) = reveal_args(Path::new("/tmp/dir"), true).unwrap();
         assert_eq!(dir_args, vec!["/tmp/dir".to_string()]);
+    }
+}
+
+#[cfg(test)]
+mod granted_roots_tests {
+    use super::grant_covers;
+    use std::path::PathBuf;
+
+    fn grants(paths: &[&str]) -> Vec<PathBuf> {
+        paths.iter().map(PathBuf::from).collect()
+    }
+
+    #[test]
+    fn exact_match_covers() {
+        assert!(grant_covers(
+            &grants(&[r"C:\Repos\api"]),
+            &PathBuf::from(r"C:\Repos\api"),
+        ));
+    }
+
+    #[test]
+    fn ancestor_grant_covers_descendant() {
+        // The case that used to fail: granted the workspace root, the repo
+        // inside it kept reporting "not authorized".
+        assert!(grant_covers(
+            &grants(&[r"C:\Repos"]),
+            &PathBuf::from(r"C:\Repos\api\collections"),
+        ));
+    }
+
+    #[test]
+    fn descendant_grant_does_not_cover_ancestor() {
+        // Granting a subfolder must not unlock the repo root above it.
+        assert!(!grant_covers(
+            &grants(&[r"C:\Repos\api"]),
+            &PathBuf::from(r"C:\Repos"),
+        ));
+    }
+
+    #[test]
+    fn sibling_paths_do_not_cover() {
+        assert!(!grant_covers(
+            &grants(&[r"C:\Repos\api"]),
+            &PathBuf::from(r"C:\Repos\api2"),
+        ));
     }
 }
