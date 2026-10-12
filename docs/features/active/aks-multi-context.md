@@ -45,7 +45,9 @@ UI, not new architecture:
 - New `ctxs` search param: comma-separated `encodeURIComponent` context names —
   the **whole selection** (including the configured context). An absent `ctxs`
   falls back to `[configured]`; persisted in the `aks-selected-contexts` view pref
-  so it survives navigation.
+  so it survives navigation. The pref restores the user's **last selection
+  verbatim** — one cluster or many (a default-only selection is the no-op case);
+  an explicit `ctxs` param always wins over the pref.
 - `ns` param becomes composite: `enc(ctx):enc(ns)` per entry, `enc(ctx):*` for
   "all namespaces in that cluster", entries joined with `,`. **Back-compat:**
   entries without a `:` bind to the configured default context — old deep links and pinned
@@ -58,12 +60,14 @@ UI, not new architecture:
 **Pickers:**
 
 - `ContextSelector` → plain multi-select dropdown (checkbox list reusing the
-  NamespaceSelector interaction pattern): clicking a row or its checkbox toggles
-  membership; the trailing button (or Ctrl/Cmd+click) selects only that context.
-  The last checked context can't be deselected. Selection does **no** POST and no
-  upfront connection test — failures surface lazily on that context's namespace
-  query. The old primary-switch flow (`POST /api/aks/context` + connection test)
-  is gone from this surface.
+  NamespaceSelector interaction pattern): clicking a **row** selects only that
+  context and closes (same single-select semantics as the namespace picker);
+  the **checkbox** toggles membership in the merged set. The trailing button is
+  kept as a select-only affordance. The last checked context can't be
+  deselected. Selection does **no** POST and no upfront connection test —
+  failures surface lazily on that context's namespace query. The old
+  primary-switch flow (`POST /api/aks/context` + connection test) is gone from
+  this surface.
 - `NamespaceSelector` → grouped list: one section per selected context with its
   own loading/error state (a 403 on one cluster must not blank the picker — reuse
   the `NamespacesWarning`/`nsError` pattern per context). Per-cluster "All" state;
