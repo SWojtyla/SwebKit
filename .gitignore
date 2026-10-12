@@ -45,6 +45,10 @@ scripts/logs/
 # Throwaway appdata roots created by e2e runs
 src-sidecar/.e2e-appdata*/
 
+# Throwaway sidecar build output used by local e2e runs (keeps the user's dev
+# sidecar binaries untouched)
+.e2e-sidecar/
+
 # Playwright
 **/test-results/
 **/playwright-report/

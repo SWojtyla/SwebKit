@@ -240,4 +240,44 @@ test.describe("AKS multi-context", () => {
         );
         await expect(page).toHaveURL(/ctxs=aks-ecommerce-staging(?:&|$)/);
     });
+
+    test("clicking a context row selects only that cluster", async ({
+        page,
+    }) => {
+        await attachStaging(page);
+
+        // Row click = single-select and close, like the namespace picker — the
+        // checkbox is the only control that combines clusters.
+        await page.getByTestId("aks-context-select").click();
+        await page.getByTestId("aks-context-option-aks-ecommerce-dev").click();
+
+        await expect(
+            page.getByTestId("aks-context-option-aks-ecommerce-dev"),
+        ).toHaveCount(0);
+        await expect(page.getByTestId("aks-context-select")).toContainText(
+            "aks-ecommerce-dev",
+        );
+        await expect(page).toHaveURL(/ctxs=aks-ecommerce-dev(?:&|$)/);
+    });
+
+    test("a single selected context is remembered after leaving the page", async ({
+        page,
+    }) => {
+        // Pick one non-default cluster — the pref used to restore only sets of
+        // two or more, so a lone choice fell back to the default on the next visit.
+        await page.getByTestId("aks-context-select").click();
+        await page
+            .getByTestId("aks-context-option-aks-ecommerce-staging")
+            .click();
+        await expect(page).toHaveURL(/ctxs=aks-ecommerce-staging(?:&|$)/);
+
+        // Leave and come back — the restore reads the saved pref, not the URL.
+        await page.goto("/servicebus");
+        await page.goto("/aks");
+
+        await expect(page.getByTestId("aks-context-select")).toContainText(
+            "aks-ecommerce-staging",
+        );
+        await expect(page).toHaveURL(/ctxs=aks-ecommerce-staging(?:&|$)/);
+    });
 });
