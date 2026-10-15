@@ -145,4 +145,14 @@ services.AddHttpClient("MyClient")
 
 ---
 
+## CS-14 — A newly published NuGet advisory can break restore with zero code changes
+
+**Symptom:** `dotnet restore` fails with `NU1902`/`NU1903` errors on a package nobody touched — e.g. `System.Security.Cryptography.Pkcs` 9.0.18 (transitive via `Microsoft.Data.SqlClient`) — and every branch breaks at once, including `main`. Playwright E2E fails wholesale because `global-setup` runs `dotnet run` on the sidecar and it never reaches `/health`.
+
+**Cause:** `TreatWarningsAsErrors` is on and NuGet audit runs at restore. When GitHub publishes a new advisory for a version already in the graph, the warning-as-error appears overnight — no commit required.
+
+**Fix:** `CentralPackageTransitivePinningEnabled=true` is already set in `Directory.Build.props`, so add a `<PackageVersion>` for the transitively-referenced package in `Directory.Packages.props` (no fake `PackageReference` needed) pointing at a patched version. Diagnose with `dotnet nuget why <pkg>` or a restore's resolved graph before pinning.
+
+---
+
 _See also: [azure-sdk.md](azure-sdk.md)_
