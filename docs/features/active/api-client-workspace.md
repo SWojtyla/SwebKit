@@ -130,7 +130,14 @@ rootName?; rootPath? }` — assigned by the frontend when flattening
 - `ApiEnvironment` gains the same optional `origin` + `filePath`.
 - CollectionTree shows "Internal store" section header (path, reveal) plus one
   section per linked root: name, path, git badge (branch + changed count when
-  `isGitRepository`), reveal, reload, remove, git drawer shortcut.
+  `isGitRepository`), reveal, reload, remove, git drawer shortcut. Each section
+  header also has a collapse button scoped to that section only.
+- Row-click interaction: clicking a folder or collection-root row toggles
+  expansion (chevron and row are equivalent); request rows still open the
+  request. New nodes/collections arrive expanded once; a user collapse is never
+  undone by later collection updates (tracked via `knownNodeIds`), so
+  collapse-all and scoped collapse stick. While searching, the filtered tree is
+  force-expanded and toggles write no state.
 - `ApiClientPageContext` routes mutations by origin: linked collections call
   the linked-roots endpoints; internal stays on the serialized whole-store PUT.
 - Request save in linked collections goes through

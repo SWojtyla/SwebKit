@@ -281,4 +281,61 @@ test.describe("API Client linked roots", () => {
         await page.waitForTimeout(2500);
         await expect(page.getByTestId("conflict-banner")).toHaveCount(0);
     });
+
+    test("row click toggles a collection; per-root collapse is scoped and sticks", async ({
+        page,
+    }) => {
+        const dirA = makeTempRoot();
+        const dirB = makeTempRoot();
+        const rootA = await createLinkedRoot(page, dirA);
+        const rootB = await createLinkedRoot(page, dirB);
+        await page.reload();
+
+        const nodeA = await createLinkedRequest(
+            page,
+            rootA.id,
+            "Req A",
+            "Coll A",
+        );
+        const nodeB = await createLinkedRequest(
+            page,
+            rootB.id,
+            "Req B",
+            "Coll B",
+        );
+        const collA = page
+            .getByTestId(/collection-root-/)
+            .filter({ hasText: "Coll A" });
+        const collB = page
+            .getByTestId(/collection-root-/)
+            .filter({ hasText: "Coll B" });
+
+        // Row click toggles the collection — no more chevron-only expand.
+        await collA.click();
+        await expect(nodeA).toHaveCount(0);
+        await collA.click();
+        await expect(nodeA).toBeVisible();
+
+        // Per-root collapse-all hits only that root's collections.
+        await page.getByTestId(`linked-root-collapse-${rootB.id}`).click();
+        await expect(nodeB).toHaveCount(0);
+        await expect(nodeA).toBeVisible();
+
+        // Regression: a collapsed collection must stay collapsed across store
+        // updates — any collections mutation used to re-expand every collection.
+        // Adding a second collection to root B is that update: the new one
+        // arrives expanded, Coll B stays collapsed.
+        await page
+            .getByTestId(`linked-root-add-collection-${rootB.id}`)
+            .click();
+        await page.getByTestId("name-dialog-input").fill("Other Collection");
+        await page.getByTestId("name-dialog-confirm").click();
+        await expect(
+            page
+                .getByTestId(/collection-root-/)
+                .filter({ hasText: "Other Collection" }),
+        ).toBeVisible();
+        await expect(collB).toHaveAttribute("aria-expanded", "false");
+        await expect(nodeB).toHaveCount(0);
+    });
 });

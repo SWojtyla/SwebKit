@@ -26,6 +26,7 @@ import {
     AlertTriangle,
     Play,
     ListOrdered,
+    ChevronsDownUp,
 } from "lucide-react";
 import type {
     ApiChainSummary,
@@ -250,32 +251,48 @@ export function CollectionTree({
 
     const knownNodeIds = useRef<Set<string>>(new Set());
     useEffect(() => {
-        // A folder that arrives expanded and was never seen before (imported or
-        // agent-created path segments carry isExpanded: true) enters the live
-        // expanded set. Ids already known stay user-controlled, so collapsing a
-        // folder isn't undone by the next unrelated collections update. The ref
-        // bookkeeping happens outside the updater — StrictMode double-invokes
-        // updaters, which would mark ids known on a discarded pass.
+        // Expansion is a one-time welcome, not a persistent rule: a collection
+        // or folder expands only the first time it is seen (or when it carries
+        // isExpanded), so a user collapse — per-row, per-section, or Collapse
+        // all — is no longer undone by the next unrelated collections update.
+        // The one exception: a request/folder arriving under an *existing*
+        // collapsed subtree opens its ancestor path, otherwise you'd create
+        // nodes you can't see. The ref bookkeeping happens outside the updater —
+        // StrictMode double-invokes updaters, which would mark ids known on a
+        // discarded pass.
         const toExpand = new Set<string>();
-        const visit = (nodes: ApiCollectionNode[]) => {
+        const visit = (
+            nodes: ApiCollectionNode[],
+            ancestors: { id: string; known: boolean }[],
+        ) => {
             for (const n of nodes) {
-                if (!knownNodeIds.current.has(n.id)) {
+                const isNew = !knownNodeIds.current.has(n.id);
+                if (isNew) {
                     knownNodeIds.current.add(n.id);
-                    if (n.type === "Folder" && n.isExpanded) toExpand.add(n.id);
+                    for (const a of ancestors) {
+                        if (a.known) toExpand.add(a.id);
+                    }
                 }
-                if (n.type === "Folder") visit(n.children);
+                if (n.type === "Folder") {
+                    if (isNew && n.isExpanded) toExpand.add(n.id);
+                    visit(n.children, [
+                        ...ancestors,
+                        { id: n.id, known: !isNew },
+                    ]);
+                }
             }
         };
-        collections.forEach((c) => visit(c.nodes));
+        collections.forEach((c) => {
+            const rootKnown = knownNodeIds.current.has(c.id);
+            if (!rootKnown) {
+                knownNodeIds.current.add(c.id);
+                toExpand.add(c.id);
+            }
+            visit(c.nodes, [{ id: c.id, known: rootKnown }]);
+        });
         setExpandedIds((prev) => {
             const next = new Set(prev);
             let changed = false;
-            collections.forEach((c) => {
-                if (!next.has(c.id)) {
-                    next.add(c.id);
-                    changed = true;
-                }
-            });
             for (const id of toExpand) {
                 if (!next.has(id)) {
                     next.add(id);
@@ -583,6 +600,29 @@ export function CollectionTree({
         return result;
     }, [collections, linkedRoots, isDemo]);
 
+    /** Collapses every collection + folder inside one section — the per-root
+     *  counterpart of the toolbar's global Collapse-all. */
+    const collapseSection = (rootId: string | null) => {
+        const sec = sections.find((s) => s.rootId === rootId);
+        if (!sec) return;
+        const drop = new Set<string>();
+        const collect = (nodes: ApiCollectionNode[]) => {
+            for (const n of nodes) {
+                drop.add(n.id);
+                if (n.type === "Folder") collect(n.children);
+            }
+        };
+        sec.collections.forEach((c) => {
+            drop.add(c.id);
+            collect(c.nodes);
+        });
+        setExpandedIds((prev) => {
+            const next = new Set(prev);
+            drop.forEach((id) => next.delete(id));
+            return next;
+        });
+    };
+
     // While searching, every folder that survived `filterNodes` is guaranteed to
     // contain a match — render all of them expanded regardless of the user's
     // persisted collapse state, so a match inside a collapsed folder is never
@@ -736,6 +776,18 @@ export function CollectionTree({
                         Internal store
                         {storeBasename ? ` · ${storeBasename}` : ""}
                     </span>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            collapseSection(null);
+                        }}
+                        className="shrink-0 rounded p-0.5 hover:bg-accent"
+                        title="Collapse all collections in the internal store"
+                        aria-label="Collapse all collections in the internal store"
+                        data-testid="internal-store-collapse"
+                    >
+                        <ChevronsDownUp className="h-3 w-3" />
+                    </button>
                     {RUNS_IN_TAURI && storePath && (
                         <button
                             onClick={(e) => {
@@ -807,6 +859,18 @@ export function CollectionTree({
                         <AlertTriangle className="h-3 w-3" />
                     </span>
                 )}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        collapseSection(root.id);
+                    }}
+                    className="shrink-0 rounded p-0.5 hover:bg-accent"
+                    title="Collapse all collections in this root"
+                    aria-label="Collapse all collections in this root"
+                    data-testid={`linked-root-collapse-${root.id}`}
+                >
+                    <ChevronsDownUp className="h-3 w-3" />
+                </button>
                 {root.isGitRepository && (
                     <button
                         onClick={(e) => {
@@ -957,6 +1021,12 @@ export function CollectionTree({
                     }
                     if (multiSelect) setMultiSelect(null);
                     onSelectNode(node, collectionId);
+                    // Folder rows (incl. the synthesized collection root) expand/
+                    // collapse on row click — nobody should have to hit the 12px
+                    // chevron. Requests still just open. Skipped while searching:
+                    // filtered rows are force-expanded regardless.
+                    if (!search && node.type === "Folder")
+                        toggleExpand(node.id);
                 }}
                 onDoubleClick={(e) => {
                     e.stopPropagation();
