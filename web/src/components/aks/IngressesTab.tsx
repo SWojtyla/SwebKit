@@ -15,15 +15,13 @@ const columns: Column<IngressInfo>[] = [
     {
         header: "Class",
         cell: (ing) => (
-            <span className="text-muted-foreground">
-                {ing.ingressClass ?? "—"}
-            </span>
+            <span className="text-fg-muted">{ing.ingressClass ?? "—"}</span>
         ),
     },
     {
         header: "Hosts",
         cell: (ing) => (
-            <span className="text-xs">
+            <span className="font-mono text-xs">
                 {ing.rules
                     .map((r) => r.host)
                     .filter(Boolean)
@@ -34,7 +32,7 @@ const columns: Column<IngressInfo>[] = [
     {
         header: "Addresses",
         cell: (ing) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="font-mono text-xs text-fg-muted">
                 {ing.addresses.length > 0 ? ing.addresses.join(", ") : "—"}
             </span>
         ),
@@ -42,7 +40,7 @@ const columns: Column<IngressInfo>[] = [
     {
         header: "Rules",
         cell: (ing) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-fg-muted">
                 {ing.rules.length} rule(s)
             </span>
         ),
@@ -99,7 +97,14 @@ export function IngressesTab({
                     label: "Open URL in browser",
                     icon: "🔗",
                     onClick: () => {
-                        if (host) window.open(`http://${host}`, "_blank");
+                        if (!host) return;
+                        try {
+                            const target = new URL(`http://${host}/`);
+                            if (target.host === host)
+                                window.open(target.href, "_blank");
+                        } catch {
+                            return;
+                        }
                     },
                     disabled: !host,
                 },

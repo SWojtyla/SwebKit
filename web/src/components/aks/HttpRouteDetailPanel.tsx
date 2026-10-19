@@ -10,10 +10,10 @@ interface Props {
 function RuleCard({ rule, index }: { rule: HttpRouteRuleInfo; index: number }) {
     return (
         <div
-            className="rounded-lg border p-3 space-y-2"
+            className="rounded-lg border bg-surface-1 p-4 shadow space-y-2"
             data-testid={`httproute-rule-${index}`}
         >
-            <div className="text-xs font-semibold text-muted-foreground">
+            <div className="text-xs font-medium uppercase tracking-wide text-fg-muted">
                 Rule {index + 1}
             </div>
             {rule.matches.length > 0 && (
@@ -23,7 +23,7 @@ function RuleCard({ rule, index }: { rule: HttpRouteRuleInfo; index: number }) {
                         {rule.matches.map((m, i) => (
                             <li
                                 key={i}
-                                className="font-mono text-xs text-muted-foreground"
+                                className="font-mono text-xs text-fg-muted"
                             >
                                 {m}
                             </li>
@@ -38,7 +38,7 @@ function RuleCard({ rule, index }: { rule: HttpRouteRuleInfo; index: number }) {
                         {rule.filters.map((f, i) => (
                             <span
                                 key={i}
-                                className="rounded bg-accent/60 px-1.5 py-0.5 font-mono text-[11px]"
+                                className="rounded bg-accent-soft px-1.5 py-0.5 font-mono text-[11px] text-accent-ink"
                                 data-testid={`httproute-rule-${index}-filter`}
                             >
                                 {f}
@@ -54,7 +54,7 @@ function RuleCard({ rule, index }: { rule: HttpRouteRuleInfo; index: number }) {
                         {rule.backendRefs.map((b, i) => (
                             <li
                                 key={i}
-                                className="font-mono text-xs text-muted-foreground"
+                                className="font-mono text-xs text-fg-muted"
                             >
                                 {b}
                             </li>
@@ -63,7 +63,7 @@ function RuleCard({ rule, index }: { rule: HttpRouteRuleInfo; index: number }) {
                 </div>
             )}
             {(rule.requestTimeout || rule.backendRequestTimeout) && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5 text-xs text-fg-muted">
                     <Clock className="h-3 w-3" />
                     <span data-testid={`httproute-rule-${index}-timeouts`}>
                         {[
@@ -96,16 +96,16 @@ export function HttpRouteDetailPanel({ route, onClose, onViewYaml }: Props) {
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
                         <h2
-                            className="truncate text-lg font-semibold"
+                            className="truncate font-mono text-sm font-semibold"
                             data-testid="httproute-detail-name"
                         >
                             {route.name}
                         </h2>
                         <span
-                            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] ${
+                            className={`inline-flex h-5 items-center gap-1 rounded-full px-2 text-xs font-semibold ${
                                 accepted
-                                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                                    : "bg-destructive/15 text-destructive"
+                                    ? "bg-state-done-soft text-state-done-ink"
+                                    : "bg-state-blocked-soft text-state-blocked-ink"
                             }`}
                             data-testid="httproute-detail-status"
                         >
@@ -117,33 +117,35 @@ export function HttpRouteDetailPanel({ route, onClose, onViewYaml }: Props) {
                             {route.status}
                         </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="mt-0.5 text-xs text-fg-muted">
                         {route.namespace} · HTTPRoute
                     </p>
                 </div>
                 <button
                     onClick={onClose}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                     data-testid="httproute-detail-close"
                 >
                     <X className="h-4 w-4" />
                 </button>
             </div>
             <div className="flex-1 overflow-auto p-4 space-y-4">
-                <div className="rounded-lg border p-3 space-y-2">
-                    <div className="text-xs font-medium">Hostnames</div>
+                <div className="rounded-lg border bg-surface-1 p-4 shadow space-y-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-fg-muted">
+                        Hostnames
+                    </div>
                     <div className="flex flex-wrap gap-1.5">
                         {route.hostnames.length > 0 ? (
                             route.hostnames.map((h) => (
                                 <span
                                     key={h}
-                                    className="rounded bg-accent/60 px-1.5 py-0.5 font-mono text-[11px]"
+                                    className="rounded bg-accent-soft px-1.5 py-0.5 font-mono text-[11px] text-accent-ink"
                                 >
                                     {h}
                                 </span>
                             ))
                         ) : (
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-xs text-fg-muted">
                                 * (all hosts)
                             </span>
                         )}
@@ -153,7 +155,7 @@ export function HttpRouteDetailPanel({ route, onClose, onViewYaml }: Props) {
                             href={url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                            className="inline-flex items-center gap-1 text-xs text-accent-ink hover:underline"
                             data-testid="httproute-detail-url"
                         >
                             <Globe className="h-3 w-3" /> {url}
@@ -161,8 +163,8 @@ export function HttpRouteDetailPanel({ route, onClose, onViewYaml }: Props) {
                     )}
                 </div>
 
-                <div className="rounded-lg border p-3 space-y-2">
-                    <div className="text-xs font-medium">
+                <div className="rounded-lg border bg-surface-1 p-4 shadow space-y-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-fg-muted">
                         Attached gateways / parents
                     </div>
                     {route.parentStatuses.length > 0 ? (
@@ -176,9 +178,9 @@ export function HttpRouteDetailPanel({ route, onClose, onViewYaml }: Props) {
                                         data-testid={`httproute-parent-status-${i}`}
                                     >
                                         {pAccepted ? (
-                                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                                            <CheckCircle2 className="h-3.5 w-3.5 text-state-done" />
                                         ) : (
-                                            <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                                            <AlertCircle className="h-3.5 w-3.5 text-state-blocked" />
                                         )}
                                         <span className="font-mono">
                                             {p.parentRef}
@@ -186,8 +188,8 @@ export function HttpRouteDetailPanel({ route, onClose, onViewYaml }: Props) {
                                         <span
                                             className={`ml-auto text-[11px] ${
                                                 pAccepted
-                                                    ? "text-muted-foreground"
-                                                    : "text-destructive"
+                                                    ? "text-fg-muted"
+                                                    : "text-state-blocked-ink"
                                             }`}
                                         >
                                             {p.status}
@@ -198,14 +200,14 @@ export function HttpRouteDetailPanel({ route, onClose, onViewYaml }: Props) {
                             })}
                         </ul>
                     ) : (
-                        <span className="font-mono text-xs text-muted-foreground">
+                        <span className="font-mono text-xs text-fg-muted">
                             {route.parentRefs.join(", ") || "—"}
                         </span>
                     )}
                 </div>
 
                 <div className="space-y-2">
-                    <div className="text-xs font-medium">
+                    <div className="text-xs font-medium uppercase tracking-wide text-fg-muted">
                         Rules ({route.rules.length})
                     </div>
                     {route.rules.length > 0 ? (
@@ -213,7 +215,7 @@ export function HttpRouteDetailPanel({ route, onClose, onViewYaml }: Props) {
                             <RuleCard key={i} rule={rule} index={i} />
                         ))
                     ) : (
-                        <div className="rounded-lg border p-3 text-xs text-muted-foreground">
+                        <div className="rounded-lg border bg-surface-1 p-4 shadow text-xs text-fg-muted">
                             No rules defined.
                         </div>
                     )}
@@ -222,7 +224,7 @@ export function HttpRouteDetailPanel({ route, onClose, onViewYaml }: Props) {
             <div className="border-t px-4 py-3">
                 <button
                     onClick={onViewYaml}
-                    className="w-full rounded-md border px-3 py-1.5 text-sm hover:bg-accent"
+                    className="h-8 w-full rounded-md border bg-surface-1 px-3 text-sm text-fg hover:bg-surface-2"
                     data-testid="httproute-detail-view-yaml"
                 >
                     View YAML

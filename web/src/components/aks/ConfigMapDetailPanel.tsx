@@ -29,18 +29,18 @@ export function ConfigMapDetailPanel({ configMap, onClose }: Props) {
             <div className="flex items-center justify-between border-b px-4 py-3">
                 <div>
                     <h2
-                        className="text-lg font-semibold"
+                        className="truncate font-mono text-sm font-semibold"
                         data-testid="configmap-detail-name"
                     >
                         {configMap.name}
                     </h2>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="mt-0.5 text-xs text-fg-muted">
                         {configMap.namespace}
                     </p>
                 </div>
                 <button
                     onClick={onClose}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                     data-testid="configmap-detail-close"
                 >
                     <X className="h-4 w-4" />
@@ -48,7 +48,7 @@ export function ConfigMapDetailPanel({ configMap, onClose }: Props) {
             </div>
             <div className="flex-1 overflow-auto p-4">
                 {entries.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-fg-muted">
                         No data keys in this config map
                     </p>
                 ) : (
@@ -58,10 +58,10 @@ export function ConfigMapDetailPanel({ configMap, onClose }: Props) {
                                 key={key}
                                 data-testid={`configmap-data-${key}`}
                             >
-                                <div className="text-xs font-medium text-muted-foreground">
+                                <div className="text-xs font-medium text-fg-muted">
                                     {key}
                                 </div>
-                                <pre className="mt-1 max-h-48 overflow-auto rounded border bg-background p-2 text-xs font-mono whitespace-pre-wrap break-all">
+                                <pre className="mt-1 max-h-48 overflow-auto rounded-md border bg-sunken p-2 text-xs font-mono whitespace-pre-wrap break-all">
                                     {value ??
                                         (error
                                             ? "Failed to load value"

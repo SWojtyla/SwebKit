@@ -525,7 +525,7 @@ export function MessageList({
     if (!entity) {
         return (
             <div
-                className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground"
+                className="flex min-h-0 flex-1 items-center justify-center text-sm text-fg-muted"
                 data-testid="message-list-empty"
             >
                 Select an entity
@@ -536,7 +536,7 @@ export function MessageList({
     if (isLoading) {
         return (
             <div
-                className="min-h-0 flex-1 p-4 text-sm text-muted-foreground"
+                className="min-h-0 flex-1 p-4 text-sm text-fg-muted"
                 data-testid="message-list-loading"
             >
                 Loading messages...
@@ -553,16 +553,16 @@ export function MessageList({
                 className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4 text-center"
                 data-testid="message-list-error"
             >
-                <AlertCircle className="h-6 w-6 shrink-0 text-destructive" />
-                <p className="text-sm font-medium text-destructive">
+                <AlertCircle className="h-6 w-6 shrink-0 text-state-blocked" />
+                <p className="text-sm font-medium text-state-blocked-ink">
                     Couldn't load messages
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-fg-muted">
                     {error instanceof Error ? error.message : String(error)}
                 </p>
                 <button
                     onClick={onRefresh}
-                    className="mt-1 flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                    className="mt-1 flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg hover:bg-surface-2"
                     data-testid="message-list-retry"
                 >
                     <RefreshCw className="h-3 w-3" /> Retry
@@ -696,7 +696,7 @@ export function MessageList({
                                             virtualRow.index,
                                         )
                                     }
-                                    className={`outline-none ${isFocused ? "bg-accent/40" : ""}`}
+                                    className={`outline-none ${isFocused ? "bg-accent-soft/50" : ""}`}
                                     style={{
                                         position: "absolute",
                                         top: 0,

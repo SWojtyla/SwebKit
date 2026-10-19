@@ -42,7 +42,7 @@ export function AutoscalingTab({
     return (
         <div className="space-y-6 p-4">
             <section>
-                <h2 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
                     Horizontal Pod Autoscalers
                 </h2>
                 <HpaTable
@@ -55,7 +55,7 @@ export function AutoscalingTab({
                 />
             </section>
             <section>
-                <h2 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
                     KEDA ScaledJobs
                 </h2>
                 <ScaledJobsTable
@@ -189,7 +189,7 @@ function HpaTable({
             {
                 header: "Target",
                 cell: (hpa) => (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-fg-muted">
                         {hpa.targetKind}/{hpa.targetName}
                     </span>
                 ),
@@ -208,8 +208,8 @@ function HpaTable({
                 cell: (hpa) => (
                     <span title="current → desired">
                         {hpa.currentReplicas}
-                        <span className="text-muted-foreground"> → </span>
-                        <span className="text-success">
+                        <span className="text-fg-muted"> → </span>
+                        <span className="text-state-done-ink">
                             {hpa.desiredReplicas}
                         </span>
                     </span>
@@ -226,13 +226,13 @@ function HpaTable({
                                 hpa.targetCpuUtilizationPercent != null &&
                                 hpa.currentCpuUtilizationPercent >
                                     hpa.targetCpuUtilizationPercent
-                                    ? "text-warning"
-                                    : "text-muted-foreground"
+                                    ? "text-state-needs-ink"
+                                    : "text-fg-muted"
                             }
                         >
                             {hpa.currentCpuUtilizationPercent}%
                             {hpa.targetCpuUtilizationPercent != null && (
-                                <span className="text-muted-foreground">
+                                <span className="text-fg-muted">
                                     {" "}
                                     / {hpa.targetCpuUtilizationPercent}%
                                 </span>
@@ -249,18 +249,18 @@ function HpaTable({
                     <div className="flex flex-wrap gap-1">
                         {hpa.isKedaManaged ? (
                             <span
-                                className="rounded bg-purple-500/20 px-1.5 py-0.5 text-xs text-purple-500"
+                                className="inline-flex h-5 items-center rounded-full bg-state-waiting-soft px-2 text-xs font-semibold text-state-waiting-ink"
                                 title={`KEDA ScaledObject${hpa.scaledObjectName ? `: ${hpa.scaledObjectName}` : ""}`}
                             >
                                 KEDA
                             </span>
                         ) : (
-                            <span className="rounded px-1.5 py-0.5 text-xs text-muted-foreground">
+                            <span className="rounded px-1.5 py-0.5 text-xs text-fg-muted">
                                 HPA
                             </span>
                         )}
                         {hpa.isScalingDisabled && (
-                            <span className="rounded bg-destructive/20 px-1.5 py-0.5 text-xs text-destructive">
+                            <span className="inline-flex h-5 items-center rounded-full bg-state-blocked-soft px-2 text-xs font-semibold text-state-blocked-ink">
                                 Disabled
                             </span>
                         )}
@@ -442,14 +442,14 @@ function ScaledJobsTable({
                             {job.triggers.map((t) => (
                                 <span
                                     key={t}
-                                    className="rounded bg-accent px-1.5 py-0.5 font-mono text-xs"
+                                    className="rounded bg-accent-soft px-1.5 py-0.5 font-mono text-xs text-accent-ink"
                                 >
                                     {t}
                                 </span>
                             ))}
                         </div>
                     ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-fg-muted">—</span>
                     ),
             },
             {
@@ -465,11 +465,13 @@ function ScaledJobsTable({
                 header: "State",
                 cell: (job) =>
                     job.isPaused ? (
-                        <span className="rounded bg-destructive/20 px-1.5 py-0.5 text-xs text-destructive">
+                        <span className="inline-flex h-5 items-center rounded-full bg-state-blocked-soft px-2 text-xs font-semibold text-state-blocked-ink">
                             Paused
                         </span>
                     ) : (
-                        <span className="text-xs text-success">Active</span>
+                        <span className="text-xs text-state-done-ink">
+                            Active
+                        </span>
                     ),
                 sortValue: (job) => (job.isPaused ? 0 : 1),
             },
@@ -568,18 +570,16 @@ function ScaleDialog({
                 <div className="min-w-0">
                     <h2 className="text-sm font-semibold">Scale autoscaler</h2>
                     <p
-                        className="truncate text-xs text-muted-foreground"
+                        className="truncate text-xs text-fg-muted"
                         title={`${namespace}/${name}`}
                     >
                         {namespace} /{" "}
-                        <span className="font-medium text-foreground">
-                            {name}
-                        </span>
+                        <span className="font-medium text-fg">{name}</span>
                     </p>
                 </div>
                 <button
                     onClick={onCancel}
-                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                     aria-label="Close"
                     data-testid={`${testIdPrefix}-close`}
                 >
@@ -608,7 +608,7 @@ function ScaleDialog({
                                     onSave(min, max);
                             }}
                             autoFocus
-                            className="mt-1 block w-24 rounded-md border bg-background px-2 py-1.5 text-sm tabular-nums"
+                            className="mt-1 block h-8 w-24 rounded-md border bg-surface-1 px-2 text-sm tabular-nums"
                             data-testid={`${testIdPrefix}-min`}
                         />
                     </label>
@@ -630,17 +630,17 @@ function ScaleDialog({
                                 if (e.key === "Enter" && !invalid && !isSaving)
                                     onSave(min, max);
                             }}
-                            className="mt-1 block w-24 rounded-md border bg-background px-2 py-1.5 text-sm tabular-nums"
+                            className="mt-1 block h-8 w-24 rounded-md border bg-surface-1 px-2 text-sm tabular-nums"
                             data-testid={`${testIdPrefix}-max`}
                         />
                     </label>
-                    <span className="pb-1.5 text-xs text-muted-foreground">
+                    <span className="pb-1.5 text-xs text-fg-muted">
                         currently {initialMin}–{initialMax}
                     </span>
                 </div>
                 {invalid && (
                     <p
-                        className="text-xs text-destructive"
+                        className="text-xs text-state-blocked-ink"
                         data-testid={`${testIdPrefix}-error`}
                     >
                         Min replicas cannot exceed max replicas.
@@ -653,7 +653,7 @@ function ScaleDialog({
                     onClick={onCancel}
                     disabled={isSaving}
                     title={isSaving ? "Saving…" : undefined}
-                    className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
+                    className="h-8 rounded-md border bg-surface-1 px-3 text-xs text-fg hover:bg-surface-2"
                     data-testid={`${testIdPrefix}-cancel`}
                 >
                     Cancel
@@ -668,7 +668,7 @@ function ScaleDialog({
                               ? `Min must be ≤ max and both ≥ ${minAllowed}`
                               : undefined
                     }
-                    className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                    className="h-8 rounded-md bg-primary px-3 text-xs text-primary-foreground hover:bg-accent-hover disabled:opacity-50"
                     data-testid={`${testIdPrefix}-save`}
                 >
                     {isSaving ? "Scaling…" : "Save"}

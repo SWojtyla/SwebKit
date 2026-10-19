@@ -10,17 +10,19 @@ test.describe("Layout", () => {
         await setDemoMode(page, false);
     });
 
-    test("top bar and status bar are visible", async ({ page }) => {
+    test("top bar and status popover are visible", async ({ page }) => {
         await page.goto("/");
         await expect(page.getByTestId("top-bar")).toBeVisible();
+        await page.getByTestId("status-popover-trigger").click();
         await expect(page.getByTestId("status-bar")).toBeVisible();
         await expect(page.getByTestId("status-bar-connection")).toBeVisible();
     });
 
-    test("status bar shows live health for each infrastructure area", async ({
+    test("status popover shows live health for each infrastructure area", async ({
         page,
     }) => {
         await page.goto("/");
+        await page.getByTestId("status-popover-trigger").click();
         const areas = ["service-bus", "aks", "redis", "storage"];
 
         for (const area of areas) {

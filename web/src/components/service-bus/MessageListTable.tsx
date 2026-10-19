@@ -35,7 +35,7 @@ export function MessageTableEmpty({
 }) {
     return (
         <div
-            className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 text-sm text-muted-foreground"
+            className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 text-sm text-fg-muted"
             data-testid={
                 sourceEmpty
                     ? "message-list-no-messages"
@@ -50,7 +50,7 @@ export function MessageTableEmpty({
             {/* Honest limit: peek returns scheduled messages only inside the fetched window —
                 deeper ones exist on the broker but are invisible here. */}
             {sourceEmpty && viewMode === "scheduled" && (
-                <span className="text-xs text-muted-foreground/80">
+                <span className="text-xs text-fg-subtle">
                     Scheduled messages beyond the peek window aren't returned —
                     raise the peek count to look deeper.
                 </span>
@@ -69,14 +69,14 @@ export function MessageTableHeader({
     onToggleSelectAll: () => void;
 }) {
     const headerCell =
-        "flex items-center whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted-foreground";
+        "flex h-8 items-center whitespace-nowrap px-3 text-left text-xs font-medium uppercase tracking-wide text-fg-muted";
     return (
         <div
-            className="sticky top-0 z-10 grid border-b bg-popover"
+            className="sticky top-0 z-10 grid border-b bg-surface-1"
             style={{ gridTemplateColumns: grid.gridTemplateColumns }}
             role="row"
         >
-            <div className="flex items-center px-2 py-1.5" role="columnheader">
+            <div className="flex h-8 items-center px-3" role="columnheader">
                 <input
                     type="checkbox"
                     checked={allSelected}
@@ -129,7 +129,7 @@ export function MessageRow({
             data-testid={`message-item-${msg.sequenceNumber}`}
             onClick={() => onSelect(msg)}
             role="row"
-            className={`grid cursor-pointer border-b hover:bg-accent ${isActive ? "bg-accent" : ""}`}
+            className={`grid cursor-pointer border-b hover:bg-surface-2 ${isActive ? "bg-accent-soft" : ""}`}
             style={{ gridTemplateColumns: grid.gridTemplateColumns }}
         >
             <div
@@ -159,10 +159,10 @@ export function MessageRow({
                             isDelivery &&
                             grid.viewMode === "dlq" &&
                             msg.deliveryCount > 0
-                                ? "text-destructive"
+                                ? "text-state-blocked-ink"
                                 : ""
-                        } ${isDlqReason ? "text-destructive" : ""} ${
-                            scheduled ? "text-amber-500" : ""
+                        } ${isDlqReason ? "text-state-blocked-ink" : ""} ${
+                            scheduled ? "text-state-waiting-ink" : ""
                         }`}
                     >
                         {isDlqReason && msg.deadLetterReason && (
@@ -184,7 +184,7 @@ export function MessageRow({
                         key={col}
                         title={display}
                         role="cell"
-                        className={`flex min-w-0 items-center truncate px-2 text-muted-foreground ${density}`}
+                        className={`flex min-w-0 items-center truncate px-2 text-fg-muted ${density}`}
                     >
                         <span className="truncate">{display}</span>
                     </div>
@@ -198,7 +198,7 @@ export function MessageRow({
                             key={col.key}
                             title={value}
                             role="cell"
-                            className={`flex min-w-0 items-center truncate px-2 text-muted-foreground ${density} ${col.className ?? ""}`}
+                            className={`flex min-w-0 items-center truncate px-2 text-fg-muted ${density} ${col.className ?? ""}`}
                         >
                             <span className="truncate">{value}</span>
                         </div>
@@ -223,7 +223,7 @@ export interface MessageListFooterProps {
 
 export function MessageListFooter(p: MessageListFooterProps) {
     return (
-        <div className="flex items-center justify-between border-t px-3 py-1 text-xs text-muted-foreground">
+        <div className="flex items-center justify-between border-t px-3 py-1.5 text-xs text-fg-subtle">
             <span data-testid="message-filter-count">
                 {p.totalAvailable != null
                     ? `Showing ${p.filteredCount} of ${p.totalAvailable} message(s)`
@@ -243,7 +243,7 @@ export function MessageListFooter(p: MessageListFooterProps) {
                           ? "All messages are loaded"
                           : undefined
                 }
-                className="rounded border px-2 py-0.5 text-xs hover:bg-accent disabled:opacity-50"
+                className="h-7 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg hover:bg-surface-2 disabled:opacity-50"
             >
                 {p.isLoadingMore
                     ? "Loading…"
@@ -259,7 +259,7 @@ export function MessageListFooter(p: MessageListFooterProps) {
                 disabled={p.isFetching}
                 title="Refresh messages"
                 data-testid="message-list-refresh"
-                className="ml-2 flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent disabled:opacity-50"
+                className="ml-2 flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-50"
             >
                 <RefreshCw
                     className={`h-3 w-3 ${p.isFetching ? "animate-spin" : ""}`}
@@ -272,7 +272,7 @@ export function MessageListFooter(p: MessageListFooterProps) {
             />
             {p.autoRefreshInterval > 0 && (
                 <span
-                    className="ml-2 flex items-center gap-1 text-success"
+                    className="ml-2 flex items-center gap-1 text-state-done-ink"
                     data-testid="auto-refresh-indicator"
                 >
                     <RotateCw className="h-3 w-3 animate-spin" />{" "}

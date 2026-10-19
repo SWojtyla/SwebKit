@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<title>API Client — SwebOS skin</title>
+<link rel="stylesheet" href="swebos.css">
+<style>
+  .api-body { flex: 1; min-height: 0; display: flex; }
+  .ctree {
+    width: 248px; flex: none; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; min-height: 0; background: var(--surface-1);
+  }
+  .ctree-head { display: flex; align-items: center; gap: 2px; padding: 8px 8px 6px; }
+  .ctree-head .sec-label { flex: 1; }
+  .ctree-scroll { flex: 1; overflow: auto; padding: 0 8px 8px; }
+  .tnode { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: var(--radius-md); color: var(--text-muted); font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .tnode:hover { background: var(--surface-2); color: var(--text); }
+  .tnode.active { background: var(--shell-navsel-bg); color: var(--shell-navsel-text); box-shadow: var(--shell-navsel-shadow); }
+  .tnode .nm { overflow: hidden; text-overflow: ellipsis; }
+  .tnode .gitchip { margin-left: auto; }
+  .tindent-1 { margin-left: 16px; }
+  .tindent-2 { margin-left: 32px; }
+
+  .editor { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .reqstrip { flex: none; display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .reqtab {
+    display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px;
+    border: 1px solid transparent; border-bottom: none; border-radius: var(--radius-md) var(--radius-md) 0 0;
+    color: var(--text-muted); font-size: 13px; white-space: nowrap; cursor: pointer; background: transparent;
+  }
+  .reqtab:hover { background: var(--surface-2); color: var(--text); }
+  .reqtab.active { background: var(--surface-1); border-color: var(--border); border-bottom: 2px solid var(--accent); color: var(--text); }
+  .reqtab .dirty { width: 7px; height: 7px; border-radius: 999px; background: var(--state-needs); }
+  .reqtab .x { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; color: var(--text-subtle); }
+  .reqtab .x:hover { background: var(--surface-2); color: var(--text); }
+
+  .urlbar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; }
+  .urlbar .method { width: 92px; font-weight: 600; }
+  .urlbar .url { flex: 1; font-family: var(--font-mono); font-size: 12px; }
+  .metarow { display: flex; align-items: center; gap: 8px; padding: 0 16px 8px; flex-wrap: wrap; }
+  .metarow .name { width: 220px; }
+
+  .reqpane { flex: none; display: flex; flex-direction: column; }
+  .paramgrid { display: flex; flex-direction: column; }
+  .prow { display: grid; grid-template-columns: 28px 1fr 1fr 28px; align-items: center; gap: 8px; padding: 5px 16px; border-bottom: 1px solid var(--border); }
+  .prow .k, .prow .v { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+  .prow.off .k, .prow.off .v { color: var(--text-subtle); text-decoration: line-through; }
+  .prow .x { visibility: hidden; }
+  .prow:hover .x { visibility: visible; }
+
+  .resp { flex: 1; min-height: 240px; border-top: 1px solid var(--border); display: flex; flex-direction: column; }
+  .resp-status { display: flex; align-items: center; gap: 10px; padding: 8px 16px; }
+  .resp-status .stat { font-weight: 600; font-size: 14px; }
+  .respbody { flex: 1; overflow: auto; padding: 10px 16px; font-family: var(--font-mono); font-size: 12px; line-height: 18px; background: var(--surface-sunken); }
+  .respbody pre { margin: 0; }
+</style>
+</head>
+<body>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-dash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
+  <symbol id="i-sb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-aks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V22"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></symbol>
+  <symbol id="i-api" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></symbol>
+  <symbol id="i-sql" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m5 12-3 3 3 3"/><path d="m9 18 3-3-3-3"/></symbol>
+  <symbol id="i-stor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol>
+  <symbol id="i-mon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-cog" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-chevd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chevr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-imp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="i-git" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+</svg>
+
+<div class="app-shell wash">
+  <nav class="shell-sidebar">
+    <div class="shell-brand">
+      <span class="shell-brand-mark"><svg><use href="#i-box"/></svg></span>
+      <span class="shell-brand-name">SwebKit</span>
+      <button class="icon-btn sm" style="margin-left:auto" title="Collapse sidebar"><svg class="ic"><use href="#i-panel"/></svg></button>
+    </div>
+    <div class="shell-nav">
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-dash"/></svg>Dashboard</a>
+      <a class="shell-nav-item" href="service-bus.html"><svg class="ic-20"><use href="#i-sb"/></svg>Service Bus</a>
+      <a class="shell-nav-item" href="aks.html"><svg class="ic-20"><use href="#i-aks"/></svg>AKS</a>
+      <a class="shell-nav-item active" href="#"><svg class="ic-20"><use href="#i-api"/></svg>API Client</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-db"/></svg>Redis</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-sql"/></svg>SQL</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-stor"/></svg>Storage</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-bot"/></svg>AI Agent</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-mon"/></svg>Monitoring</a>
+    </div>
+    <div class="shell-nav-sep"></div>
+    <div>
+      <div class="sec-label" style="padding:2px 8px 4px">Pinned</div>
+      <a class="shell-nav-item" href="#"><svg class="ic"><use href="#i-api"/></svg><span style="overflow:hidden;text-overflow:ellipsis">phonotif-api › Call routing</span></a>
+      <a class="shell-nav-item" href="#"><svg class="ic"><use href="#i-sb"/></svg><span style="overflow:hidden;text-overflow:ellipsis">orders.inbound · DLQ</span></a>
+    </div>
+    <div class="shell-side-foot">
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-cog"/></svg>Settings</a>
+    </div>
+  </nav>
+
+  <div class="shell-main">
+    <div class="shell-topbar">
+      <div class="crumbs"><span>SwebKit</span><span class="sep">›</span><b>API Client</b></div>
+      <div style="flex:1"></div>
+      <a class="shell-pill" href="#" title="Active environment"><svg class="ic" style="width:12px;height:12px"><use href="#i-globe"/></svg><strong>dev</strong></a>
+      <button class="shell-search"><svg class="ic"><use href="#i-search"/></svg>Search or run a command<span class="kbd">Ctrl K</span></button>
+      <button class="icon-btn" title="Notifications"><svg class="ic"><use href="#i-bell"/></svg></button>
+      <button class="icon-btn" title="System: all healthy"><span class="dot dot-done" style="width:10px;height:10px"></span></button>
+    </div>
+
+    <div class="shell-sheet">
+      <div class="api-body">
+        <!-- collections -->
+        <div class="ctree">
+          <div class="ctree-head">
+            <span class="sec-label">Collections</span>
+            <button class="icon-btn sm" title="New collection"><svg class="ic"><use href="#i-plus"/></svg></button>
+            <button class="icon-btn sm" title="Import…"><svg class="ic"><use href="#i-imp"/></svg></button>
+            <button class="icon-btn sm" title="Import cURL"><svg class="ic"><use href="#i-sql"/></svg></button>
+            <button class="icon-btn sm" title="Git"><svg class="ic"><use href="#i-git"/></svg></button>
+            <button class="icon-btn sm" title="Environments"><svg class="ic"><use href="#i-globe"/></svg></button>
+          </div>
+          <div class="ctree-scroll">
+            <div class="tnode"><svg class="ic"><use href="#i-chevd"/></svg><svg class="ic"><use href="#i-link"/></svg><span class="nm">phonotif-api</span><span class="chip chip-sm gitchip mono" style="font-size:11px">git: dev</span></div>
+            <div class="tnode tindent-1"><svg class="ic"><use href="#i-chevd"/></svg><svg class="ic"><use href="#i-folder"/></svg><span class="nm">Calls</span></div>
+            <div class="tnode tindent-2 active"><span class="mtd mtd-get">GET</span><span class="nm">Call routing</span></div>
+            <div class="tnode tindent-2"><span class="mtd mtd-post">POST</span><span class="nm">Send SMS</span></div>
+            <div class="tnode tindent-2"><span class="mtd mtd-get">GET</span><span class="nm">Agent state</span></div>
+            <div class="tnode tindent-1"><svg class="ic"><use href="#i-chevr"/></svg><svg class="ic"><use href="#i-folder"/></svg><span class="nm">Admin</span></div>
+            <div class="tnode"><svg class="ic"><use href="#i-chevd"/></svg><svg class="ic"><use href="#i-folder"/></svg><span class="nm">mail-api</span></div>
+            <div class="tnode tindent-1"><span class="mtd mtd-get">GET</span><span class="nm">Inbox</span></div>
+            <div class="tnode tindent-1"><span class="mtd mtd-post">POST</span><span class="nm">Send mail</span></div>
+            <div class="tnode tindent-1"><span class="mtd mtd-del">DEL</span><span class="nm">Delete draft</span></div>
+            <div class="tnode"><svg class="ic"><use href="#i-chevr"/></svg><svg class="ic"><use href="#i-folder"/></svg><span class="nm">scratchpad</span></div>
+            <div style="padding:8px 8px 2px"><span class="sec-label">Chains</span></div>
+            <div class="tnode"><svg class="ic"><use href="#i-play"/></svg><span class="nm">Ingest → route → notify</span></div>
+          </div>
+        </div>
+
+        <!-- editor -->
+        <div class="editor">
+          <div class="reqstrip">
+            <button class="reqtab active"><span class="mtd mtd-get" style="width:auto">GET</span>Call routing<span class="x" title="Close"><svg class="ic" style="width:10px;height:10px"><use href="#i-x"/></svg></span></button>
+            <button class="reqtab"><span class="mtd mtd-post" style="width:auto">POST</span>Send SMS<span class="dirty" title="Unsaved changes"></span><span class="x"><svg class="ic" style="width:10px;height:10px"><use href="#i-x"/></svg></span></button>
+            <button class="icon-btn sm" title="New request"><svg class="ic"><use href="#i-plus"/></svg></button>
+          </div>
+
+          <div class="urlbar">
+            <select class="select method"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option></select>
+            <input class="input url" value="https://{{host}}/api/v2/calls/{{callId}}/routing?trace=true" spellcheck="false">
+            <button class="btn btn-primary"><svg class="ic"><use href="#i-api"/></svg>Send</button>
+            <button class="btn">Save<span class="kbd">Ctrl S</span></button>
+            <button class="icon-btn bordered" title="More actions"><svg class="ic"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="metarow">
+            <input class="input input-sm name" value="Call routing">
+            <select class="select select-sm"><option>dev</option><option>tst</option><option>prd</option></select>
+            <span class="chip" title="host = dev-phonotif.priv.brio.be"><span class="var-resolved mono">{{host}}</span></span>
+            <span class="chip" title="callId = not set — pick after send"><span class="var-unresolved mono">{{callId}}</span></span>
+            <span class="chip" title="token = credential store (not previewable)"><span class="var-deferred mono">{{token}}</span></span>
+            <a href="#" style="font-size:12px;font-weight:500">Show resolved request</a>
+            <div style="flex:1"></div>
+            <a href="#" style="font-size:12px;font-weight:500">Copy as cURL</a>
+          </div>
+
+          <div class="reqpane">
+            <div class="tabs" style="padding:0 12px">
+              <button class="tab active">Params <span class="cnt">3</span></button>
+              <button class="tab">Headers <span class="cnt">4</span></button>
+              <button class="tab">Body</button>
+              <button class="tab">Auth</button>
+              <button class="tab">Capture <span class="cnt">1</span></button>
+            </div>
+            <div class="paramgrid" style="padding-top:4px">
+              <div class="prow" style="border-bottom:none;padding-top:8px">
+                <span></span><span class="sec-label">Key</span><span class="sec-label">Value</span><span></span>
+              </div>
+              <div class="prow"><input type="checkbox" class="check" checked><span class="k">trace</span><span class="v">true</span><button class="x icon-btn sm"><svg class="ic"><use href="#i-x"/></svg></button></div>
+              <div class="prow"><input type="checkbox" class="check" checked><span class="k">expand</span><span class="v"><span class="var-resolved">segments,agent</span></span><button class="x icon-btn sm"><svg class="ic"><use href="#i-x"/></svg></button></div>
+              <div class="prow"><input type="checkbox" class="check" checked><span class="k">tenant</span><span class="v"><span class="var-resolved">{{tenantId}}</span></span><button class="x icon-btn sm"><svg class="ic"><use href="#i-x"/></svg></button></div>
+              <div class="prow off"><input type="checkbox" class="check"><span class="k">debug</span><span class="v">1</span><button class="x icon-btn sm"><svg class="ic"><use href="#i-x"/></svg></button></div>
+              <div style="padding:8px 16px"><a href="#" style="font-size:13px;font-weight:500">+ Add parameter</a></div>
+            </div>
+          </div>
+
+          <!-- response -->
+          <div class="resp">
+            <div class="resp-status">
+              <span class="badge badge-done"><span class="bdot"></span>200 OK</span>
+              <span class="t-xs muted num">143 ms</span>
+              <span class="t-xs muted num">2.4 KB</span>
+              <div style="flex:1"></div>
+              <span class="t-xs subtle">application/json · phonotif-api › Call routing</span>
+            </div>
+            <div class="tabs" style="padding:0 12px">
+              <button class="tab active">Body</button>
+              <button class="tab">Headers <span class="cnt">11</span></button>
+              <button class="tab">Console</button>
+              <div style="flex:1"></div>
+              <button class="tab" style="min-height:32px">Pretty</button>
+              <button class="tab" style="min-height:32px">Raw</button>
+              <button class="tab" style="min-height:32px">Pick JSONPath</button>
+            </div>
+            <div class="respbody"><pre>{
+  <span class="tok-key">"callId"</span><span class="tok-punct">:</span> <span class="tok-string">"8f2e44b1-9d30-4f2c-a91c-2f6d5c8b1e07"</span><span class="tok-punct">,</span>
+  <span class="tok-key">"state"</span><span class="tok-punct">:</span> <span class="tok-string">"answered"</span><span class="tok-punct">,</span>
+  <span class="tok-key">"queue"</span><span class="tok-punct">:</span> <span class="tok-string">"priority-2"</span><span class="tok-punct">,</span>
+  <span class="tok-key">"answeredBy"</span><span class="tok-punct">:</span> <span class="tok-string">"s.wojtyla"</span><span class="tok-punct">,</span>
+  <span class="tok-key">"answeredAfterMs"</span><span class="tok-punct">:</span> <span class="tok-number">4200</span><span class="tok-punct">,</span>
+  <span class="tok-key">"segments"</span><span class="tok-punct">:</span> <span class="tok-punct">[</span>
+    { <span class="tok-key">"kind"</span><span class="tok-punct">:</span> <span class="tok-string">"ivr"</span><span class="tok-punct">,</span> <span class="tok-key">"durationMs"</span><span class="tok-punct">:</span> <span class="tok-number">3110</span> }<span class="tok-punct">,</span>
+    { <span class="tok-key">"kind"</span><span class="tok-punct">:</span> <span class="tok-string">"queue"</span><span class="tok-punct">,</span> <span class="tok-key">"durationMs"</span><span class="tok-punct">:</span> <span class="tok-number">1090</span><span class="tok-punct">,</span> <span class="tok-key">"recorded"</span><span class="tok-punct">:</span> <span class="tok-bool">true</span> }
+  <span class="tok-punct">],</span>
+  <span class="tok-key">"recording"</span><span class="tok-punct">:</span> { <span class="tok-key">"consent"</span><span class="tok-punct">:</span> <span class="tok-bool">true</span><span class="tok-punct">,</span> <span class="tok-key">"url"</span><span class="tok-punct">:</span> <span class="tok-null">null</span> }
+}</pre></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="theme-switch" id="ts">
+  <div class="ts-label">Theme (prototype)</div>
+  <button data-t=""><span class="sw" style="background:oklch(0.52 0.20 268)"></span>Aurora Light</button>
+  <button data-t="dark"><span class="sw sw-aurora"></span>Aurora Dark</button>
+  <button data-t="clay"><span class="sw" style="background:oklch(0.50 0.13 40)"></span>Clay Light</button>
+  <button data-t="clay dark"><span class="sw sw-clay"></span>Clay Dark</button>
+</div>
+<script>
+(function(){
+  var root = document.documentElement, box = document.getElementById('ts');
+  var saved = localStorage.getItem('swebos-skin-theme');
+  if (saved !== null) root.className = saved;
+  function mark(){ box.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.t === root.className); }); }
+  box.addEventListener('click', function(e){ var b = e.target.closest('button'); if(!b) return; root.className = b.dataset.t; localStorage.setItem('swebos-skin-theme', root.className); mark(); });
+  mark();
+})();
+</script>
+</body>
+</html>

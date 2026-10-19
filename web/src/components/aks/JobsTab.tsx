@@ -24,10 +24,10 @@ const columns: Column<JobInfo>[] = [
             <span
                 className={
                     job.status === "Completed"
-                        ? "text-success"
+                        ? "text-state-queued-ink"
                         : job.status === "Failed"
-                          ? "text-destructive"
-                          : "text-warning"
+                          ? "text-state-blocked-ink"
+                          : "text-state-working-ink"
                 }
             >
                 {job.status}
@@ -42,18 +42,22 @@ const columns: Column<JobInfo>[] = [
     },
     {
         header: "Succeeded",
-        cell: (job) => <span className="text-success">{job.succeeded}</span>,
+        cell: (job) => (
+            <span className="text-state-done-ink">{job.succeeded}</span>
+        ),
         sortValue: (job) => job.succeeded,
     },
     {
         header: "Failed",
-        cell: (job) => <span className="text-destructive">{job.failed}</span>,
+        cell: (job) => (
+            <span className="text-state-blocked-ink">{job.failed}</span>
+        ),
         sortValue: (job) => job.failed,
     },
     {
         header: "Completions",
         cell: (job) => (
-            <span className="text-muted-foreground">
+            <span className="text-fg-muted">
                 {job.desiredCompletions ?? "—"}
             </span>
         ),
@@ -61,7 +65,7 @@ const columns: Column<JobInfo>[] = [
     {
         header: "Source",
         cell: (job) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-fg-muted">
                 {job.sourceKind && job.sourceName
                     ? `${job.sourceKind}/${job.sourceName}`
                     : "—"}

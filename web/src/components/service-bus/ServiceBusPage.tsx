@@ -594,27 +594,27 @@ export function ServiceBusPage() {
         <>
             {selectedEntity && (
                 <div
-                    className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
+                    className="flex items-center gap-2 border-b bg-surface-1 px-3 py-1.5 text-xs"
                     data-testid="sb-breadcrumb"
                 >
                     <button
                         type="button"
                         onClick={() => setSelectedEntity(null)}
-                        className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                        className="flex items-center gap-1 text-fg-muted hover:text-fg"
                         title="Return to entity overview"
                     >
                         <ChevronLeft className="h-3 w-3" /> Overview
                     </button>
-                    <span className="text-muted-foreground">/</span>
+                    <span className="text-fg-subtle">/</span>
                     <span
-                        className="truncate text-muted-foreground"
+                        className="truncate text-fg-muted"
                         title={selectedNs?.alias ?? selectedNsId ?? ""}
                     >
                         {selectedNs?.alias ?? selectedNsId}
                     </span>
-                    <span className="text-muted-foreground">/</span>
+                    <span className="text-fg-subtle">/</span>
                     <span
-                        className="truncate font-medium"
+                        className="truncate font-medium text-fg"
                         title={selectedEntity.name}
                     >
                         {selectedEntity.name}
@@ -632,7 +632,7 @@ export function ServiceBusPage() {
                     <button
                         type="button"
                         onClick={() => setAskAiOpen(true)}
-                        className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                        className="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                         title="Ask AI about this entity"
                         data-testid="sb-ask-ai-btn"
                     >
@@ -657,7 +657,7 @@ export function ServiceBusPage() {
                         scheduled messages indistinguishable from active ones unless the view
                         splits on the stamp. */}
                     <div
-                        className="inline-flex rounded-md border p-0.5"
+                        className="inline-flex gap-0.5 rounded-md bg-surface-2 p-0.5"
                         role="tablist"
                         data-testid="sb-view-selector"
                     >
@@ -692,16 +692,16 @@ export function ServiceBusPage() {
                                 role="tab"
                                 aria-selected={viewMode === s.id}
                                 onClick={() => setViewMode(s.id)}
-                                className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium ${
+                                className={`flex h-6 items-center gap-1 rounded-sm px-2.5 text-xs font-medium ${
                                     viewMode === s.id
-                                        ? "bg-primary/15 text-primary"
-                                        : "text-muted-foreground hover:text-foreground"
+                                        ? "bg-surface-1 text-fg shadow-sm"
+                                        : "text-fg-muted hover:text-fg"
                                 }`}
                             >
                                 {s.icon && <s.icon className="h-3 w-3" />}
                                 {s.label}
                                 {s.count != null && (
-                                    <span className="text-[10px] opacity-80">
+                                    <span className="text-xs tabular-nums opacity-70">
                                         {s.count}
                                     </span>
                                 )}
@@ -845,7 +845,7 @@ export function ServiceBusPage() {
                     onClick={() =>
                         navigate("/settings", { state: { tab: "service-bus" } })
                     }
-                    className="self-start px-4 py-1 text-xs text-primary underline"
+                    className="self-start px-4 py-1 text-xs text-accent-ink underline"
                     data-testid="sb-goto-settings"
                 >
                     Configure namespaces in Settings
@@ -867,7 +867,7 @@ export function ServiceBusPage() {
                         {[
                             <div
                                 key="entities"
-                                className="h-full overflow-auto border-r"
+                                className="h-full overflow-auto border-r bg-surface-1"
                             >
                                 <EntityTree
                                     nsId={selectedNsId}
@@ -891,7 +891,7 @@ export function ServiceBusPage() {
                         <button
                             data-testid="show-entity-tree"
                             onClick={() => setShowEntityTree(true)}
-                            className="flex items-center border-r bg-card px-1.5 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                            className="flex items-center border-r bg-surface-1 px-1.5 py-2 text-xs font-medium uppercase tracking-wide text-fg-muted hover:bg-surface-2 hover:text-fg"
                             title="Show entity tree"
                         >
                             Entities

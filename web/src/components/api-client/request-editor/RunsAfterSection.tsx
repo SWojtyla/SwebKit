@@ -117,7 +117,7 @@ export function RunsAfterSection({
             data-testid="runs-after-section"
         >
             <span
-                className="flex shrink-0 items-center gap-1 text-muted-foreground"
+                className="flex shrink-0 items-center gap-1 text-fg-muted"
                 title="Requests that run before this one when sent with dependencies"
             >
                 <ListOrdered className="h-3.5 w-3.5" />
@@ -129,10 +129,10 @@ export function RunsAfterSection({
                     <span
                         key={depId}
                         data-testid={`dep-chip-${depId}`}
-                        className={`flex items-center gap-1 rounded border px-1.5 py-0.5 ${
+                        className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 ${
                             missing
-                                ? "border-dashed text-muted-foreground"
-                                : "bg-muted/40"
+                                ? "border-dashed text-fg-muted"
+                                : "bg-surface-2"
                         }`}
                         title={
                             missing
@@ -146,7 +146,7 @@ export function RunsAfterSection({
                             type="button"
                             data-testid={`dep-remove-${depId}`}
                             aria-label={`Remove prerequisite ${name}`}
-                            className="rounded p-0.5 hover:bg-accent"
+                            className="rounded p-0.5 hover:bg-surface-2"
                             onClick={() =>
                                 onChange(deps.filter((d) => d !== depId))
                             }
@@ -160,7 +160,7 @@ export function RunsAfterSection({
                 <button
                     type="button"
                     data-testid="dep-add-button"
-                    className="flex items-center gap-1 rounded border border-dashed px-1.5 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                    className="flex items-center gap-1 rounded-md border border-dashed px-1.5 py-0.5 text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-50"
                     onClick={() => setPickerOpen((v) => !v)}
                     aria-haspopup="menu"
                     aria-expanded={pickerOpen}
@@ -182,7 +182,7 @@ export function RunsAfterSection({
                         onKeyDown={onListKeyDown}
                     >
                         {candidates.length === 0 && (
-                            <div className="px-3 py-1.5 text-xs text-muted-foreground">
+                            <div className="px-3 py-1.5 text-xs text-fg-muted">
                                 No available requests — every other request is
                                 already a prerequisite or would create a cycle.
                             </div>
@@ -205,8 +205,7 @@ export function RunsAfterSection({
             </div>
             {hasCycle && (
                 <span
-                    className="text-xs"
-                    style={{ color: "var(--destructive)" }}
+                    className="text-xs text-state-blocked-ink"
                     data-testid="dep-cycle-warning"
                 >
                     Dependency cycle detected — a run would be rejected.

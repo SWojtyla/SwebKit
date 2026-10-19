@@ -95,16 +95,16 @@ export function actionsColumn<T extends NamedResource>(
     return {
         header: "Actions",
         sortable: false,
-        className: "py-2 pr-4 w-px whitespace-nowrap",
+        className: "w-px whitespace-nowrap py-1 pr-4",
         cell: (resource) => (
             <div
-                className="flex items-center gap-1"
+                className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
                 onClick={(e) => e.stopPropagation()}
             >
                 {opts.onPrimary && (
                     <button
                         onClick={() => opts.onPrimary!(resource)}
-                        className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
+                        className="h-7 rounded-md border border-border bg-surface-1 px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                         data-testid={`${opts.testIdPrefix}-scale-${resource.name}`}
                     >
                         {opts.primaryLabel ?? "Scale"}
@@ -112,7 +112,7 @@ export function actionsColumn<T extends NamedResource>(
                 )}
                 <button
                     onClick={(e) => ws.showContextMenu(e, buildMenu(resource))}
-                    className="rounded border border-border px-1.5 py-1 text-xs text-muted-foreground hover:bg-accent/50"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                     aria-label={`More actions for ${resource.name}`}
                     title="More actions"
                     data-testid={`${opts.testIdPrefix}-actions-${resource.name}`}

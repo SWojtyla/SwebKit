@@ -97,13 +97,13 @@ export function AksNavRail() {
 
     return (
         <nav
-            className={`flex flex-col border-r bg-card/30 ${
-                minimized ? "w-11" : "w-56"
+            className={`flex flex-col border-r bg-surface-1 ${
+                minimized ? "w-11" : "w-52"
             }`}
             data-testid="aks-tabs"
             aria-label="AKS resource views"
         >
-            <div className="flex items-center gap-1 border-b p-1.5">
+            <div className="flex items-center gap-1 border-b p-2">
                 {!minimized && (
                     <input
                         type="text"
@@ -117,7 +117,7 @@ export function AksNavRail() {
                         }}
                         placeholder="Filter resources…"
                         data-testid="aks-nav-filter"
-                        className="h-6 min-w-0 flex-1 rounded border bg-background px-2 text-xs outline-none focus:border-primary"
+                        className="h-7 min-w-0 flex-1 rounded-md border bg-surface-1 px-2 text-xs placeholder:text-fg-subtle outline-none focus:border-focus"
                     />
                 )}
                 <button
@@ -130,7 +130,7 @@ export function AksNavRail() {
                         minimized ? "Expand navigator" : "Collapse navigator"
                     }
                     data-testid="aks-nav-minimize"
-                    className="ml-auto shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                 >
                     {minimized ? (
                         <PanelLeftOpen className="h-3.5 w-3.5" />
@@ -140,7 +140,7 @@ export function AksNavRail() {
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto py-1">
+            <div className="flex-1 overflow-y-auto px-2 py-1">
                 {navGroups.map((group) => {
                     const items = visibleItems.get(group.id) ?? [];
                     if (query && items.length === 0) return null;
@@ -161,7 +161,7 @@ export function AksNavRail() {
                                     aria-expanded={expanded}
                                     data-testid={`aks-nav-group-${group.id}`}
                                     title={group.desc}
-                                    className="flex w-full items-center gap-1 px-2.5 pb-0.5 pt-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                                    className="flex w-full items-center gap-1 px-2 pb-1 pt-3 text-xs font-medium text-fg-muted hover:text-fg"
                                 >
                                     {expanded ? (
                                         <ChevronDown className="h-3 w-3 shrink-0" />
@@ -193,21 +193,21 @@ export function AksNavRail() {
                                                         : item.desc
                                                 }
                                                 data-testid={`aks-tab-${item.id}`}
-                                                className={`flex w-full items-center gap-2 border-l-2 py-1 text-left text-[13px] ${
+                                                className={`flex h-7 w-full items-center gap-2 rounded-md text-left text-sm ${
                                                     minimized
                                                         ? "justify-center px-0"
-                                                        : "px-3"
+                                                        : "px-2"
                                                 } ${
                                                     isActive
-                                                        ? "border-primary bg-primary/10 font-semibold text-primary"
-                                                        : "border-transparent text-foreground hover:bg-accent"
+                                                        ? "bg-sidebar-active text-sidebar-active-foreground shadow-[var(--shell-navsel-shadow)]"
+                                                        : "text-fg-muted hover:bg-surface-2 hover:text-fg"
                                                 }`}
                                             >
                                                 <span
                                                     className={`w-4 shrink-0 text-center text-xs ${
                                                         isActive
-                                                            ? "text-primary"
-                                                            : "text-muted-foreground"
+                                                            ? ""
+                                                            : "text-fg-subtle"
                                                     }`}
                                                 >
                                                     {item.glyph}
@@ -227,7 +227,7 @@ export function AksNavRail() {
                 })}
                 {query && firstMatch === undefined && (
                     <p
-                        className="px-3 py-2 text-xs text-muted-foreground"
+                        className="px-3 py-2 text-xs text-fg-muted"
                         data-testid="aks-nav-no-results"
                     >
                         No resources match "{filter.trim()}"
@@ -238,7 +238,7 @@ export function AksNavRail() {
             {/* Where-am-I footer: the rail highlights the active item, but a
                 collapsed section can hide it — the breadcrumb keeps the anchor. */}
             <div
-                className="truncate border-t px-2.5 py-1.5 text-[11px] text-muted-foreground"
+                className="truncate border-t px-2.5 py-1.5 text-xs text-fg-subtle"
                 data-testid="aks-nav-current"
             >
                 {minimized

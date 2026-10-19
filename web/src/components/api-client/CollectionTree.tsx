@@ -719,7 +719,7 @@ export function CollectionTree({
             onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) =>
                 sectionKeyDown(e, rowIndex),
             className:
-                "mt-1 flex items-center gap-1 border-t px-2 py-1 text-[11px] text-muted-foreground outline-none focus-visible:bg-accent",
+                "mt-1 flex items-center gap-1 border-t px-2 py-1 text-xs font-medium text-fg-muted outline-none focus-visible:bg-surface-2",
         };
 
         // The internal-store section header carries the A3 store path,
@@ -742,7 +742,7 @@ export function CollectionTree({
                                 e.stopPropagation();
                                 void handleRevealStore();
                             }}
-                            className="shrink-0 rounded p-0.5 hover:bg-accent"
+                            className="shrink-0 rounded p-0.5 hover:bg-surface-2"
                             title="Reveal in explorer"
                             aria-label="Reveal in explorer"
                             data-testid="collection-store-reveal"
@@ -756,13 +756,13 @@ export function CollectionTree({
                                 e.stopPropagation();
                                 void handleCopyStorePath();
                             }}
-                            className="shrink-0 rounded p-0.5 hover:bg-accent"
+                            className="shrink-0 rounded p-0.5 hover:bg-surface-2"
                             title="Copy path"
                             aria-label="Copy path"
                             data-testid="collection-store-copy"
                         >
                             {storeCopied ? (
-                                <Check className="h-3 w-3 text-success" />
+                                <Check className="h-3 w-3 text-state-done" />
                             ) : (
                                 <Copy className="h-3 w-3" />
                             )}
@@ -796,8 +796,7 @@ export function CollectionTree({
                 </span>
                 {!root.isValid && (
                     <span
-                        className="flex shrink-0 items-center"
-                        style={{ color: "var(--warning)" }}
+                        className="flex shrink-0 items-center text-state-needs"
                         title={
                             root.diagnostics.join("\n") ||
                             "This root failed to load"
@@ -813,7 +812,7 @@ export function CollectionTree({
                             e.stopPropagation();
                             onOpenGit(root);
                         }}
-                        className="flex shrink-0 items-center gap-0.5 rounded border px-1 py-0.5 hover:bg-accent"
+                        className="flex h-5 shrink-0 items-center gap-1 rounded-md border bg-surface-1 px-1.5 font-mono text-[11px] text-fg-muted hover:bg-surface-2 hover:text-fg"
                         title={`Open ${root.repositoryRoot ?? root.path} in the Git drawer`}
                         data-testid={`linked-root-git-${root.id}`}
                     >
@@ -833,7 +832,7 @@ export function CollectionTree({
                         e.stopPropagation();
                         onAddCollection(root.id);
                     }}
-                    className="shrink-0 rounded p-0.5 hover:bg-accent"
+                    className="shrink-0 rounded p-0.5 hover:bg-surface-2"
                     title="New collection in this root"
                     aria-label="New collection in this root"
                     data-testid={`linked-root-add-collection-${root.id}`}
@@ -845,7 +844,7 @@ export function CollectionTree({
                         e.stopPropagation();
                         onReloadRoot(root.id);
                     }}
-                    className="shrink-0 rounded p-0.5 hover:bg-accent"
+                    className="shrink-0 rounded p-0.5 hover:bg-surface-2"
                     title="Reload from disk"
                     aria-label="Reload from disk"
                     data-testid={`linked-root-reload-${root.id}`}
@@ -858,7 +857,7 @@ export function CollectionTree({
                             e.stopPropagation();
                             onRevealPath(root.path);
                         }}
-                        className="shrink-0 rounded p-0.5 hover:bg-accent"
+                        className="shrink-0 rounded p-0.5 hover:bg-surface-2"
                         title="Reveal folder in explorer"
                         aria-label="Reveal folder in explorer"
                         data-testid={`linked-root-reveal-${root.id}`}
@@ -871,7 +870,7 @@ export function CollectionTree({
                         e.stopPropagation();
                         setRemoveRootTarget(root);
                     }}
-                    className="shrink-0 rounded p-0.5 hover:bg-accent"
+                    className="shrink-0 rounded p-0.5 hover:bg-surface-2"
                     title="Unregister — files stay on disk"
                     aria-label="Unregister — files stay on disk"
                     data-testid={`linked-root-remove-${root.id}`}
@@ -921,13 +920,13 @@ export function CollectionTree({
                 aria-expanded={node.type === "Folder" ? isExpanded : undefined}
                 tabIndex={0}
                 data-multi-selected={isMultiSelected || undefined}
-                className={`group flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-sm ${
+                className={`group flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-sm ${
                     isSelected
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-accent"
+                        ? "bg-sidebar-active text-sidebar-active-foreground"
+                        : "text-fg-muted hover:bg-surface-2 hover:text-fg"
                 } ${
                     isMultiSelected
-                        ? "tree-node-selected ring-1 ring-inset ring-primary/70 bg-accent/40"
+                        ? "tree-node-selected ring-1 ring-inset ring-primary/70 bg-accent-soft/40"
                         : ""
                 } ${isCollection ? "font-medium" : ""} ${
                     isDragging ? "tree-dragging" : ""
@@ -940,7 +939,7 @@ export function CollectionTree({
                             ? "tree-drag-over-inside"
                             : ""
                 }`}
-                style={{ paddingLeft: `${12 + depth * 16}px` }}
+                style={{ paddingLeft: `${8 + depth * 16}px` }}
                 // Focus explicitly: Chromium does not focus a `draggable` element on
                 // mousedown, so making the row a drag source otherwise silently broke
                 // click-then-Alt+Arrow keyboard reordering.
@@ -986,7 +985,7 @@ export function CollectionTree({
                     data-testid={`drag-handle-${row.id}`}
                     aria-label="Drag to reorder"
                     draggable={draggable}
-                    className={`shrink-0 p-0.5 ${draggable ? "cursor-grab hover:text-primary" : "cursor-not-allowed opacity-30"}`}
+                    className={`shrink-0 p-0.5 ${draggable ? "cursor-grab hover:text-accent-ink" : "cursor-not-allowed opacity-30"}`}
                     onClick={(e) => e.stopPropagation()}
                     onDragStart={(e) => handleDragStart(e, row)}
                     onDragEnd={handleDragEnd}
@@ -1018,7 +1017,7 @@ export function CollectionTree({
                             <MethodBadge
                                 method={method}
                                 variant="text"
-                                className="w-10 text-right"
+                                className="w-[38px] text-right"
                             />
                         )}
                         <FileText className="h-3.5 w-3.5 shrink-0 opacity-50" />
@@ -1039,7 +1038,7 @@ export function CollectionTree({
                             }
                         }}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex-1 rounded border bg-background px-1 py-0 text-sm"
+                        className="flex-1 rounded-md border bg-surface-1 px-1 py-0 text-sm"
                     />
                 ) : (
                     <span className="flex-1 truncate">{node.name}</span>
@@ -1069,16 +1068,19 @@ export function CollectionTree({
     return (
         <>
             <div
-                className="flex h-full w-full flex-col border-r bg-card"
+                className="flex h-full w-full flex-col border-r bg-surface-1"
                 data-testid="collection-tree"
             >
-                {/* Header */}
-                <div className="flex items-center justify-between border-b p-2">
-                    <span className="text-sm font-semibold">Collections</span>
-                    <div className="flex gap-1">
+                {/* Header — spec .ctree-head: small muted section label + 28px
+                    ghost icon buttons (.icon-btn.sm). */}
+                <div className="flex items-center justify-between gap-1 border-b px-2 pb-1.5 pt-2">
+                    <span className="flex-1 text-xs font-medium text-fg-muted">
+                        Collections
+                    </span>
+                    <div className="flex gap-0.5">
                         <button
                             data-testid="add-collection-button"
-                            className="rounded p-1 hover:bg-accent"
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                             title="Add collection"
                             onClick={() => onAddCollection()}
                         >
@@ -1087,7 +1089,7 @@ export function CollectionTree({
                         {!isDemo && (
                             <button
                                 data-testid="link-folder-button"
-                                className="rounded p-1 hover:bg-accent"
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                                 title="Link a folder as a collection root"
                                 onClick={onLinkFolder}
                             >
@@ -1096,7 +1098,7 @@ export function CollectionTree({
                         )}
                         <button
                             data-testid="add-request-button"
-                            className="rounded p-1 hover:bg-accent disabled:opacity-40"
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-40"
                             title="Add request"
                             disabled={!selectedCollectionId}
                             onClick={() =>
@@ -1108,7 +1110,7 @@ export function CollectionTree({
                         </button>
                         <button
                             data-testid="add-folder-button"
-                            className="rounded p-1 hover:bg-accent disabled:opacity-40"
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-40"
                             title="Add folder"
                             disabled={!selectedCollectionId}
                             onClick={() =>
@@ -1123,7 +1125,7 @@ export function CollectionTree({
                         />
                         <button
                             onClick={() => setShowCurlImport(true)}
-                            className="flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs hover:bg-accent"
+                            className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                             title="Import from cURL"
                             data-testid="curl-import-button"
                         >
@@ -1132,28 +1134,28 @@ export function CollectionTree({
                     </div>
                 </div>
 
-                {/* Search + expand/collapse */}
+                {/* Search + expand/collapse — sunken field per .shell-search */}
                 <div className="flex items-center gap-1 border-b px-2 py-1">
-                    <Search className="h-3 w-3 shrink-0 text-muted-foreground" />
+                    <Search className="h-3 w-3 shrink-0 text-fg-muted" />
                     <input
                         type="text"
                         data-testid="collection-search"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder="Filter..."
-                        className="flex-1 rounded border bg-background px-2 py-0.5 text-xs"
+                        className="h-7 flex-1 rounded-md border bg-sunken px-2 text-xs placeholder:text-fg-subtle"
                     />
                     <button
                         onClick={expandAll}
                         title="Expand all"
-                        className="rounded p-0.5 text-xs text-muted-foreground hover:bg-accent"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                     >
                         <ChevronDown className="h-3 w-3" />
                     </button>
                     <button
                         onClick={collapseAll}
                         title="Collapse all"
-                        className="rounded p-0.5 text-xs text-muted-foreground hover:bg-accent"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                     >
                         <ChevronRight className="h-3 w-3" />
                     </button>
@@ -1168,12 +1170,12 @@ export function CollectionTree({
                     aria-label="Collections"
                 >
                     {collections.length === 0 && (
-                        <div className="p-2 text-xs text-muted-foreground">
+                        <div className="p-2 text-xs text-fg-muted">
                             No collections. Click + to create one.
                         </div>
                     )}
                     {flatRows.length === 0 && collections.length > 0 && (
-                        <div className="p-2 text-xs text-muted-foreground">
+                        <div className="p-2 text-xs text-fg-muted">
                             No matching collections.
                         </div>
                     )}
@@ -1419,7 +1421,7 @@ export function CollectionTree({
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         {chains.length === 0 && (
-                                            <div className="px-3 py-1.5 text-xs text-muted-foreground">
+                                            <div className="px-3 py-1.5 text-xs text-fg-muted">
                                                 No chains yet
                                             </div>
                                         )}
@@ -1441,7 +1443,7 @@ export function CollectionTree({
                                                 <span className="min-w-0 flex-1 truncate text-left">
                                                     {chain.name}
                                                 </span>
-                                                <span className="shrink-0 text-[10px] text-muted-foreground">
+                                                <span className="shrink-0 text-[10px] text-fg-subtle">
                                                     {chain.stepCount}
                                                 </span>
                                             </button>

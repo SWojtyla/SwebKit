@@ -331,7 +331,7 @@ export function CollectionImportButton({ onOpen }: { onOpen: () => void }) {
     return (
         <button
             onClick={onOpen}
-            className="flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs hover:bg-accent"
+            className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
             title="Import collection"
             data-testid="collection-import-button"
         >

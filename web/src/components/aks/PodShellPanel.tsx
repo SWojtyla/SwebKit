@@ -195,7 +195,7 @@ export function PodShellPanel({
 
     return (
         <div
-            className="relative flex shrink-0 flex-col border-t bg-card"
+            className="relative flex shrink-0 flex-col border-t bg-surface-1"
             style={{ height }}
             role="region"
             aria-label={`Shell in pod ${pod}`}
@@ -217,13 +217,11 @@ export function PodShellPanel({
                         {pod}
                     </span>
                     {container && (
-                        <span className="text-muted-foreground">
-                            / {container}
-                        </span>
+                        <span className="text-fg-muted">/ {container}</span>
                     )}
                     {status === "connecting" && (
                         <span
-                            className="text-xs text-muted-foreground"
+                            className="text-xs text-fg-muted"
                             data-testid="pod-shell-status"
                         >
                             Connecting…
@@ -231,7 +229,7 @@ export function PodShellPanel({
                     )}
                     {status === "closed" && (
                         <span
-                            className="text-xs text-muted-foreground"
+                            className="text-xs text-fg-muted"
                             data-testid="pod-shell-status"
                         >
                             Session ended
@@ -239,7 +237,7 @@ export function PodShellPanel({
                     )}
                     {status === "error" && (
                         <span
-                            className="text-xs text-destructive"
+                            className="text-xs text-state-blocked-ink"
                             data-testid="pod-shell-status"
                         >
                             {error}

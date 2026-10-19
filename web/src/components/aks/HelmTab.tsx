@@ -17,22 +17,22 @@ interface HelmTabProps {
 // warning-yellow as an in-progress `pending-*` state, which reads as "still working on it"
 // rather than "this release is actually broken."
 function helmStatusClass(status: string): string {
-    if (status === "deployed") return "text-success";
-    if (status === "failed") return "text-destructive";
-    return "text-warning";
+    if (status === "deployed") return "text-state-done-ink";
+    if (status === "failed") return "text-state-blocked-ink";
+    return "text-state-working-ink";
 }
 
 const columns: Column<HelmReleaseInfo>[] = [
     {
         header: "Chart",
         cell: (rel) => (
-            <span className="text-muted-foreground">{rel.chart ?? "—"}</span>
+            <span className="text-fg-muted">{rel.chart ?? "—"}</span>
         ),
     },
     {
         header: "Version",
         cell: (rel) => (
-            <span className="text-muted-foreground">
+            <span className="text-fg-muted">
                 {rel.appVersion ?? rel.chartVersion ?? "—"}
             </span>
         ),
@@ -53,7 +53,7 @@ const columns: Column<HelmReleaseInfo>[] = [
     {
         header: "Updated",
         cell: (rel) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-fg-muted">
                 {rel.updated ? formatLocalDateTime(rel.updated) : "—"}
             </span>
         ),

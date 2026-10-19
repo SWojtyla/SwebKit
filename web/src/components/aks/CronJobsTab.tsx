@@ -134,7 +134,7 @@ export function CronJobsTab({
                             setScheduleTarget(cj);
                         }}
                         title={`Edit schedule${cj.timeZone ? ` (evaluates in ${cj.timeZone})` : ""}`}
-                        className="rounded px-1 font-mono text-xs hover:bg-accent/50 hover:underline"
+                        className="rounded px-1 font-mono text-xs hover:bg-accent hover:underline"
                         data-testid={`cronjob-schedule-${cj.name}`}
                     >
                         {cj.schedule ?? "—"}
@@ -145,9 +145,9 @@ export function CronJobsTab({
                 header: "Suspend",
                 cell: (cj) =>
                     cj.suspend ? (
-                        <span className="text-warning">Yes</span>
+                        <span className="text-state-needs-ink">Yes</span>
                     ) : (
-                        <span className="text-success">No</span>
+                        <span className="text-state-done-ink">No</span>
                     ),
                 sortValue: (cj) => (cj.suspend ? 0 : 1),
             },
@@ -162,7 +162,7 @@ export function CronJobsTab({
                     if (cj.suspend || !cj.schedule) {
                         return (
                             <span
-                                className="text-xs text-muted-foreground"
+                                className="text-xs text-fg-muted"
                                 title={
                                     cj.suspend
                                         ? "CronJob is suspended"
@@ -179,7 +179,7 @@ export function CronJobsTab({
                     });
                     return (
                         <span
-                            className="text-xs text-muted-foreground"
+                            className="text-xs text-fg-muted"
                             title={
                                 cj.timeZone
                                     ? `Schedule evaluates in ${cj.timeZone}; shown in your local time`
@@ -201,7 +201,7 @@ export function CronJobsTab({
             {
                 header: "Last Schedule",
                 cell: (cj) => (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-fg-muted">
                         {formatLocalDateTime(cj.lastScheduleTime) || "—"}
                     </span>
                 ),
@@ -210,7 +210,7 @@ export function CronJobsTab({
             {
                 header: "Last Success",
                 cell: (cj) => (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-fg-muted">
                         {formatLocalDateTime(cj.lastSuccessfulTime) || "—"}
                     </span>
                 ),
@@ -219,6 +219,7 @@ export function CronJobsTab({
             {
                 header: "Actions",
                 sortable: false,
+                className: "w-px whitespace-nowrap py-1 pr-4",
                 cell: (cj) => (
                     <button
                         onClick={(e) => {
@@ -229,7 +230,7 @@ export function CronJobsTab({
                         title={
                             suspendMutation.isPending ? "Updating…" : undefined
                         }
-                        className="rounded border border-border px-2 py-1 text-xs hover:bg-accent/50"
+                        className="h-7 rounded-md border bg-surface-1 px-2 text-xs text-fg-muted opacity-0 transition-opacity hover:bg-surface-2 hover:text-fg group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
                         data-testid={`cronjob-suspend-${cj.name}`}
                     >
                         {cj.suspend ? "Resume" : "Suspend"}

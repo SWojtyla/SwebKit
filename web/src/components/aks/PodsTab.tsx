@@ -20,6 +20,7 @@ import {
 } from "@/lib/aksUsage";
 import { showNotification } from "@/lib/tauri-bridge";
 import { ResourceTable, type Column } from "./shared/ResourceTable";
+import { PhaseBadge } from "./shared/PhaseBadge";
 import {
     useAksActions,
     useAksCluster,
@@ -61,7 +62,7 @@ function formatAge(startTime: string | null | undefined): string {
 function MetricBar({ value, className }: { value: number; className: string }) {
     const pct = Math.min(100, Math.max(0, value * 100));
     return (
-        <div className="h-1.5 w-16 rounded-full bg-muted">
+        <div className="h-1.5 w-16 rounded-full bg-surface-2">
             <div
                 className={`h-1.5 rounded-full ${className}`}
                 style={{ width: `${pct}%` }}
@@ -88,20 +89,6 @@ function aggregatePodUsage(metric: PodMetricInfo | undefined) {
 function podHealthRank(pod: PodInfo): number {
     const unhealthy = pod.status !== "Running" || pod.restartCount > 0;
     return unhealthy ? 0 : 1;
-}
-
-function PodStatusBadge({ status }: { status: string }) {
-    const color =
-        status === "Running"
-            ? "text-success"
-            : status === "Pending"
-              ? "text-warning"
-              : status === "Failed" ||
-                  status.includes("BackOff") ||
-                  status.includes("Error")
-                ? "text-destructive"
-                : "text-muted-foreground";
-    return <span className={color}>{status}</span>;
 }
 
 export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
@@ -322,14 +309,18 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
         () => [
             {
                 header: "Status",
-                cell: (pod) => <PodStatusBadge status={pod.status} />,
+                cell: (pod) => <PhaseBadge phase={pod.status} />,
                 sortValue: (pod) => pod.status,
             },
             {
                 header: "Ready",
                 cell: (pod) => (
                     <span
-                        className={pod.ready ? "text-success" : "text-warning"}
+                        className={
+                            pod.ready
+                                ? "text-state-done-ink"
+                                : "text-state-needs-ink"
+                        }
                     >
                         {pod.readyDisplay}
                     </span>
@@ -344,7 +335,7 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
                     if (!usage)
                         return (
                             <span
-                                className="text-xs text-muted-foreground"
+                                className="text-xs text-fg-muted"
                                 title="Metrics unavailable — metrics-server may not be installed or pod has no resource data"
                             >
                                 —
@@ -388,7 +379,7 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
                     if (!usage)
                         return (
                             <span
-                                className="text-xs text-muted-foreground"
+                                className="text-xs text-fg-muted"
                                 title="Metrics unavailable — metrics-server may not be installed or pod has no resource data"
                             >
                                 —
@@ -428,16 +419,18 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
                 header: "Restarts",
                 cell: (pod) =>
                     pod.restartCount > 0 ? (
-                        <span className="text-warning">{pod.restartCount}</span>
+                        <span className="font-medium text-state-needs-ink">
+                            {pod.restartCount}
+                        </span>
                     ) : (
-                        <span className="text-muted-foreground">0</span>
+                        <span className="text-fg-subtle">0</span>
                     ),
                 sortValue: (pod) => pod.restartCount,
             },
             {
                 header: "Node",
                 cell: (pod) => (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="font-mono text-xs text-fg-muted">
                         {pod.nodeName ?? "—"}
                     </span>
                 ),
@@ -445,7 +438,7 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
             {
                 header: "Age",
                 cell: (pod) => (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-fg-muted">
                         {formatAge(pod.startTime)}
                     </span>
                 ),
@@ -456,7 +449,7 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
             {
                 header: "Actions",
                 sortable: false,
-                className: "py-2 pr-4 w-px whitespace-nowrap",
+                className: "w-px whitespace-nowrap py-1 pr-4",
                 cell: (pod) => (
                     <button
                         onClick={(e) => {
@@ -467,7 +460,7 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
                         title={
                             deleteMutation.isPending ? "Deleting…" : undefined
                         }
-                        className="rounded border border-destructive px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
+                        className="h-7 rounded-md border border-state-blocked/40 px-2 text-xs text-state-blocked-ink opacity-0 transition-opacity hover:bg-state-blocked-soft group-hover:opacity-100 focus:opacity-100"
                     >
                         Delete
                     </button>
@@ -478,19 +471,20 @@ export function PodsTab({ targets, isMulti, showContext }: PodsTabProps) {
     );
 
     return (
-        <div className="p-4">
-            <div className="mb-2 flex items-center gap-2 px-4 pt-4">
-                <label className="flex items-center gap-2 text-sm">
+        <div>
+            <div className="flex items-center gap-3 border-b px-4 py-2">
+                <label className="flex items-center gap-2 text-sm text-fg-muted">
                     <input
                         type="checkbox"
                         checked={hideCompleted}
                         onChange={(e) => setHideCompleted(e.target.checked)}
+                        className="h-3.5 w-3.5 accent-primary"
                     />
                     Hide completed pods
                 </label>
                 <button
                     onClick={watchNamespace}
-                    className="ml-auto flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                    className="ml-auto flex h-7 items-center gap-1.5 rounded-md border bg-surface-1 px-2.5 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                     title="Create an alert rule watching pod restarts"
                     data-testid="pods-watch-namespace"
                 >

@@ -16,13 +16,15 @@ const columns: Column<ServiceInfo>[] = [
     {
         header: "Cluster IP",
         cell: (svc) => (
-            <span className="text-muted-foreground">{svc.clusterIp}</span>
+            <span className="font-mono text-xs text-fg-muted">
+                {svc.clusterIp}
+            </span>
         ),
     },
     {
         header: "External",
         cell: (svc) => (
-            <span className="text-muted-foreground">
+            <span className="font-mono text-xs text-fg-muted">
                 {svc.externalAddresses.length > 0
                     ? svc.externalAddresses.join(", ")
                     : "—"}
@@ -32,7 +34,7 @@ const columns: Column<ServiceInfo>[] = [
     {
         header: "Ports",
         cell: (svc) => (
-            <span className="text-xs">
+            <span className="font-mono text-xs">
                 {svc.ports
                     .map(
                         (p) =>

@@ -205,7 +205,7 @@ function ResourceTableInner<
     if (error) {
         return (
             <div
-                className="flex items-center gap-2 p-4 text-sm text-destructive"
+                className="flex items-center gap-2 p-4 text-sm text-state-blocked-ink"
                 data-testid={`${testIdPrefix}s-error`}
             >
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -223,11 +223,11 @@ function ResourceTableInner<
 
     const header = (
         <thead>
-            <tr className="border-b text-left text-xs text-muted-foreground">
+            <tr className="h-8 border-b text-left text-xs font-medium uppercase tracking-wide text-fg-muted">
                 <th className="max-w-[320px] py-2 pr-4">
                     <button
                         onClick={() => toggleSort("name")}
-                        className="flex items-center gap-1 hover:text-foreground"
+                        className="flex items-center gap-1 uppercase tracking-wide hover:text-fg"
                         data-testid={`${testIdPrefix}s-sort-name`}
                     >
                         Name {sortIcon("name")}
@@ -237,7 +237,7 @@ function ResourceTableInner<
                     <th className="whitespace-nowrap py-2 pr-4">
                         <button
                             onClick={() => toggleSort("namespace")}
-                            className="flex items-center gap-1 hover:text-foreground"
+                            className="flex items-center gap-1 uppercase tracking-wide hover:text-fg"
                             data-testid={`${testIdPrefix}s-sort-namespace`}
                         >
                             Namespace {sortIcon("namespace")}
@@ -248,7 +248,7 @@ function ResourceTableInner<
                     <th className="whitespace-nowrap py-2 pr-4">
                         <button
                             onClick={() => toggleSort("context")}
-                            className="flex items-center gap-1 hover:text-foreground"
+                            className="flex items-center gap-1 uppercase tracking-wide hover:text-fg"
                             data-testid={`${testIdPrefix}s-sort-context`}
                         >
                             Context {sortIcon("context")}
@@ -267,7 +267,7 @@ function ResourceTableInner<
                         ) : (
                             <button
                                 onClick={() => toggleSort(i)}
-                                className="flex items-center gap-1 hover:text-foreground"
+                                className="flex items-center gap-1 uppercase tracking-wide hover:text-fg"
                                 data-testid={`${testIdPrefix}s-sort-${i}`}
                             >
                                 {col.header} {sortIcon(i)}
@@ -281,14 +281,14 @@ function ResourceTableInner<
 
     const filterBar = !hideNameFilter && (
         <div className="mb-2 flex items-center gap-1.5 px-1">
-            <Search className="h-3.5 w-3.5 text-muted-foreground" />
+            <Search className="h-3.5 w-3.5 text-fg-subtle" />
             <input
                 ref={filterInputRef}
                 type="text"
                 value={nameFilter}
                 onChange={(e) => setNameFilter(e.target.value)}
                 placeholder="Filter by name…"
-                className="w-56 rounded-md border bg-background px-2 py-1 text-xs"
+                className="h-7 w-56 rounded-md border bg-surface-1 px-2 text-xs placeholder:text-fg-subtle"
                 data-testid={`${testIdPrefix}s-name-filter`}
             />
         </div>
@@ -311,11 +311,7 @@ function ResourceTableInner<
     }
 
     if (rawRows.length === 0) {
-        return (
-            <div className="p-4 text-sm text-muted-foreground">
-                {emptyMessage}
-            </div>
-        );
+        return <div className="p-4 text-sm text-fg-muted">{emptyMessage}</div>;
     }
 
     return (
@@ -332,13 +328,13 @@ function ResourceTableInner<
                         return (
                             <div
                                 key={e.context}
-                                className="rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive"
+                                className="rounded-md border border-state-blocked/30 bg-state-blocked-soft px-2 py-1.5 text-xs text-state-blocked-ink"
                                 data-testid={`${testIdPrefix}s-context-error-${e.context}`}
                             >
                                 <div className="flex items-center gap-2">
                                     <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                                     {apiErr?.kind && (
-                                        <span className="shrink-0 rounded border border-destructive/40 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide">
+                                        <span className="shrink-0 rounded border border-state-blocked/40 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide">
                                             {apiErr.kind}
                                         </span>
                                     )}
@@ -350,8 +346,8 @@ function ResourceTableInner<
                                     </span>
                                 </div>
                                 {(apiErr?.detail || apiErr?.hint) && (
-                                    <details className="mt-1 pl-5 text-muted-foreground">
-                                        <summary className="inline cursor-pointer hover:text-foreground">
+                                    <details className="mt-1 pl-5 text-fg-muted">
+                                        <summary className="inline cursor-pointer hover:text-fg">
                                             details
                                         </summary>
                                         {apiErr.detail && (
@@ -373,7 +369,7 @@ function ResourceTableInner<
             )}
             {visibleRows.length === 0 ? (
                 <div
-                    className="p-4 text-sm text-muted-foreground"
+                    className="p-4 text-sm text-fg-muted"
                     data-testid={`${testIdPrefix}s-no-filter-match`}
                 >
                     No {testIdPrefix}s match "{nameFilter}".
@@ -410,11 +406,11 @@ function ResourceTableInner<
                                         key={rowKey}
                                         data-testid={`${testIdPrefix}-row-${row.name}`}
                                         data-grid-nav-row={rowIndex}
-                                        className={`border-b last:border-0 outline-none ${
+                                        className={`group h-9 border-b last:border-0 outline-none ${
                                             clickable
-                                                ? "cursor-pointer hover:bg-accent/50"
-                                                : "hover:bg-accent/30"
-                                        } ${isSelected ? "bg-accent" : ""} ${isFocused ? "bg-accent/70" : ""} ${getRowClassName?.(row) ?? ""}`}
+                                                ? "cursor-pointer hover:bg-surface-2"
+                                                : "hover:bg-surface-2"
+                                        } ${isSelected ? "bg-accent-soft" : ""} ${isFocused ? "bg-accent-soft/70" : ""} ${getRowClassName?.(row) ?? ""}`}
                                         tabIndex={isFocused ? 0 : -1}
                                         onFocus={() =>
                                             gridNav.setFocusedIndex(rowIndex)
@@ -430,7 +426,7 @@ function ResourceTableInner<
                                             }
                                         }}
                                     >
-                                        <td className="max-w-[320px] py-2 pr-4 font-medium">
+                                        <td className="max-w-[320px] py-2 pr-4 font-mono text-xs">
                                             <span
                                                 className="block truncate"
                                                 title={row.name}
@@ -439,13 +435,13 @@ function ResourceTableInner<
                                             </span>
                                         </td>
                                         {isMulti && (
-                                            <td className="whitespace-nowrap py-2 pr-4 text-xs text-muted-foreground">
+                                            <td className="whitespace-nowrap py-2 pr-4 text-xs text-fg-muted">
                                                 {row.namespace ?? "—"}
                                             </td>
                                         )}
                                         {showContext && (
                                             <td
-                                                className="whitespace-nowrap py-2 pr-4 text-xs text-muted-foreground"
+                                                className="whitespace-nowrap py-2 pr-4 text-xs text-fg-muted"
                                                 data-testid={`${testIdPrefix}-cell-context-${row.name}`}
                                             >
                                                 {row.context ?? "—"}

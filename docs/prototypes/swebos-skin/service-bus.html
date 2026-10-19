@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<title>Service Bus — SwebOS skin</title>
+<link rel="stylesheet" href="swebos.css">
+<style>
+  .ribbon { flex: none; border-bottom: 1px solid var(--border); }
+  .ribbon-tabs { display: flex; align-items: center; gap: 2px; padding: 6px 12px 0; }
+  .ribbon-tabs .ns { margin-left: auto; display: flex; align-items: center; gap: 8px; padding-bottom: 4px; }
+  .ribbon-body { display: flex; align-items: center; gap: 6px; padding: 8px 12px; flex-wrap: wrap; }
+  .ribbon-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; flex: none; }
+  .rbtn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--radius-md); border: none; background: transparent; color: var(--text-muted); font-family: var(--font-ui); font-size: 13px; font-weight: 500; cursor: pointer; }
+  .rbtn:hover { background: var(--accent-soft); color: var(--text); }
+  .rbtn.primary { background: var(--accent); color: var(--accent-contrast); }
+  .rbtn.primary:hover { background: var(--accent-hover); }
+  .rbtn.danger { color: var(--state-blocked-ink); }
+  .rbtn.danger:hover { background: var(--state-blocked-soft); }
+  .rbtn .lab { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; }
+
+  .sb-body { flex: 1; min-height: 0; display: flex; }
+  .etree { width: 240px; flex: none; border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; background: var(--surface-1); }
+  .etree-search { padding: 8px; border-bottom: 1px solid var(--border); }
+  .etree-scroll { flex: 1; overflow: auto; padding: 4px 8px 8px; }
+  .enode { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 2px 8px; border-radius: var(--radius-md); color: var(--text-muted); font-size: 13px; cursor: pointer; }
+  .enode:hover { background: var(--surface-2); color: var(--text); }
+  .enode.active { background: var(--shell-navsel-bg); color: var(--shell-navsel-text); box-shadow: var(--shell-navsel-shadow); }
+  .enode .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .enode .counts { margin-left: auto; display: flex; gap: 4px; }
+  .cntb { min-width: 22px; height: 18px; padding: 0 5px; border-radius: 999px; font-size: 11px; font-weight: 600; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+  .cntb.q { background: var(--state-queued-soft); color: var(--state-queued-ink); }
+  .cntb.b { background: var(--state-blocked-soft); color: var(--state-blocked-ink); }
+  .cntb.w { background: var(--state-waiting-soft); color: var(--state-waiting-ink); }
+  .sub { margin-left: 22px; border-left: 1px solid var(--border); padding-left: 4px; }
+
+  .mlist { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .chipsbar { flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .bulkbar {
+    flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    background: var(--accent-soft); border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .tbl-foot { flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 12px; font-size: 12px; color: var(--text-subtle); }
+
+  .msgview { padding: 0 12px 12px; overflow: auto; }
+  .jsonpre {
+    font-family: var(--font-mono); font-size: 12px; line-height: 18px; margin: 0;
+    background: var(--surface-sunken); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; overflow: auto;
+  }
+  .dlqcard {
+    border: 1px solid color-mix(in oklch, var(--state-blocked) 40%, var(--border));
+    background: var(--state-blocked-soft); border-radius: var(--radius-md); padding: 10px 12px; margin-top: 10px;
+  }
+  .kv { display: grid; grid-template-columns: 130px 1fr; row-gap: 6px; font-size: 12px; }
+  .kv dt { color: var(--text-muted); } .kv dd { margin: 0; font-family: var(--font-mono); color: var(--text); word-break: break-all; }
+</style>
+</head>
+<body>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-dash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
+  <symbol id="i-sb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-aks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V22"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></symbol>
+  <symbol id="i-api" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></symbol>
+  <symbol id="i-sql" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m5 12-3 3 3 3"/><path d="m9 18 3-3-3-3"/></symbol>
+  <symbol id="i-stor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol>
+  <symbol id="i-mon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-cog" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-chevd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chevr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-queue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
+  <symbol id="i-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+  <symbol id="i-rules" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/><line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/><line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/><line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="16" y1="18" x2="16" y2="22"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></symbol>
+  <symbol id="i-zip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-replay" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+</svg>
+
+<div class="app-shell wash">
+  <nav class="shell-sidebar">
+    <div class="shell-brand">
+      <span class="shell-brand-mark"><svg><use href="#i-box"/></svg></span>
+      <span class="shell-brand-name">SwebKit</span>
+      <button class="icon-btn sm" style="margin-left:auto" title="Collapse sidebar"><svg class="ic"><use href="#i-panel"/></svg></button>
+    </div>
+    <div class="shell-nav">
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-dash"/></svg>Dashboard</a>
+      <a class="shell-nav-item active" href="#"><svg class="ic-20"><use href="#i-sb"/></svg>Service Bus</a>
+      <a class="shell-nav-item" href="aks.html"><svg class="ic-20"><use href="#i-aks"/></svg>AKS</a>
+      <a class="shell-nav-item" href="api-client.html"><svg class="ic-20"><use href="#i-api"/></svg>API Client</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-db"/></svg>Redis</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-sql"/></svg>SQL</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-stor"/></svg>Storage</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-bot"/></svg>AI Agent</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-mon"/></svg>Monitoring</a>
+    </div>
+    <div class="shell-nav-sep"></div>
+    <div>
+      <div class="sec-label" style="padding:2px 8px 4px">Pinned</div>
+      <a class="shell-nav-item" href="#"><svg class="ic"><use href="#i-sb"/></svg><span style="overflow:hidden;text-overflow:ellipsis">orders.inbound · DLQ</span></a>
+      <a class="shell-nav-item" href="#"><svg class="ic"><use href="#i-cal"/></svg><span style="overflow:hidden;text-overflow:ellipsis">billing.daily · scheduled</span></a>
+    </div>
+    <div class="shell-side-foot">
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-cog"/></svg>Settings</a>
+    </div>
+  </nav>
+
+  <div class="shell-main">
+    <div class="shell-topbar">
+      <div class="crumbs"><span>SwebKit</span><span class="sep">›</span><b>Service Bus</b><span class="sep">›</span><span class="mono" style="font-size:12px">orders.inbound</span></div>
+      <div style="flex:1"></div>
+      <a class="shell-pill" href="#" title="In-flight operations"><span class="pdot" style="background:var(--state-working)"></span><strong>1</strong>&nbsp;op running</a>
+      <a class="shell-pill" href="#" title="Environment"><span class="pdot" style="background:var(--state-needs)"></span>tst</a>
+      <button class="shell-search"><svg class="ic"><use href="#i-search"/></svg>Search or run a command<span class="kbd">Ctrl K</span></button>
+      <button class="icon-btn" title="Notifications"><svg class="ic"><use href="#i-bell"/></svg></button>
+      <button class="icon-btn" title="System: all healthy"><span class="dot dot-done" style="width:10px;height:10px"></span></button>
+    </div>
+
+    <div class="shell-sheet">
+      <!-- ribbon → spec tabs + grouped controls -->
+      <div class="ribbon">
+        <div class="ribbon-tabs">
+          <button class="tab">Home</button>
+          <button class="tab active">Messages</button>
+          <button class="tab">Recovery</button>
+          <button class="tab">View</button>
+          <div class="ns">
+            <span class="sec-label">Namespace</span>
+            <select class="select select-sm" style="width:200px"><option>sb-portima-tst</option><option>sb-portima-dev</option><option>sb-portima-prd</option></select>
+            <button class="icon-btn sm" title="Collapse ribbon"><svg class="ic"><use href="#i-chevd"/></svg></button>
+          </div>
+        </div>
+        <div class="ribbon-body">
+          <button class="rbtn"><svg class="ic"><use href="#i-refresh"/></svg>Refresh</button>
+          <select class="select select-sm" title="Peek count"><option>Peek 5</option><option selected>Peek 50</option><option>Peek 100</option><option>Peek 200</option></select>
+          <select class="select select-sm" title="Auto refresh"><option>Auto: off</option><option>Auto: 10s</option><option selected>Auto: 30s</option><option>Auto: 60s</option></select>
+          <span class="ribbon-sep"></span>
+          <span class="seg"><button class="on">Filters on</button><button>Filters off</button></span>
+          <button class="rbtn"><svg class="ic"><use href="#i-rules"/></svg>Rules</button>
+          <button class="rbtn"><svg class="ic"><use href="#i-plus"/></svg>Add rule</button>
+          <button class="rbtn"><svg class="ic"><use href="#i-save"/></svg>Saved</button>
+          <span class="ribbon-sep"></span>
+          <button class="rbtn"><svg class="ic"><use href="#i-zip"/></svg>ZIP</button>
+        </div>
+      </div>
+
+      <div class="sb-body">
+        <!-- entity tree -->
+        <div class="etree">
+          <div class="etree-search"><input class="input input-sm" placeholder="Search entities…" style="width:100%"></div>
+          <div class="etree-scroll">
+            <div class="sec-label" style="padding:6px 8px 2px;display:flex;align-items:center;gap:6px"><svg class="ic"><use href="#i-queue"/></svg>Queues</div>
+            <div class="enode"><svg class="ic"><use href="#i-chevr"/></svg><span class="nm">billing.daily</span><span class="counts"><span class="cntb q">84</span><span class="cntb w">12</span></span></div>
+            <div class="enode"><svg class="ic"><use href="#i-chevr"/></svg><span class="nm">notifications.out</span><span class="counts"><span class="cntb q">31</span></span></div>
+            <div class="enode active"><svg class="ic"><use href="#i-chevd"/></svg><span class="nm">orders.inbound</span><span class="counts"><span class="cntb q">1.2k</span><span class="cntb b">17</span></span></div>
+            <div class="sub">
+              <div class="enode"><span class="nm muted">$deadletter</span><span class="counts"><span class="cntb b">17</span></span></div>
+            </div>
+            <div class="enode"><svg class="ic"><use href="#i-chevr"/></svg><span class="nm">payments.cmd</span><span class="counts"><span class="cntb q">6</span><span class="cntb b">2</span></span></div>
+            <div class="enode"><svg class="ic"><use href="#i-chevr"/></svg><span class="nm">sms.dispatched</span><span class="counts"><span class="cntb q">0</span></span></div>
+            <div class="sec-label" style="padding:10px 8px 2px;display:flex;align-items:center;gap:6px"><svg class="ic"><use href="#i-tree"/></svg>Topics</div>
+            <div class="enode"><svg class="ic"><use href="#i-chevd"/></svg><span class="nm">customer.events</span><span class="counts"><span class="cntb b">4</span></span></div>
+            <div class="sub">
+              <div class="enode"><span class="nm">audit-trail</span><span class="counts"><span class="cntb q">56</span></span></div>
+              <div class="enode"><span class="nm">mail-notify</span><span class="counts"><span class="cntb q">12</span><span class="cntb b">4</span></span></div>
+            </div>
+            <div class="enode"><svg class="ic"><use href="#i-chevr"/></svg><span class="nm">order.events</span><span class="counts"><span class="cntb q">9</span></span></div>
+          </div>
+        </div>
+
+        <!-- message list -->
+        <div class="mlist">
+          <div class="chipsbar">
+            <input class="input input-sm" placeholder="Filter messages…  ( / )" style="width:220px">
+            <span class="chip removable">view: <b style="font-weight:600">DLQ</b><span class="x"><svg class="ic" style="width:10px;height:10px"><use href="#i-x"/></svg></span></span>
+            <span class="chip removable">reason: <span class="mono">MaxDeliveryCount</span><span class="x"><svg class="ic" style="width:10px;height:10px"><use href="#i-x"/></svg></span></span>
+            <a href="#" style="font-size:12px;font-weight:500">+ rule</a>
+            <div style="flex:1"></div>
+            <span class="seg"><button>Active</button><button>Scheduled</button><button class="on">DLQ</button></span>
+            <span class="t-xs subtle num">17 of 17</span>
+          </div>
+          <div class="bulkbar">
+            <span><strong class="num">2</strong> selected</span>
+            <a href="#" style="font-size:12px">Select all</a>
+            <div style="flex:1"></div>
+            <button class="btn btn-sm"><svg class="ic"><use href="#i-replay"/></svg>Resubmit to orders.inbound</button>
+            <button class="btn btn-sm"><svg class="ic"><use href="#i-api"/></svg>Resend to origin</button>
+            <button class="btn btn-sm btn-danger">Complete DLQ</button>
+            <button class="btn btn-sm btn-ghost">Cancel</button>
+          </div>
+          <div style="flex:1;overflow:auto">
+            <table class="tbl">
+              <thead><tr>
+                <th style="width:30px"><input type="checkbox" class="check"></th>
+                <th>State</th><th>Enqueued<span class="sort">↓</span></th><th class="num">Seq #</th>
+                <th>Message ID</th><th>Subject</th><th class="num">Delivery</th><th>DLQ Reason</th>
+              </tr></thead>
+              <tbody>
+                <tr class="selected">
+                  <td><input type="checkbox" class="check" checked></td>
+                  <td><span class="badge b-sm badge-blocked"><span class="bdot"></span>Dead-lettered</span></td>
+                  <td class="muted num">09:12:44</td><td class="num mono">88412</td>
+                  <td class="mono t-xs">ord-2026-10-19-00471</td><td>OrderCreated</td><td class="num">10</td>
+                  <td class="muted">MaxDeliveryCount</td>
+                </tr>
+                <tr class="selected">
+                  <td><input type="checkbox" class="check" checked></td>
+                  <td><span class="badge b-sm badge-blocked"><span class="bdot"></span>Dead-lettered</span></td>
+                  <td class="muted num">09:12:31</td><td class="num mono">88411</td>
+                  <td class="mono t-xs">ord-2026-10-19-00470</td><td>OrderCreated</td><td class="num">10</td>
+                  <td class="muted">MaxDeliveryCount</td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" class="check"></td>
+                  <td><span class="badge b-sm badge-blocked"><span class="bdot"></span>Dead-lettered</span></td>
+                  <td class="muted num">08:58:02</td><td class="num mono">88396</td>
+                  <td class="mono t-xs">ord-2026-10-19-00452</td><td>OrderCreated</td><td class="num">10</td>
+                  <td class="muted">MaxDeliveryCount</td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" class="check"></td>
+                  <td><span class="badge b-sm badge-blocked"><span class="bdot"></span>Dead-lettered</span></td>
+                  <td class="muted num">08:41:17</td><td class="num mono">88374</td>
+                  <td class="mono t-xs">ord-2026-10-19-00440</td><td>OrderValidated</td><td class="num">7</td>
+                  <td class="muted">TTLExpiredException</td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" class="check"></td>
+                  <td><span class="badge b-sm badge-waiting"><span class="bdot"></span>Scheduled</span></td>
+                  <td class="muted num">14:00 20-10</td><td class="num mono">88361</td>
+                  <td class="mono t-xs">ord-2026-10-19-00421</td><td>OrderReminder</td><td class="num">0</td>
+                  <td class="muted">—</td>
+                </tr>
+                <tr>
+                  <td><input type="checkbox" class="check"></td>
+                  <td><span class="badge b-sm badge-blocked"><span class="bdot"></span>Dead-lettered</span></td>
+                  <td class="muted num">07:19:55</td><td class="num mono">88302</td>
+                  <td class="mono t-xs">ord-2026-10-19-00398</td><td>OrderCreated</td><td class="num">10</td>
+                  <td class="muted">MaxDeliveryCount</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="tbl-foot">
+            <span>Refreshed 09:41:05</span><span>·</span><span>Showing <span class="num">6</span> of <span class="num">17</span></span>
+            <a href="#">Load more</a><div style="flex:1"></div><span>Sessions not supported on this entity</span>
+          </div>
+        </div>
+
+        <!-- message detail -->
+        <aside class="detail" style="width:360px;flex:none;border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0;background:var(--surface-1)">
+          <div style="padding:12px 12px 8px;display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0">
+              <span style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">OrderCreated</span>
+              <span class="badge b-sm badge-blocked" style="flex:none"><span class="bdot"></span>Dead-lettered</span>
+              <button class="icon-btn sm" style="margin-left:auto" title="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+            </div>
+            <div class="t-xs muted"><span class="mono">ord-2026-10-19-00471</span> · Seq <span class="mono num">#88412</span></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-sm btn-primary"><svg class="ic"><use href="#i-replay"/></svg>Resubmit</button>
+              <button class="btn btn-sm">Complete DLQ</button>
+              <button class="icon-btn sm bordered" title="Copy body"><svg class="ic"><use href="#i-sql"/></svg></button>
+              <button class="icon-btn sm bordered" title="Edit & resubmit"><svg class="ic"><use href="#i-edit"/></svg></button>
+              <button class="icon-btn sm bordered" title="More actions"><svg class="ic"><use href="#i-more"/></svg></button>
+            </div>
+          </div>
+          <div class="tabs" style="padding:0 4px">
+            <button class="tab active">Body</button>
+            <button class="tab">Properties</button>
+            <button class="tab">System</button>
+            <button class="tab">DLQ Info</button>
+          </div>
+          <div class="msgview" style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px;padding:10px 0 6px">
+              <span class="t-xs muted">Format: <b class="mono">JSON</b></span><span class="t-xs muted">Size: <b class="num">1.1 KB</b></span><span class="t-xs muted">Lines: <b class="num">24</b></span>
+              <div style="flex:1"></div>
+              <a href="#" class="t-xs" style="font-weight:500">Pretty</a>
+              <a href="#" class="t-xs muted">Raw</a>
+            </div>
+            <pre class="jsonpre">{
+  <span class="tok-key">"orderId"</span><span class="tok-punct">:</span> <span class="tok-string">"ORD-88171"</span><span class="tok-punct">,</span>
+  <span class="tok-key">"customer"</span><span class="tok-punct">:</span> <span class="tok-string">"Vivisol BV"</span><span class="tok-punct">,</span>
+  <span class="tok-key">"lines"</span><span class="tok-punct">:</span> <span class="tok-punct">[</span>
+    { <span class="tok-key">"sku"</span><span class="tok-punct">:</span> <span class="tok-string">"O2-CONC-10L"</span><span class="tok-punct">,</span> <span class="tok-key">"qty"</span><span class="tok-punct">:</span> <span class="tok-number">2</span> }
+  <span class="tok-punct">],</span>
+  <span class="tok-key">"totalExVat"</span><span class="tok-punct">:</span> <span class="tok-number">1840.00</span><span class="tok-punct">,</span>
+  <span class="tok-key">"urgent"</span><span class="tok-punct">:</span> <span class="tok-bool">true</span>
+}</pre>
+            <div class="dlqcard">
+              <div class="t-xs" style="font-weight:600;color:var(--state-blocked-ink)">Dead-letter reason</div>
+              <div class="t-xs" style="color:var(--state-blocked-ink);margin-top:2px">MaxDeliveryCount — moved after 10 deliveries. Last error: <span class="mono">SqlException: deadlock victim (1205)</span></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="theme-switch" id="ts">
+  <div class="ts-label">Theme (prototype)</div>
+  <button data-t=""><span class="sw" style="background:oklch(0.52 0.20 268)"></span>Aurora Light</button>
+  <button data-t="dark"><span class="sw sw-aurora"></span>Aurora Dark</button>
+  <button data-t="clay"><span class="sw" style="background:oklch(0.50 0.13 40)"></span>Clay Light</button>
+  <button data-t="clay dark"><span class="sw sw-clay"></span>Clay Dark</button>
+</div>
+<script>
+(function(){
+  var root = document.documentElement, box = document.getElementById('ts');
+  var saved = localStorage.getItem('swebos-skin-theme');
+  if (saved !== null) root.className = saved;
+  function mark(){ box.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.t === root.className); }); }
+  box.addEventListener('click', function(e){ var b = e.target.closest('button'); if(!b) return; root.className = b.dataset.t; localStorage.setItem('swebos-skin-theme', root.className); mark(); });
+  mark();
+})();
+</script>
+</body>
+</html>
