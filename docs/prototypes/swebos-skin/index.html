@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<title>SwebOS skin for SwebKit — prototypes</title>
+<link rel="stylesheet" href="swebos.css">
+<style>
+  body { min-height: 100vh; }
+  .page { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; display: flex; flex-direction: column; gap: 20px; }
+  .lead { color: var(--text-muted); font-size: 14px; line-height: 20px; max-width: 760px; }
+  .mcard { display: block; padding: 16px 20px; color: inherit; }
+  .mcard:hover { border-color: var(--border-strong); }
+  .mcard h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .mcard p { color: var(--text-muted); margin: 0; font-size: 13px; }
+  .tags { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid2 .card { padding: 16px; }
+  .card h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+  .card ul { margin: 0; padding-left: 18px; color: var(--text-muted); font-size: 13px; line-height: 1.7; }
+  table.cmp { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .cmp th { text-align: left; font-size: 12px; font-weight: 500; color: var(--text-muted); padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .cmp td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .cmp td:first-child { color: var(--text-muted); white-space: nowrap; }
+  .theme-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .swatch { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; font-size: 12px; }
+  .swatch .sw-head { padding: 6px 8px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .swatch .sw-body { padding: 8px; display: flex; flex-direction: column; gap: 5px; }
+  .swatch .sw-row { height: 8px; border-radius: 3px; }
+  .keep { color: var(--state-done-ink); font-weight: 600; }
+  .drop { color: var(--state-blocked-ink); }
+</style>
+</head>
+<body class="wash">
+<div class="page">
+
+  <header>
+    <div class="crumbs" style="margin-bottom:8px"><span>SwebKit</span><span class="sep">›</span><span>docs/prototypes/swebos-skin</span></div>
+    <h1 class="t-2xl disp" style="margin:0 0 6px">One design system for both apps</h1>
+    <p class="lead" style="margin:0">
+      SwebFlow was redesigned as <b>SwebOS</b>: a real design system — semantic tokens, a fixed state
+      vocabulary, in-house primitives, two theme families (<b>Aurora</b> cool indigo, <b>Clay</b> warm
+      terracotta) × light/dark. These mocks render SwebKit's three heaviest pages in that system, inside
+      the SwebOS shell. Adopting it makes the apps visibly related and lets SwebKit drop
+      <b>5 of its 9 themes</b>. Nothing is wired — mock data only.
+      <b>Use the switcher (bottom-right) to flip family + mode.</b>
+    </p>
+  </header>
+
+  <a class="card mcard" href="aks.html">
+    <h2>AKS <span class="chip">pods · rail · logs</span></h2>
+    <p>The heaviest page: spec shell + 232px nav, the adopted resource rail, a live pods table using the six-state vocabulary (Running → done, Pending → waiting, CrashLoopBackOff → blocked), and the pod detail rail with the shared log syntax palette.</p>
+    <div class="tags"><span class="tag chip">state vocabulary in tables</span><span class="chip">status bar → topbar health dot</span><span class="chip">log palette survives</span></div>
+  </a>
+
+  <a class="card mcard" href="api-client.html">
+    <h2>API Client <span class="chip">collections · editor · response</span></h2>
+    <p>Collection tree with linked-root + git badges, request tab strip with dirty dots, method/URL bar with <span class="mono">{{variable}}</span> resolution tinting, params table, and a JSON response viewer on the shared <span class="mono">--cm-*</span> palette. Method colours fold into the state hues.</p>
+    <div class="tags"><span class="chip">var-tok highlighting</span><span class="chip">method → state hues</span><span class="chip">CodeMirror palette</span></div>
+  </a>
+
+  <a class="card mcard" href="service-bus.html">
+    <h2>Service Bus <span class="chip">ribbon → tabs · entities · DLQ</span></h2>
+    <p>The ribbon keeps its four groups but renders as spec tabs + grouped controls. Entity tree badges and the message table take the state vocabulary: Active → queued, Scheduled → waiting, DLQ → blocked. Detail side-panel with highlighted message body.</p>
+    <div class="tags"><span class="chip">ribbon as spec tabs</span><span class="chip">DLQ = blocked</span><span class="chip">chips bar</span></div>
+  </a>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>What changes</h3>
+      <ul>
+        <li><b>Chrome</b> — sidebar 224 → <b>232px</b>, topbar 48px, <b>status bar removed</b> (health folds into a topbar dot + System popover, per spec §8).</li>
+        <li><b>Tokens</b> — every colour goes through the semantic set (<code class="mono t-xs">--surface-1/-2/sunken, --text/-muted/-subtle, --accent/-ink/-soft, --border/-strong</code>) plus the six <code class="mono t-xs">--state-*</code> triplets.</li>
+        <li><b>Type scale fixed</b> — 12/13/14/16/20/24 only; section labels sentence-case, no uppercase tracking.</li>
+        <li><b>Primitives</b> — one Button (primary/secondary/ghost/danger × 28/32), Card, Chip, StateBadge, Tabs, DataTable. Radius &amp; elevation come from the family, not per-page choices.</li>
+        <li><b>Sizing</b> — control 32/28, table row 36, right rail 360, nav row 32.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>What stays</h3>
+      <ul>
+        <li><b>Layout of each feature</b> — AKS keeps its rail + table + detail panel; API Client its tree/editor/response; Service Bus its ribbon groups + tree + list. This is a skin + system adoption, not a redesign of the tools.</li>
+        <li><b>Feature vocab</b> — DLQ, peek, resubmit, port-forward, capture rules… nothing renamed.</li>
+        <li><b>Log/YAML/JSON syntax palette</b> — SwebOS already ships the shared <code class="mono t-xs">--cm-*</code> token set both apps use.</li>
+        <li><b>Mono identifiers</b> — pod names, message IDs, SHAs stay mono; spec keeps identifiers <i>off</i> the accent colour.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card card-pad">
+    <h3>Themes — 9 down to 4</h3>
+    <table class="cmp">
+      <tr><th>Today</th><th>SwebOS system</th><th></th></tr>
+      <tr><td>Aurora Dark <span class="subtle">(default)</span></td><td><span class="dot dot-queued" style="background:oklch(0.55 0.20 268)"></span> <b>Aurora Dark</b></td><td class="keep">keep</td></tr>
+      <tr><td>Aurora Light</td><td><span class="dot" style="background:oklch(0.52 0.20 268)"></span> <b>Aurora Light</b></td><td class="keep">keep</td></tr>
+      <tr><td>—</td><td><span class="dot" style="background:oklch(0.55 0.13 42)"></span> <b>Clay Light / Dark</b> <span class="subtle">(new family — the warm one)</span></td><td class="keep">keep</td></tr>
+      <tr><td>Fathom Abyss / Shallows</td><td>—</td><td class="drop">drop</td></tr>
+      <tr><td>Letterpress Day / Night</td><td>—</td><td class="drop">drop</td></tr>
+      <tr><td>Cascade Clear / Deep</td><td>—</td><td class="drop">drop</td></tr>
+      <tr><td>✨ Fancy ✨</td><td>—</td><td class="drop">drop <span class="subtle">(or keep as easter egg — your call)</span></td></tr>
+    </table>
+  </div>
+
+  <div class="card card-pad">
+    <h3>State vocabulary — the same six words everywhere</h3>
+    <table class="cmp">
+      <tr><th>State</th><th>Meaning</th><th>AKS</th><th>Service Bus</th><th>API Client</th></tr>
+      <tr><td><span class="badge badge-blocked"><span class="bdot"></span>blocked</span></td><td>stopped / wrong</td><td>CrashLoopBackOff, Failed, ImagePullBackOff*</td><td>Dead-lettered</td><td>5xx, network error</td></tr>
+      <tr><td><span class="badge badge-needs"><span class="bdot"></span>needs</span></td><td>needs <i>you</i></td><td>NotReady node, cert expiring</td><td>—</td><td>4xx (auth to fix)</td></tr>
+      <tr><td><span class="badge badge-working"><span class="bdot"></span>working</span></td><td>in progress</td><td>ContainerCreating, Terminating</td><td>—</td><td>request in flight, GET</td></tr>
+      <tr><td><span class="badge badge-waiting"><span class="bdot"></span>waiting</span></td><td>on the system</td><td>Pending</td><td>Scheduled</td><td>—</td></tr>
+      <tr><td><span class="badge badge-queued"><span class="bdot"></span>queued</span></td><td>pending, idle</td><td>Completed jobs</td><td>Active messages</td><td>saved, unsent</td></tr>
+      <tr><td><span class="badge badge-done"><span class="bdot"></span>done</span></td><td>healthy / complete</td><td>Running</td><td>—</td><td>2xx, POST, vars resolved</td></tr>
+    </table>
+    <p class="t-xs muted" style="margin:10px 0 0">*Config-shaped failures that need a human could take <span class="ink-needs">needs</span> instead — the point of the demo is the mapping is explicit, not inherited from ad-hoc hex colours.</p>
+  </div>
+
+  <div class="card card-pad">
+    <h3>Open questions to judge on the mocks</h3>
+    <ul style="margin:0;padding-left:18px;color:var(--text-muted);font-size:13px;line-height:1.8">
+      <li><b>Family</b> — Aurora only, Clay only, or ship both like SwebOS? (Switcher is on every mock.)</li>
+      <li><b>Density</b> — spec fixes rows at 36px and controls at 32. Current SwebKit is tighter. The mocks run spec density; if it feels too airy for a tool, that's a spec amendment, not a per-theme thing.</li>
+      <li><b>Status bar</b> — spec has no footer. Keep SwebKit's health strip anyway, or adopt the topbar dot + popover?</li>
+      <li><b>Ribbon</b> — Service Bus keeps its four action groups but as spec tabs (mock shows <i>Messages</i>). Alternative: keep the literal ribbon, restyled. Decide after seeing it.</li>
+      <li><b>Accent on identifiers</b> — spec bans accent colour on IDs/links-as-data; names stay text + mono, accent stays a signal.</li>
+    </ul>
+  </div>
+
+</div>
+
+<div class="theme-switch" id="ts">
+  <div class="ts-label">Theme (prototype)</div>
+  <button data-t=""    ><span class="sw sw-aurora" style="background:oklch(0.52 0.20 268)"></span>Aurora Light</button>
+  <button data-t="dark"><span class="sw sw-aurora"></span>Aurora Dark</button>
+  <button data-t="clay"><span class="sw sw-clay" style="background:oklch(0.50 0.13 40)"></span>Clay Light</button>
+  <button data-t="clay dark"><span class="sw sw-clay"></span>Clay Dark</button>
+</div>
+<script>
+(function(){
+  var root = document.documentElement, box = document.getElementById('ts');
+  var saved = localStorage.getItem('swebos-skin-theme');
+  if (saved !== null) root.className = saved;
+  function mark(){ box.querySelectorAll('button').forEach(function(b){
+    b.classList.toggle('on', b.dataset.t === root.className);
+  });}
+  box.addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    root.className = b.dataset.t;
+    localStorage.setItem('swebos-skin-theme', root.className);
+    mark();
+  });
+  mark();
+})();
+</script>
+</body>
+</html>

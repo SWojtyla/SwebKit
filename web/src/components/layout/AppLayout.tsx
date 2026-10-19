@@ -18,12 +18,9 @@ import {
     PanelLeftOpen,
     Sun,
     Moon,
-    Sparkles,
+    Layers,
     Beaker,
     Keyboard,
-    Waves,
-    Feather,
-    Droplets,
     Clock,
     AlertTriangle,
 } from "lucide-react";
@@ -50,7 +47,7 @@ import {
 } from "@/lib/stores/panel-preferences";
 import { notifyScreenRouteChanged } from "@/lib/stores/screen-state";
 import { initDeepLinks, type DeepLinkContext } from "@/lib/deep-links";
-import { useSettingsStore, isTheme } from "@/lib/stores/settings";
+import { useSettingsStore, migrateTheme } from "@/lib/stores/settings";
 import { useAgentPanelStore } from "@/lib/stores/agent-panel";
 import { useMonitoringStream } from "@/lib/hooks/useMonitoring";
 import {
@@ -150,10 +147,15 @@ export function AppLayout() {
     useEffect(() => {
         if (themeHydratedRef.current || !userSettings) return;
         themeHydratedRef.current = true;
-        if (isTheme(userSettings.theme) && userSettings.theme !== theme) {
-            setTheme(userSettings.theme);
+        // Retired theme ids migrate to the nearest Aurora mode — a stale
+        // user-settings.json should land somewhere sensible, not the default.
+        const migrated = migrateTheme(userSettings.theme);
+        if (!migrated) return;
+        if (migrated !== theme) setTheme(migrated);
+        if (migrated !== userSettings.theme) {
+            updateUserSettings.mutate((prev) => ({ ...prev, theme: migrated }));
         }
-    }, [userSettings, theme, setTheme]);
+    }, [userSettings, theme, setTheme, updateUserSettings]);
 
     // Apply font-size and density from user settings. The root font-size is a simple rem scaler;
     // density is surfaced as a data attribute for future CSS and for select controls to reflect.
@@ -361,6 +363,46 @@ export function AppLayout() {
         state: serviceHealth[area.id]?.connectivity ?? "checking",
     }));
 
+    // Spec §8: no footer — the status bar's contents fold into a top-bar
+    // status popover. The trigger dot rolls every signal up to one colour.
+    const [statusOpen, setStatusOpen] = useState(false);
+    const statusRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!statusOpen) return;
+        const onDown = (e: MouseEvent) => {
+            if (!statusRef.current?.contains(e.target as Node)) {
+                setStatusOpen(false);
+            }
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setStatusOpen(false);
+        };
+        document.addEventListener("mousedown", onDown);
+        document.addEventListener("keydown", onKey);
+        return () => {
+            document.removeEventListener("mousedown", onDown);
+            document.removeEventListener("keydown", onKey);
+        };
+    }, [statusOpen]);
+
+    const statusTone = !sidecarOk
+        ? "bad"
+        : areaHealth.some(
+                (a) => a.state === "unavailable" || a.state === "degraded",
+            )
+          ? "bad"
+          : areaHealth.some((a) => a.state === "checking")
+            ? "warn"
+            : "ok";
+
+    const isDarkTheme = theme === "dark" || theme === "clay-dark";
+    const themeLabel = {
+        light: "Aurora Light",
+        dark: "Aurora Dark",
+        clay: "Clay Light",
+        "clay-dark": "Clay Dark",
+    }[theme];
+
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
@@ -410,17 +452,24 @@ export function AppLayout() {
     return (
         <div className="aurora-bg theme-transition flex h-screen w-screen overflow-hidden bg-background text-foreground">
             <aside
-                className={`flex flex-col border-r bg-sidebar transition-all duration-200 ${navCollapsed ? "w-14" : "w-56"}`}
+                className={`flex flex-col bg-sidebar transition-all duration-200 ${navCollapsed ? "w-14" : "w-[232px]"}`}
+                style={{ borderRight: "var(--shell-sidebar-edge)" }}
             >
-                <div className="flex h-14 items-center gap-2 border-b px-4">
+                <div className="flex h-12 items-center gap-2 px-3">
+                    <div
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-primary text-primary-foreground"
+                        title="SwebKit"
+                    >
+                        <Layers className="h-3 w-3" />
+                    </div>
                     {!navCollapsed && (
-                        <span className="gradient-text text-lg font-bold tracking-tight">
+                        <span className="font-display text-base font-semibold tracking-tight">
                             SwebKit
                         </span>
                     )}
                     <button
                         onClick={() => setNavCollapsed(!navCollapsed)}
-                        className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent"
+                        className="ml-auto rounded-[var(--radius-sm)] p-1 text-muted-foreground hover:bg-surface-2 hover:text-foreground"
                         data-testid="nav-collapse-toggle"
                     >
                         {navCollapsed ? (
@@ -438,10 +487,12 @@ export function AppLayout() {
                             end={end}
                             data-testid={`nav-${label.toLowerCase().replace(/\s+/g, "-")}`}
                             className={({ isActive }) =>
-                                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
+                                `flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium transition-all duration-200 ${
+                                    navCollapsed ? "justify-center px-0" : ""
+                                } ${
                                     isActive
-                                        ? "bg-primary text-primary-foreground shadow-sm"
-                                        : "text-sidebar-foreground hover:bg-sidebar-active hover:text-primary"
+                                        ? "bg-sidebar-active text-sidebar-active-foreground shadow-[var(--shell-navsel-shadow)]"
+                                        : "text-sidebar-foreground hover:bg-surface-2 hover:text-foreground"
                                 }`
                             }
                         >
@@ -464,7 +515,8 @@ export function AppLayout() {
             <div className="flex flex-1 flex-col overflow-hidden">
                 {/* Top bar */}
                 <header
-                    className="glass flex min-h-14 flex-wrap items-center gap-2 border-b px-3 py-2"
+                    className="glass flex h-12 items-center gap-2 px-3"
+                    style={{ borderBottom: "var(--shell-topbar-edge)" }}
                     data-testid="top-bar"
                 >
                     <span
@@ -476,16 +528,14 @@ export function AppLayout() {
                     {env && <EnvironmentBadge env={env} />}
                     <button
                         onClick={() => setPaletteOpen(true)}
-                        className="flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground transition-all hover:border-primary/30 hover:bg-accent"
+                        className="shell-search"
                         data-testid="command-palette-trigger"
                     >
-                        <Search className="h-4 w-4" />
-                        <span className="hidden sm:inline">Search...</span>
-                        <kbd className="ml-4 rounded border bg-card px-1.5 py-0.5 text-xs text-muted-foreground hidden sm:inline">
-                            Ctrl+K
-                        </kbd>
+                        <Search className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Search…</span>
+                        <kbd className="hidden sm:inline">Ctrl K</kbd>
                     </button>
-                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                    <div className="ml-auto flex items-center gap-1.5">
                         <ActivityIndicator />
                         <button
                             onClick={() => {
@@ -498,23 +548,12 @@ export function AppLayout() {
                                     }));
                                 }
                             }}
-                            className="rounded-lg border p-2 text-muted-foreground transition-all hover:bg-accent hover:text-foreground"
+                            className="shell-icon-btn"
                             data-testid="theme-toggle"
-                            title="Toggle theme"
+                            title={`Theme: ${themeLabel}`}
                         >
-                            {theme === "dark" ? (
+                            {isDarkTheme ? (
                                 <Sun className="h-4 w-4" />
-                            ) : theme === "fancy" ? (
-                                <Sparkles className="h-4 w-4" />
-                            ) : theme === "fathom-dark" ||
-                              theme === "fathom-light" ? (
-                                <Waves className="h-4 w-4" />
-                            ) : theme === "letterpress-light" ||
-                              theme === "letterpress-dark" ? (
-                                <Feather className="h-4 w-4" />
-                            ) : theme === "cascade-light" ||
-                              theme === "cascade-dark" ? (
-                                <Droplets className="h-4 w-4" />
                             ) : (
                                 <Moon className="h-4 w-4" />
                             )}
@@ -522,7 +561,8 @@ export function AppLayout() {
                         <button
                             onClick={() => toggleDemoMode.mutate(!isDemoMode)}
                             disabled={toggleDemoMode.isPending}
-                            className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs ${isDemoMode ? "border-primary text-primary" : "text-muted-foreground hover:bg-accent"} disabled:opacity-50`}
+                            className="shell-icon-btn gap-1 text-xs"
+                            data-active={isDemoMode || undefined}
                             data-testid="demo-mode-toggle"
                             title="Toggle demo mode"
                         >
@@ -536,7 +576,8 @@ export function AppLayout() {
                         {!onAgentPage && (
                             <button
                                 onClick={toggleAgentPanel}
-                                className={`rounded-lg border p-2 transition-all hover:bg-accent hover:text-foreground ${agentPanelOpen ? "border-primary text-primary" : "text-muted-foreground"}`}
+                                className="shell-icon-btn"
+                                data-active={agentPanelOpen || undefined}
                                 data-testid="global-agent-panel-toggle"
                                 title="AI Agent (Ctrl+Shift+L)"
                             >
@@ -545,12 +586,159 @@ export function AppLayout() {
                         )}
                         <button
                             onClick={() => setShortcutsOpen(true)}
-                            className="rounded-lg border p-2 text-muted-foreground transition-all hover:bg-accent hover:text-foreground"
+                            className="shell-icon-btn"
                             data-testid="keyboard-shortcuts-btn"
                             title="Keyboard shortcuts (?)"
                         >
                             <Keyboard className="h-4 w-4" />
                         </button>
+
+                        {/* Spec §8: the old footer folds into this status popover.
+                            All `status-bar-*` testids survive on the moved elements. */}
+                        <div className="relative" ref={statusRef}>
+                            <button
+                                onClick={() => setStatusOpen((v) => !v)}
+                                className="shell-icon-btn"
+                                data-testid="status-popover-trigger"
+                                title="System status"
+                                aria-expanded={statusOpen}
+                            >
+                                <Circle
+                                    className={`h-2.5 w-2.5 ${
+                                        statusTone === "ok"
+                                            ? "fill-success text-success"
+                                            : statusTone === "warn"
+                                              ? "fill-warning text-warning"
+                                              : "fill-destructive text-destructive"
+                                    }`}
+                                />
+                            </button>
+                            {statusOpen && (
+                                <div
+                                    className="absolute right-0 top-[calc(100%+8px)] z-50 w-64 rounded-lg border bg-popover p-3 text-xs text-popover-foreground shadow-lg"
+                                    data-testid="status-bar"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                            <Circle
+                                                className={`h-2 w-2 ${sidecarOk ? "fill-success text-success" : "fill-destructive text-destructive"}`}
+                                            />
+                                            <span data-testid="status-bar-connection">
+                                                {sidecarOk
+                                                    ? "Connected"
+                                                    : "Disconnected"}
+                                            </span>
+                                            {!sidecarOk && (
+                                                <button
+                                                    onClick={handleReconnect}
+                                                    disabled={reconnecting}
+                                                    title={
+                                                        reconnecting
+                                                            ? "Reconnecting…"
+                                                            : undefined
+                                                    }
+                                                    className="ml-1 rounded border px-1.5 py-0.5 text-[11px] hover:bg-accent disabled:opacity-50"
+                                                    data-testid="status-bar-reconnect"
+                                                >
+                                                    {reconnecting
+                                                        ? "Reconnecting…"
+                                                        : "Reconnect"}
+                                                </button>
+                                            )}
+                                        </div>
+                                        {health?.version && (
+                                            <span className="text-muted-foreground">
+                                                v{health.version}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div
+                                        className="mt-2 space-y-1"
+                                        data-testid="status-bar-area-health"
+                                    >
+                                        {areaHealth.map(
+                                            ({ id, label, state }) => {
+                                                const stateLabel = {
+                                                    "not-configured":
+                                                        "Not configured",
+                                                    checking: "Checking",
+                                                    connected: "Connected",
+                                                    degraded: "Degraded",
+                                                    unavailable: "Unavailable",
+                                                }[state];
+                                                const stateClass =
+                                                    state === "connected"
+                                                        ? "fill-success text-success"
+                                                        : state ===
+                                                                "checking" ||
+                                                            state === "degraded"
+                                                          ? "fill-warning text-warning"
+                                                          : state ===
+                                                              "not-configured"
+                                                            ? "fill-muted-foreground text-muted-foreground"
+                                                            : "fill-destructive text-destructive";
+
+                                                return (
+                                                    <div
+                                                        key={id}
+                                                        className="flex items-center gap-1.5"
+                                                        data-testid={`status-bar-health-${id}`}
+                                                        aria-label={`${label}: ${stateLabel}`}
+                                                        title={`${label}: ${stateLabel}`}
+                                                    >
+                                                        <Circle
+                                                            className={`h-1.5 w-1.5 ${stateClass}`}
+                                                        />
+                                                        <span>{label}</span>
+                                                        <span className="ml-auto text-muted-foreground">
+                                                            {stateLabel}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            },
+                                        )}
+                                    </div>
+                                    <div className="mt-2 space-y-1 border-t pt-2">
+                                        {env && (
+                                            <div
+                                                className={
+                                                    env.tier === "prd"
+                                                        ? "font-semibold text-destructive"
+                                                        : env.tier === "stg"
+                                                          ? "text-warning"
+                                                          : ""
+                                                }
+                                                title={environmentBadgeTitle(
+                                                    env,
+                                                )}
+                                                data-testid="status-bar-env"
+                                            >
+                                                {env.label}
+                                            </div>
+                                        )}
+                                        {isDemoMode && (
+                                            <div
+                                                className="text-warning"
+                                                data-testid="status-bar-demo"
+                                            >
+                                                Demo Mode
+                                            </div>
+                                        )}
+                                        <div
+                                            className="flex items-center gap-1"
+                                            title={`All times shown in local time: ${localTimeZoneName()} (${localUtcOffsetLabel()})`}
+                                            data-testid="status-bar-timezone"
+                                        >
+                                            <Clock className="h-3 w-3" />
+                                            {localTimeZoneAbbrev()}
+                                        </div>
+                                        <div className="text-muted-foreground">
+                                            {themeLabel} theme
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </header>
 
@@ -564,128 +752,17 @@ export function AppLayout() {
                     </div>
                 )}
 
-                <main className="flex-1 overflow-auto">
+                <main
+                    className="flex-1 overflow-auto"
+                    style={{
+                        margin: 'var(--shell-sheet-margin)',
+                        background: 'var(--shell-sheet-bg)',
+                        borderRadius: 'var(--shell-sheet-radius)',
+                        boxShadow: 'var(--shell-sheet-shadow)',
+                    }}
+                >
                     <Outlet />
                 </main>
-
-                {/* Status bar */}
-                <footer
-                    className="glass flex h-7 items-center gap-4 border-t px-4 text-xs text-muted-foreground"
-                    data-testid="status-bar"
-                >
-                    <div className="flex items-center gap-1.5">
-                        <Circle
-                            className={`h-2 w-2 ${sidecarOk ? "fill-success text-success" : "fill-destructive text-destructive"}`}
-                        />
-                        <span data-testid="status-bar-connection">
-                            {sidecarOk ? "Connected" : "Disconnected"}
-                        </span>
-                        {!sidecarOk && (
-                            <button
-                                onClick={handleReconnect}
-                                disabled={reconnecting}
-                                title={
-                                    reconnecting ? "Reconnecting…" : undefined
-                                }
-                                className="ml-1 rounded border px-1.5 py-0.5 text-[11px] hover:bg-accent disabled:opacity-50"
-                                data-testid="status-bar-reconnect"
-                            >
-                                {reconnecting ? "Reconnecting…" : "Reconnect"}
-                            </button>
-                        )}
-                    </div>
-                    <div
-                        className="flex min-w-0 items-center gap-3"
-                        data-testid="status-bar-area-health"
-                    >
-                        {areaHealth.map(({ id, label, state }) => {
-                            const stateLabel = {
-                                "not-configured": "Not configured",
-                                checking: "Checking",
-                                connected: "Connected",
-                                degraded: "Degraded",
-                                unavailable: "Unavailable",
-                            }[state];
-                            const stateClass =
-                                state === "connected"
-                                    ? "fill-success text-success"
-                                    : state === "checking" ||
-                                        state === "degraded"
-                                      ? "fill-warning text-warning"
-                                      : state === "not-configured"
-                                        ? "fill-muted-foreground text-muted-foreground"
-                                        : "fill-destructive text-destructive";
-
-                            return (
-                                <div
-                                    key={id}
-                                    className="flex items-center gap-1"
-                                    data-testid={`status-bar-health-${id}`}
-                                    aria-label={`${label}: ${stateLabel}`}
-                                    title={`${label}: ${stateLabel}`}
-                                >
-                                    <Circle
-                                        className={`h-1.5 w-1.5 ${stateClass}`}
-                                    />
-                                    <span>{label}</span>
-                                </div>
-                            );
-                        })}
-                    </div>
-                    {health?.version && <span>v{health.version}</span>}
-                    {isDemoMode && (
-                        <span
-                            className="text-warning"
-                            data-testid="status-bar-demo"
-                        >
-                            Demo Mode
-                        </span>
-                    )}
-                    {env && (
-                        <span
-                            className={
-                                env.tier === "prd"
-                                    ? "font-semibold text-destructive"
-                                    : env.tier === "stg"
-                                      ? "text-warning"
-                                      : ""
-                            }
-                            title={environmentBadgeTitle(env)}
-                            data-testid="status-bar-env"
-                        >
-                            {env.label}
-                        </span>
-                    )}
-                    <span
-                        className="flex items-center gap-1"
-                        title={`All times shown in local time: ${localTimeZoneName()} (${localUtcOffsetLabel()})`}
-                        data-testid="status-bar-timezone"
-                    >
-                        <Clock className="h-3 w-3" />
-                        {localTimeZoneAbbrev()}
-                    </span>
-                    <span className="ml-auto">
-                        {theme === "dark"
-                            ? "Dark"
-                            : theme === "fancy"
-                              ? "✨ Fancy ✨"
-                              : theme === "fathom-dark"
-                                ? "Fathom · Abyss"
-                                : theme === "fathom-light"
-                                  ? "Fathom · Shallows"
-                                  : theme === "letterpress-light"
-                                    ? "Letterpress · Day"
-                                    : theme === "letterpress-dark"
-                                      ? "Letterpress · Night"
-                                      : theme === "cascade-light"
-                                        ? "Cascade · Clear"
-                                        : theme === "cascade-dark"
-                                          ? "Cascade · Deep"
-                                          : "Light"}{" "}
-                        theme
-                    </span>
-                    <span>SwebKit</span>
-                </footer>
             </div>
 
             <GlobalAgentPanel

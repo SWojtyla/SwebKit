@@ -13,7 +13,7 @@ const columns: Column<GatewayClassInfo>[] = [
     {
         header: "Controller",
         cell: (gc) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="font-mono text-xs text-fg-muted">
                 {gc.controllerName ?? "—"}
             </span>
         ),
@@ -24,10 +24,10 @@ const columns: Column<GatewayClassInfo>[] = [
             <span
                 className={
                     gc.status === "Accepted"
-                        ? "text-success"
+                        ? "text-state-done-ink"
                         : gc.status === "Pending"
-                          ? "text-warning"
-                          : "text-muted-foreground"
+                          ? "text-state-waiting-ink"
+                          : "text-fg-muted"
                 }
             >
                 {gc.status}

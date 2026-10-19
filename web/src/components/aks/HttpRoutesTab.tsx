@@ -23,7 +23,7 @@ const columns: Column<HttpRouteInfo>[] = [
     {
         header: "Hosts",
         cell: (route) => (
-            <span className="text-xs">
+            <span className="font-mono text-xs">
                 {route.hostnames.length > 0 ? route.hostnames.join(", ") : "—"}
             </span>
         ),
@@ -31,7 +31,7 @@ const columns: Column<HttpRouteInfo>[] = [
     {
         header: "Parents",
         cell: (route) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-fg-muted">
                 {route.parentRefs.length > 0
                     ? route.parentRefs.join(", ")
                     : "—"}
@@ -41,7 +41,7 @@ const columns: Column<HttpRouteInfo>[] = [
     {
         header: "Backends",
         cell: (route) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-fg-muted">
                 {route.backendRefs.length > 0
                     ? route.backendRefs.join(", ")
                     : "—"}
@@ -53,10 +53,7 @@ const columns: Column<HttpRouteInfo>[] = [
         cell: (route) => {
             const all = route.rules.flatMap((r) => r.matches);
             return (
-                <span
-                    className="text-xs text-muted-foreground"
-                    title={all.join("\n")}
-                >
+                <span className="text-xs text-fg-muted" title={all.join("\n")}>
                     {all.length > 0
                         ? `${all[0]}${all.length > 1 ? ` +${all.length - 1}` : ""}`
                         : "—"}
@@ -70,7 +67,7 @@ const columns: Column<HttpRouteInfo>[] = [
             const types = [...new Set(route.rules.flatMap((r) => r.filters))];
             return (
                 <span
-                    className="text-xs text-muted-foreground"
+                    className="text-xs text-fg-muted"
                     title={types.join("\n")}
                 >
                     {types.length > 0 ? types.join(", ") : "—"}
@@ -84,10 +81,10 @@ const columns: Column<HttpRouteInfo>[] = [
             <span
                 className={
                     route.status === "Accepted"
-                        ? "text-success"
+                        ? "text-state-done-ink"
                         : route.status === "Pending"
-                          ? "text-warning"
-                          : "text-muted-foreground"
+                          ? "text-state-waiting-ink"
+                          : "text-fg-muted"
                 }
             >
                 {route.status}
@@ -153,7 +150,14 @@ export function HttpRoutesTab({
                     label: "Open URL in browser",
                     icon: "🔗",
                     onClick: () => {
-                        if (host) window.open(`https://${host}`, "_blank");
+                        if (!host) return;
+                        try {
+                            const target = new URL(`https://${host}/`);
+                            if (target.host === host)
+                                window.open(target.href, "_blank");
+                        } catch {
+                            return;
+                        }
                     },
                     disabled: !host,
                 },

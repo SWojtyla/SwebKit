@@ -29,7 +29,7 @@ export function ContainerDetailPanel({
 
     if (isLoading) {
         return (
-            <div className="p-4 text-sm text-muted-foreground">
+            <div className="p-4 text-sm text-fg-muted">
                 Loading container details...
             </div>
         );
@@ -37,7 +37,7 @@ export function ContainerDetailPanel({
 
     if (error) {
         return (
-            <div className="p-4 text-sm text-destructive">
+            <div className="p-4 text-sm text-state-blocked-ink">
                 Error: {error.message}
             </div>
         );
@@ -45,7 +45,7 @@ export function ContainerDetailPanel({
 
     if (!containers || containers.length === 0) {
         return (
-            <div className="p-4 text-sm text-muted-foreground">
+            <div className="p-4 text-sm text-fg-muted">
                 No container details available
             </div>
         );
@@ -77,7 +77,7 @@ export function ContainerDetailPanel({
                         <button
                             key={c.name}
                             onClick={() => setActiveContainer(i)}
-                            className={`whitespace-nowrap px-3 py-1.5 text-xs ${activeContainer === i ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-1.5 text-xs font-medium ${activeContainer === i ? "border-primary text-fg" : "border-transparent text-fg-muted hover:text-fg"}`}
                         >
                             {c.name}
                         </button>
@@ -90,7 +90,7 @@ export function ContainerDetailPanel({
                 {/* Basic info */}
                 <div className="space-y-1">
                     <h3 className="text-sm font-semibold">{container.name}</h3>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-fg-muted">
                         <span className="font-medium">Image:</span>{" "}
                         {container.image}
                         {container.imageTag && (
@@ -101,13 +101,13 @@ export function ContainerDetailPanel({
 
                 {/* Metrics */}
                 {containerMetric && (
-                    <div className="rounded border p-3">
-                        <div className="mb-2 text-xs font-medium text-muted-foreground">
+                    <div className="rounded-lg border bg-surface-1 p-4 shadow">
+                        <div className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
                             Metrics
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-xs">
                             <div>
-                                <span className="text-muted-foreground">
+                                <span className="text-fg-muted">
                                     CPU:
                                 </span>{" "}
                                 <span className="font-mono">
@@ -118,7 +118,7 @@ export function ContainerDetailPanel({
                                 </span>
                             </div>
                             <div>
-                                <span className="text-muted-foreground">
+                                <span className="text-fg-muted">
                                     Memory:
                                 </span>{" "}
                                 <span className="font-mono">
@@ -134,13 +134,13 @@ export function ContainerDetailPanel({
                 )}
 
                 {/* Resources */}
-                <div className="rounded border p-3">
-                    <div className="mb-2 text-xs font-medium text-muted-foreground">
+                <div className="rounded-lg border bg-surface-1 p-4 shadow">
+                    <div className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
                         Resources
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                         <div>
-                            <span className="text-muted-foreground">
+                            <span className="text-fg-muted">
                                 CPU Request:
                             </span>{" "}
                             <span className="font-mono">
@@ -148,7 +148,7 @@ export function ContainerDetailPanel({
                             </span>
                         </div>
                         <div>
-                            <span className="text-muted-foreground">
+                            <span className="text-fg-muted">
                                 CPU Limit:
                             </span>{" "}
                             <span className="font-mono">
@@ -156,7 +156,7 @@ export function ContainerDetailPanel({
                             </span>
                         </div>
                         <div>
-                            <span className="text-muted-foreground">
+                            <span className="text-fg-muted">
                                 Memory Request:
                             </span>{" "}
                             <span className="font-mono">
@@ -164,7 +164,7 @@ export function ContainerDetailPanel({
                             </span>
                         </div>
                         <div>
-                            <span className="text-muted-foreground">
+                            <span className="text-fg-muted">
                                 Memory Limit:
                             </span>{" "}
                             <span className="font-mono">
@@ -176,8 +176,8 @@ export function ContainerDetailPanel({
 
                 {/* Environment Variables */}
                 {container.envVars.length > 0 && (
-                    <div className="rounded border p-3">
-                        <div className="mb-2 text-xs font-medium text-muted-foreground">
+                    <div className="rounded-lg border bg-surface-1 p-4 shadow">
+                        <div className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
                             Environment Variables ({container.envVars.length})
                         </div>
                         <div className="space-y-1">
@@ -189,7 +189,7 @@ export function ContainerDetailPanel({
                                     <span className="font-mono font-medium min-w-[160px]">
                                         {env.name}
                                     </span>
-                                    <span className="text-muted-foreground">
+                                    <span className="text-fg-muted">
                                         =
                                     </span>
                                     <div className="flex-1">
@@ -199,11 +199,11 @@ export function ContainerDetailPanel({
                                             </span>
                                         ) : (
                                             <div className="flex items-center gap-2">
-                                                <span className="rounded bg-accent px-1.5 py-0.5 text-[10px]">
+                                                <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] text-accent-ink">
                                                     {env.source}
                                                 </span>
                                                 {env.sourceName && (
-                                                    <span className="font-mono text-muted-foreground">
+                                                    <span className="font-mono text-fg-muted">
                                                         {env.sourceName}
                                                         {env.sourceKey &&
                                                             `/${env.sourceKey}`}
@@ -217,7 +217,7 @@ export function ContainerDetailPanel({
                                                                     env.name,
                                                                 )
                                                             }
-                                                            className="text-primary hover:underline"
+                                                            className="text-accent-ink hover:underline"
                                                         >
                                                             {revealedSecrets.has(
                                                                 env.name,

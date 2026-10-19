@@ -1,127 +1,180 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { ChevronRight, ChevronDown, Mail, MailX, Folder, Search, ArrowUp, ArrowDown } from "lucide-react";
+import {
+    ChevronRight,
+    ChevronDown,
+    Mail,
+    MailX,
+    Folder,
+    Search,
+    ArrowUp,
+    ArrowDown,
+} from "lucide-react";
 import { useSbQueues, useSbTopics, useSbSubscriptions } from "@/lib/hooks";
 import { QueryState } from "@/components/shared/QueryState";
 import type { SbEntityInfo, SbViewMode } from "@/lib/types";
 
 interface Props {
-  nsId: string | null;
-  selectedEntity: SbEntityInfo | null;
-  onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
+    nsId: string | null;
+    selectedEntity: SbEntityInfo | null;
+    onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
 }
 
 type SortCol = "name" | "active" | "dlq" | "sched";
 
 function CountBadge({
-  entity,
-  count,
-  mode,
-  onSelectEntity,
+    entity,
+    count,
+    mode,
+    onSelectEntity,
 }: {
-  entity: SbEntityInfo;
-  count: number | undefined;
-  mode?: SbViewMode;
-  onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
+    entity: SbEntityInfo;
+    count: number | undefined;
+    mode?: SbViewMode;
+    onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
 }) {
-  const value = count ?? 0;
-  if (value > 0 && mode) {
+    const value = count ?? 0;
+    if (value > 0 && mode) {
+        return (
+            <button
+                type="button"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectEntity(entity, mode);
+                }}
+                className={`flex h-5 items-center rounded-full px-2 text-xs font-medium tabular-nums hover:opacity-80 ${
+                    mode === "dlq"
+                        ? "bg-state-blocked-soft text-state-blocked-ink"
+                        : mode === "scheduled"
+                          ? "bg-state-waiting-soft text-state-waiting-ink"
+                          : "bg-state-queued-soft text-state-queued-ink"
+                }`}
+                title={`Open ${mode === "dlq" ? "dead-letter" : mode === "scheduled" ? "scheduled" : "active"} messages`}
+            >
+                {value}
+            </button>
+        );
+    }
     return (
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); onSelectEntity(entity, mode); }}
-        className={`rounded px-1.5 py-0.5 hover:opacity-80 ${
-          mode === "dlq"
-            ? "bg-destructive/20 text-destructive"
-            : mode === "scheduled"
-              ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
-              : "bg-secondary text-secondary-foreground"
-        }`}
-        title={`Open ${mode === "dlq" ? "dead-letter" : mode === "scheduled" ? "scheduled" : "active"} messages`}
-      >
-        {value}
-      </button>
+        <span
+            className={`flex h-5 items-center rounded-full px-2 text-xs tabular-nums ${
+                value > 0
+                    ? "bg-state-queued-soft text-state-queued-ink"
+                    : "text-fg-subtle"
+            }`}
+        >
+            {value > 0 ? value : "–"}
+        </span>
     );
-  }
-  return (
-    <span
-      className={`rounded px-1.5 py-0.5 ${
-        value > 0 ? "bg-muted text-muted-foreground" : "text-muted-foreground"
-      }`}
-    >
-      {value > 0 ? value : "–"}
-    </span>
-  );
 }
 
 function EntityStatsBadges({
-  entity,
-  onSelectEntity,
-  dlqRollup,
+    entity,
+    onSelectEntity,
+    dlqRollup,
 }: {
-  entity: SbEntityInfo;
-  onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
-  /**
-   * Rolled-up dead-letter count across a topic's subscriptions. Topics have no active/scheduled
-   * count of their own, but a DLQ backlog on a subscription underneath is worth surfacing even
-   * while the topic is collapsed — otherwise it's invisible until every subscription is expanded
-   * by hand. `undefined` while the rollup is still loading, `null` if it failed to load.
-   */
-  dlqRollup?: number | null;
+    entity: SbEntityInfo;
+    onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
+    /**
+     * Rolled-up dead-letter count across a topic's subscriptions. Topics have no active/scheduled
+     * count of their own, but a DLQ backlog on a subscription underneath is worth surfacing even
+     * while the topic is collapsed — otherwise it's invisible until every subscription is expanded
+     * by hand. `undefined` while the rollup is still loading, `null` if it failed to load.
+     */
+    dlqRollup?: number | null;
 }) {
+    if (entity.isTopic) {
+        return (
+            <span className="ml-auto flex gap-1 text-xs text-fg-subtle">
+                <span className="flex h-5 items-center rounded-full px-2">
+                    –
+                </span>
+                <span
+                    className={`flex h-5 items-center rounded-full px-2 tabular-nums ${dlqRollup ? "bg-state-blocked-soft text-state-blocked-ink" : ""}`}
+                    title="Dead-letter messages across all subscriptions"
+                    data-testid={`entity-tree-topic-dlq-rollup-${entity.name}`}
+                >
+                    {dlqRollup === undefined
+                        ? "·"
+                        : dlqRollup === null
+                          ? "?"
+                          : dlqRollup > 0
+                            ? dlqRollup
+                            : "–"}
+                </span>
+                <span className="flex h-5 items-center rounded-full px-2">
+                    –
+                </span>
+            </span>
+        );
+    }
 
-  if (entity.isTopic) {
+    if (!entity.stats) {
+        return (
+            <span className="ml-auto flex gap-1 text-xs text-fg-subtle">
+                <span className="flex h-5 items-center rounded-full px-2">
+                    ·
+                </span>
+                <span className="flex h-5 items-center rounded-full px-2">
+                    ·
+                </span>
+                <span className="flex h-5 items-center rounded-full px-2">
+                    ·
+                </span>
+            </span>
+        );
+    }
+
     return (
-      <span className="ml-auto flex gap-1 text-xs text-muted-foreground">
-        <span className="rounded px-1.5 py-0.5">–</span>
-        <span
-          className={`rounded px-1.5 py-0.5 ${dlqRollup ? "bg-destructive/20 text-destructive" : ""}`}
-          title="Dead-letter messages across all subscriptions"
-          data-testid={`entity-tree-topic-dlq-rollup-${entity.name}`}
-        >
-          {dlqRollup === undefined ? "·" : dlqRollup === null ? "?" : dlqRollup > 0 ? dlqRollup : "–"}
+        <span className="ml-auto flex gap-1 text-xs">
+            <CountBadge
+                entity={entity}
+                count={entity.stats.activeMessageCount}
+                mode="active"
+                onSelectEntity={onSelectEntity}
+            />
+            <CountBadge
+                entity={entity}
+                count={entity.stats.deadLetterMessageCount}
+                mode="dlq"
+                onSelectEntity={onSelectEntity}
+            />
+            <CountBadge
+                entity={entity}
+                count={entity.stats.scheduledMessageCount}
+                mode="scheduled"
+                onSelectEntity={onSelectEntity}
+            />
         </span>
-        <span className="rounded px-1.5 py-0.5">–</span>
-      </span>
     );
-  }
-
-  if (!entity.stats) {
-    return (
-      <span className="ml-auto flex gap-1 text-xs text-muted-foreground">
-        <span className="rounded px-1.5 py-0.5">·</span>
-        <span className="rounded px-1.5 py-0.5">·</span>
-        <span className="rounded px-1.5 py-0.5">·</span>
-      </span>
-    );
-  }
-
-  return (
-    <span className="ml-auto flex gap-1 text-xs">
-      <CountBadge entity={entity} count={entity.stats.activeMessageCount} mode="active" onSelectEntity={onSelectEntity} />
-      <CountBadge entity={entity} count={entity.stats.deadLetterMessageCount} mode="dlq" onSelectEntity={onSelectEntity} />
-      <CountBadge entity={entity} count={entity.stats.scheduledMessageCount} mode="scheduled" onSelectEntity={onSelectEntity} />
-    </span>
-  );
 }
 
 // Roving keyboard navigation across `role="treeitem"` rows within a tree
 // container. Since EntityTree isn't virtualized, every rendered row already
 // exists in the DOM, so a simple DOM query is enough (no scroll-into-view
 // dance like the virtualized CollectionTree needs).
-function focusAdjacentTreeItem(container: HTMLElement | null, current: HTMLElement, delta: 1 | -1) {
-  if (!container) return;
-  const items = Array.from(container.querySelectorAll<HTMLElement>('[role="treeitem"]'));
-  const index = items.indexOf(current);
-  if (index === -1) return;
-  const next = items[index + delta];
-  next?.focus();
+function focusAdjacentTreeItem(
+    container: HTMLElement | null,
+    current: HTMLElement,
+    delta: 1 | -1,
+) {
+    if (!container) return;
+    const items = Array.from(
+        container.querySelectorAll<HTMLElement>('[role="treeitem"]'),
+    );
+    const index = items.indexOf(current);
+    if (index === -1) return;
+    const next = items[index + delta];
+    next?.focus();
 }
 
 const EntityIcon = ({ entity }: { entity: SbEntityInfo }) => {
-  if (entity.stats?.deadLetterMessageCount && entity.stats.deadLetterMessageCount > 0) {
-    return <MailX className="h-4 w-4 text-destructive" />;
-  }
-  return <Mail className="h-4 w-4 text-muted-foreground" />;
+    if (
+        entity.stats?.deadLetterMessageCount &&
+        entity.stats.deadLetterMessageCount > 0
+    ) {
+        return <MailX className="h-4 w-4 text-state-blocked" />;
+    }
+    return <Mail className="h-4 w-4 text-fg-muted" />;
 };
 
 /**
@@ -129,397 +182,570 @@ const EntityIcon = ({ entity }: { entity: SbEntityInfo }) => {
  * is spelled out in the badge's tooltip rather than learned from a broker error after the fact.
  */
 const SessionBadge = ({ entity }: { entity: SbEntityInfo }) => {
-  if (!entity.requiresSession) return null;
-  return (
-    <span
-      data-testid={`entity-tree-session-${entity.name}`}
-      title="Requires sessions — settle actions (complete, dead-letter, resubmit, resend, purge) are unavailable on this entity"
-      className="shrink-0 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium uppercase leading-none text-amber-600 dark:text-amber-400"
-    >
-      session
-    </span>
-  );
+    if (!entity.requiresSession) return null;
+    return (
+        <span
+            data-testid={`entity-tree-session-${entity.name}`}
+            title="Requires sessions — settle actions (complete, dead-letter, resubmit, resend, purge) are unavailable on this entity"
+            className="shrink-0 rounded-full bg-state-needs-soft px-1.5 py-0.5 text-[10px] font-medium uppercase leading-none text-state-needs-ink"
+        >
+            session
+        </span>
+    );
 };
 
 function SortArrow({ active, asc }: { active: boolean; asc: boolean }) {
-  if (!active) return null;
-  return asc ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />;
+    if (!active) return null;
+    return asc ? (
+        <ArrowUp className="inline h-3 w-3" />
+    ) : (
+        <ArrowDown className="inline h-3 w-3" />
+    );
 }
 
 export function EntityTree({ nsId, selectedEntity, onSelectEntity }: Props) {
-  const { data: queues, isLoading: queuesLoading, isError: queuesIsError, error: queuesError } = useSbQueues(nsId);
-  const { data: topics, isLoading: topicsLoading, isError: topicsIsError, error: topicsError } = useSbTopics(nsId);
-  const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
-  const [queuesCollapsed, setQueuesCollapsed] = useState(false);
-  const [filter, setFilter] = useState("");
-  const [sortCol, setSortCol] = useState<SortCol>("name");
-  const [sortAsc, setSortAsc] = useState(true);
-  const treeRef = useRef<HTMLDivElement | null>(null);
-
-  const toggleSort = (col: SortCol) => {
-    if (sortCol === col) setSortAsc(!sortAsc);
-    else { setSortCol(col); setSortAsc(col !== "dlq" && col !== "active"); }
-  };
-
-  const sortItems = useCallback((items: SbEntityInfo[]) => {
-    const filtered = filter.trim()
-      ? items.filter((e) => e.name.toLowerCase().includes(filter.toLowerCase()))
-      : [...items];
-    return filtered.sort((a, b) => {
-      let cmp: number;
-      switch (sortCol) {
-        case "active": cmp = (a.stats?.activeMessageCount ?? 0) - (b.stats?.activeMessageCount ?? 0); break;
-        case "dlq": cmp = (a.stats?.deadLetterMessageCount ?? 0) - (b.stats?.deadLetterMessageCount ?? 0); break;
-        case "sched": cmp = (a.stats?.scheduledMessageCount ?? 0) - (b.stats?.scheduledMessageCount ?? 0); break;
-        default: cmp = a.name.localeCompare(b.name); break;
-      }
-      return sortAsc ? cmp : -cmp;
-    });
-  }, [filter, sortCol, sortAsc]);
-
-  const sortedQueues = useMemo(() => queues ? sortItems(queues) : [], [queues, sortItems]);
-  const sortedTopics = useMemo(() => topics ? sortItems(topics) : [], [topics, sortItems]);
-
-  if (!nsId) {
-    return (
-      <div className="p-4 text-sm text-muted-foreground" data-testid="entity-tree-empty">
-        Select a namespace to view entities
-      </div>
+    const {
+        data: queues,
+        isLoading: queuesLoading,
+        isError: queuesIsError,
+        error: queuesError,
+    } = useSbQueues(nsId);
+    const {
+        data: topics,
+        isLoading: topicsLoading,
+        isError: topicsIsError,
+        error: topicsError,
+    } = useSbTopics(nsId);
+    const [expandedTopics, setExpandedTopics] = useState<Set<string>>(
+        new Set(),
     );
-  }
+    const [queuesCollapsed, setQueuesCollapsed] = useState(false);
+    const [filter, setFilter] = useState("");
+    const [sortCol, setSortCol] = useState<SortCol>("name");
+    const [sortAsc, setSortAsc] = useState(true);
+    const treeRef = useRef<HTMLDivElement | null>(null);
 
-  const toggleTopic = (name: string) => {
-    setExpandedTopics((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  };
+    const toggleSort = (col: SortCol) => {
+        if (sortCol === col) setSortAsc(!sortAsc);
+        else {
+            setSortCol(col);
+            setSortAsc(col !== "dlq" && col !== "active");
+        }
+    };
 
-  const expandAllTopics = () => setExpandedTopics(new Set(sortedTopics.map((t) => t.name)));
-  const collapseAllTopics = () => setExpandedTopics(new Set());
+    const sortItems = useCallback(
+        (items: SbEntityInfo[]) => {
+            const filtered = filter.trim()
+                ? items.filter((e) =>
+                      e.name.toLowerCase().includes(filter.toLowerCase()),
+                  )
+                : [...items];
+            return filtered.sort((a, b) => {
+                let cmp: number;
+                switch (sortCol) {
+                    case "active":
+                        cmp =
+                            (a.stats?.activeMessageCount ?? 0) -
+                            (b.stats?.activeMessageCount ?? 0);
+                        break;
+                    case "dlq":
+                        cmp =
+                            (a.stats?.deadLetterMessageCount ?? 0) -
+                            (b.stats?.deadLetterMessageCount ?? 0);
+                        break;
+                    case "sched":
+                        cmp =
+                            (a.stats?.scheduledMessageCount ?? 0) -
+                            (b.stats?.scheduledMessageCount ?? 0);
+                        break;
+                    default:
+                        cmp = a.name.localeCompare(b.name);
+                        break;
+                }
+                return sortAsc ? cmp : -cmp;
+            });
+        },
+        [filter, sortCol, sortAsc],
+    );
 
-  return (
-    <div className="flex h-full flex-col text-sm">
-      {/* Filter input */}
-      <div className="border-b px-3 py-2">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter entities..."
-            className="w-full rounded-md border bg-card py-1.5 pl-8 text-xs"
-            data-testid="entity-filter"
-          />
-        </div>
-      </div>
+    const sortedQueues = useMemo(
+        () => (queues ? sortItems(queues) : []),
+        [queues, sortItems],
+    );
+    const sortedTopics = useMemo(
+        () => (topics ? sortItems(topics) : []),
+        [topics, sortItems],
+    );
 
-      {/* Column headers */}
-      <div className="flex items-center gap-1 border-b px-3 py-1 text-xs text-muted-foreground">
-        <button onClick={() => toggleSort("name")} className="flex-1 text-left font-medium hover:text-foreground">
-          Name <SortArrow active={sortCol === "name"} asc={sortAsc} />
-        </button>
-        <button onClick={() => toggleSort("active")} className="w-10 text-center font-medium hover:text-foreground" title="Active count">
-          A <SortArrow active={sortCol === "active"} asc={sortAsc} />
-        </button>
-        <button onClick={() => toggleSort("dlq")} className="w-10 text-center font-medium hover:text-foreground" title="Dead-letter count">
-          DLQ <SortArrow active={sortCol === "dlq"} asc={sortAsc} />
-        </button>
-        <button onClick={() => toggleSort("sched")} className="w-10 text-center font-medium hover:text-foreground" title="Scheduled count">
-          Sch <SortArrow active={sortCol === "sched"} asc={sortAsc} />
-        </button>
-      </div>
+    if (!nsId) {
+        return (
+            <div
+                className="p-4 text-sm text-fg-muted"
+                data-testid="entity-tree-empty"
+            >
+                Select a namespace to view entities
+            </div>
+        );
+    }
 
-      <div className="flex-1 overflow-auto py-1" role="tree" aria-label="Queues and topics" ref={treeRef}>
-        {/* Queues section — a real section header + collapse toggle, matching the reported
+    const toggleTopic = (name: string) => {
+        setExpandedTopics((prev) => {
+            const next = new Set(prev);
+            if (next.has(name)) next.delete(name);
+            else next.add(name);
+            return next;
+        });
+    };
+
+    const expandAllTopics = () =>
+        setExpandedTopics(new Set(sortedTopics.map((t) => t.name)));
+    const collapseAllTopics = () => setExpandedTopics(new Set());
+
+    return (
+        <div className="flex h-full flex-col bg-surface-1 text-sm">
+            {/* Filter input */}
+            <div className="border-b p-2">
+                <div className="relative">
+                    <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" />
+                    <input
+                        type="text"
+                        value={filter}
+                        onChange={(e) => setFilter(e.target.value)}
+                        placeholder="Filter entities..."
+                        className="h-7 w-full rounded-md border bg-surface-1 pl-8 pr-2 text-sm placeholder:text-fg-subtle"
+                        data-testid="entity-filter"
+                    />
+                </div>
+            </div>
+
+            {/* Column headers */}
+            <div className="flex items-center gap-1 border-b px-3 py-1 text-xs text-fg-muted">
+                <button
+                    onClick={() => toggleSort("name")}
+                    className="flex-1 text-left font-medium hover:text-fg"
+                >
+                    Name <SortArrow active={sortCol === "name"} asc={sortAsc} />
+                </button>
+                <button
+                    onClick={() => toggleSort("active")}
+                    className="w-10 text-center font-medium hover:text-fg"
+                    title="Active count"
+                >
+                    A <SortArrow active={sortCol === "active"} asc={sortAsc} />
+                </button>
+                <button
+                    onClick={() => toggleSort("dlq")}
+                    className="w-10 text-center font-medium hover:text-fg"
+                    title="Dead-letter count"
+                >
+                    DLQ <SortArrow active={sortCol === "dlq"} asc={sortAsc} />
+                </button>
+                <button
+                    onClick={() => toggleSort("sched")}
+                    className="w-10 text-center font-medium hover:text-fg"
+                    title="Scheduled count"
+                >
+                    Sch <SortArrow active={sortCol === "sched"} asc={sortAsc} />
+                </button>
+            </div>
+
+            <div
+                className="flex-1 overflow-auto py-1"
+                role="tree"
+                aria-label="Queues and topics"
+                ref={treeRef}
+            >
+                {/* Queues section — a real section header + collapse toggle, matching the reported
             "isn't collapsed by default when it should be" complaint for large namespaces. Its
             loading/error/empty state is independent of Topics below: a slow or broken Topics
             query must not hold up an already-loaded Queues list (or vice versa). */}
-        <div className="mb-2" role="group" aria-label="Queues">
-          <div className="flex items-center justify-between px-3 py-1">
-            <button
-              type="button"
-              onClick={() => setQueuesCollapsed((v) => !v)}
-              className="flex items-center gap-1 text-xs font-semibold uppercase text-muted-foreground hover:text-foreground"
-              data-testid="entity-tree-queues-toggle"
-              aria-expanded={!queuesCollapsed}
-            >
-              {queuesCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              Queues{!queuesLoading && !queuesIsError ? ` (${sortedQueues.length})` : ""}
-            </button>
-          </div>
-          {!queuesCollapsed && (
-            <QueryState
-              data={sortedQueues}
-              isLoading={queuesLoading}
-              error={queuesError}
-              emptyTitle="No queues found"
-              skeletonRows={3}
-            >
-              {(qs) => qs.map((queue) => (
-                <div
-                  key={queue.entityPath}
-                  role="treeitem"
-                  aria-level={1}
-                  aria-selected={selectedEntity?.entityPath === queue.entityPath}
-                  tabIndex={0}
-                  data-testid={`entity-tree-queue-${queue.name}`}
-                  onClick={() => onSelectEntity(queue)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onSelectEntity(queue);
-                    } else if (e.key === "ArrowDown") {
-                      e.preventDefault();
-                      focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
-                    } else if (e.key === "ArrowUp") {
-                      e.preventDefault();
-                      focusAdjacentTreeItem(treeRef.current, e.currentTarget, -1);
-                    }
-                  }}
-                  className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
-                    selectedEntity?.entityPath === queue.entityPath ? "bg-accent" : ""
-                  }`}
-                >
-                  <EntityIcon entity={queue} />
-                  <span className="truncate flex-1">{queue.name}</span>
-                  <SessionBadge entity={queue} />
-                  <EntityStatsBadges entity={queue} onSelectEntity={onSelectEntity} />
+                <div className="mb-2" role="group" aria-label="Queues">
+                    <div className="flex items-center justify-between px-3 py-1">
+                        <button
+                            type="button"
+                            onClick={() => setQueuesCollapsed((v) => !v)}
+                            className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-fg-muted hover:text-fg"
+                            data-testid="entity-tree-queues-toggle"
+                            aria-expanded={!queuesCollapsed}
+                        >
+                            {queuesCollapsed ? (
+                                <ChevronRight className="h-3 w-3" />
+                            ) : (
+                                <ChevronDown className="h-3 w-3" />
+                            )}
+                            Queues
+                            {!queuesLoading && !queuesIsError
+                                ? ` (${sortedQueues.length})`
+                                : ""}
+                        </button>
+                    </div>
+                    {!queuesCollapsed && (
+                        <QueryState
+                            data={sortedQueues}
+                            isLoading={queuesLoading}
+                            error={queuesError}
+                            emptyTitle="No queues found"
+                            skeletonRows={3}
+                        >
+                            {(qs) =>
+                                qs.map((queue) => (
+                                    <div
+                                        key={queue.entityPath}
+                                        role="treeitem"
+                                        aria-level={1}
+                                        aria-selected={
+                                            selectedEntity?.entityPath ===
+                                            queue.entityPath
+                                        }
+                                        tabIndex={0}
+                                        data-testid={`entity-tree-queue-${queue.name}`}
+                                        onClick={() => onSelectEntity(queue)}
+                                        onKeyDown={(e) => {
+                                            if (
+                                                e.key === "Enter" ||
+                                                e.key === " "
+                                            ) {
+                                                e.preventDefault();
+                                                onSelectEntity(queue);
+                                            } else if (e.key === "ArrowDown") {
+                                                e.preventDefault();
+                                                focusAdjacentTreeItem(
+                                                    treeRef.current,
+                                                    e.currentTarget,
+                                                    1,
+                                                );
+                                            } else if (e.key === "ArrowUp") {
+                                                e.preventDefault();
+                                                focusAdjacentTreeItem(
+                                                    treeRef.current,
+                                                    e.currentTarget,
+                                                    -1,
+                                                );
+                                            }
+                                        }}
+                                        className={`mx-1 flex min-h-7 cursor-pointer items-center gap-2 rounded-md px-2 py-0.5 text-left text-fg-muted hover:bg-surface-2 hover:text-fg ${
+                                            selectedEntity?.entityPath ===
+                                            queue.entityPath
+                                                ? "bg-accent-soft text-accent-ink"
+                                                : ""
+                                        }`}
+                                    >
+                                        <EntityIcon entity={queue} />
+                                        <span className="truncate flex-1">
+                                            {queue.name}
+                                        </span>
+                                        <SessionBadge entity={queue} />
+                                        <EntityStatsBadges
+                                            entity={queue}
+                                            onSelectEntity={onSelectEntity}
+                                        />
+                                    </div>
+                                ))
+                            }
+                        </QueryState>
+                    )}
                 </div>
-              ))}
-            </QueryState>
-          )}
-        </div>
 
-        {/* Topics section */}
-        <div role="group" aria-label="Topics">
-          <div className="flex items-center justify-between px-3 py-1">
-            <span className="text-xs font-semibold uppercase text-muted-foreground">
-              Topics{!topicsLoading && !topicsIsError ? ` (${sortedTopics.length})` : ""}
-            </span>
-            {sortedTopics.length > 0 && (
-              <div className="flex items-center gap-2 text-[11px] normal-case text-muted-foreground">
-                <button
-                  type="button"
-                  onClick={expandAllTopics}
-                  className="hover:text-foreground"
-                  data-testid="entity-tree-topics-expand-all"
-                >
-                  Expand all
-                </button>
-                <button
-                  type="button"
-                  onClick={collapseAllTopics}
-                  className="hover:text-foreground"
-                  data-testid="entity-tree-topics-collapse-all"
-                >
-                  Collapse all
-                </button>
-              </div>
-            )}
-          </div>
-          <QueryState
-            data={sortedTopics}
-            isLoading={topicsLoading}
-            error={topicsError}
-            emptyTitle="No topics found"
-            skeletonRows={3}
-          >
-            {(ts) => ts.map((topic) => (
-              <TopicRow
-                key={topic.entityPath}
-                nsId={nsId}
-                topic={topic}
-                isExpanded={expandedTopics.has(topic.name)}
-                onToggle={toggleTopic}
-                selectedEntity={selectedEntity}
-                onSelectEntity={onSelectEntity}
-                treeRef={treeRef}
-              />
-            ))}
-          </QueryState>
+                {/* Topics section */}
+                <div role="group" aria-label="Topics">
+                    <div className="flex items-center justify-between px-3 py-1">
+                        <span className="text-xs font-medium uppercase tracking-wide text-fg-muted">
+                            Topics
+                            {!topicsLoading && !topicsIsError
+                                ? ` (${sortedTopics.length})`
+                                : ""}
+                        </span>
+                        {sortedTopics.length > 0 && (
+                            <div className="flex items-center gap-2 text-xs normal-case text-fg-subtle">
+                                <button
+                                    type="button"
+                                    onClick={expandAllTopics}
+                                    className="hover:text-fg"
+                                    data-testid="entity-tree-topics-expand-all"
+                                >
+                                    Expand all
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={collapseAllTopics}
+                                    className="hover:text-fg"
+                                    data-testid="entity-tree-topics-collapse-all"
+                                >
+                                    Collapse all
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    <QueryState
+                        data={sortedTopics}
+                        isLoading={topicsLoading}
+                        error={topicsError}
+                        emptyTitle="No topics found"
+                        skeletonRows={3}
+                    >
+                        {(ts) =>
+                            ts.map((topic) => (
+                                <TopicRow
+                                    key={topic.entityPath}
+                                    nsId={nsId}
+                                    topic={topic}
+                                    isExpanded={expandedTopics.has(topic.name)}
+                                    onToggle={toggleTopic}
+                                    selectedEntity={selectedEntity}
+                                    onSelectEntity={onSelectEntity}
+                                    treeRef={treeRef}
+                                />
+                            ))
+                        }
+                    </QueryState>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }
 
 function TopicRow({
-  nsId,
-  topic,
-  isExpanded,
-  onToggle,
-  selectedEntity,
-  onSelectEntity,
-  treeRef,
+    nsId,
+    topic,
+    isExpanded,
+    onToggle,
+    selectedEntity,
+    onSelectEntity,
+    treeRef,
 }: {
-  nsId: string;
-  topic: SbEntityInfo;
-  isExpanded: boolean;
-  onToggle: (name: string) => void;
-  selectedEntity: SbEntityInfo | null;
-  onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
-  treeRef: React.RefObject<HTMLDivElement | null>;
+    nsId: string;
+    topic: SbEntityInfo;
+    isExpanded: boolean;
+    onToggle: (name: string) => void;
+    selectedEntity: SbEntityInfo | null;
+    onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
+    treeRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  // Only while expanded. This used to fetch unconditionally so the collapsed rollup badge stayed
-  // accurate, which meant one request per topic the moment the tree painted — each one building its
-  // own client and running its own per-subscription fan-out, just to render three digits. The topic
-  // list now carries the rollup, so the collapsed badge costs nothing and this fetches only what an
-  // expanded topic actually renders.
-  const { data: subs, isLoading: subsLoading, isError: subsIsError } = useSbSubscriptions(nsId, topic.name, {
-    enabled: isExpanded,
-  });
+    // Only while expanded. This used to fetch unconditionally so the collapsed rollup badge stayed
+    // accurate, which meant one request per topic the moment the tree painted — each one building its
+    // own client and running its own per-subscription fan-out, just to render three digits. The topic
+    // list now carries the rollup, so the collapsed badge costs nothing and this fetches only what an
+    // expanded topic actually renders.
+    const {
+        data: subs,
+        isLoading: subsLoading,
+        isError: subsIsError,
+    } = useSbSubscriptions(nsId, topic.name, {
+        enabled: isExpanded,
+    });
 
-  const dlqRollup = useMemo(() => {
-    // Prefer the subscriptions once loaded — same number, but re-read on expand rather than as of
-    // whenever the topic list was fetched.
-    if (subs) return subs.reduce((sum, s) => sum + (s.stats?.deadLetterMessageCount ?? 0), 0);
-    if (topic.subscriptionDeadLetterCount != null) return topic.subscriptionDeadLetterCount;
-    if (subsIsError) return null;
-    return subsLoading ? undefined : null;
-  }, [subs, subsLoading, subsIsError, topic.subscriptionDeadLetterCount]);
+    const dlqRollup = useMemo(() => {
+        // Prefer the subscriptions once loaded — same number, but re-read on expand rather than as of
+        // whenever the topic list was fetched.
+        if (subs)
+            return subs.reduce(
+                (sum, s) => sum + (s.stats?.deadLetterMessageCount ?? 0),
+                0,
+            );
+        if (topic.subscriptionDeadLetterCount != null)
+            return topic.subscriptionDeadLetterCount;
+        if (subsIsError) return null;
+        return subsLoading ? undefined : null;
+    }, [subs, subsLoading, subsIsError, topic.subscriptionDeadLetterCount]);
 
-  return (
-    <div>
-      <div
-        role="treeitem"
-        aria-level={1}
-        aria-expanded={isExpanded}
-        aria-selected={selectedEntity?.entityPath === topic.entityPath}
-        tabIndex={0}
-        data-testid={`entity-tree-topic-${topic.name}`}
-        onClick={() => onToggle(topic.name)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onToggle(topic.name);
-          } else if (e.key === "ArrowRight") {
-            e.preventDefault();
-            if (!isExpanded) onToggle(topic.name);
-            else focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
-          } else if (e.key === "ArrowLeft") {
-            if (isExpanded) {
-              e.preventDefault();
-              onToggle(topic.name);
-            }
-          } else if (e.key === "ArrowDown") {
-            e.preventDefault();
-            focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            focusAdjacentTreeItem(treeRef.current, e.currentTarget, -1);
-          }
-        }}
-        // Deliberately not the same hover treatment as queue/subscription rows: those select an
-        // entity on click, a topic row only ever toggles expansion, so it shouldn't read as the
-        // same kind of clickable target. The chevron button is the one dedicated toggle control.
-        className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-muted/40 ${
-          selectedEntity?.entityPath === topic.entityPath ? "bg-accent" : ""
-        }`}
-      >
-        <button
-          type="button"
-          tabIndex={-1}
-          onClick={(e) => { e.stopPropagation(); onToggle(topic.name); }}
-          className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-          data-testid={`entity-tree-topic-toggle-${topic.name}`}
-          aria-label={isExpanded ? `Collapse ${topic.name}` : `Expand ${topic.name}`}
-        >
-          {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        </button>
-        <Folder className="h-4 w-4 text-muted-foreground" />
-        <span className="truncate">{topic.name}</span>
-        <EntityStatsBadges entity={topic} onSelectEntity={onSelectEntity} dlqRollup={dlqRollup} />
-      </div>
+    return (
+        <div>
+            <div
+                role="treeitem"
+                aria-level={1}
+                aria-expanded={isExpanded}
+                aria-selected={selectedEntity?.entityPath === topic.entityPath}
+                tabIndex={0}
+                data-testid={`entity-tree-topic-${topic.name}`}
+                onClick={() => onToggle(topic.name)}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onToggle(topic.name);
+                    } else if (e.key === "ArrowRight") {
+                        e.preventDefault();
+                        if (!isExpanded) onToggle(topic.name);
+                        else
+                            focusAdjacentTreeItem(
+                                treeRef.current,
+                                e.currentTarget,
+                                1,
+                            );
+                    } else if (e.key === "ArrowLeft") {
+                        if (isExpanded) {
+                            e.preventDefault();
+                            onToggle(topic.name);
+                        }
+                    } else if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        focusAdjacentTreeItem(
+                            treeRef.current,
+                            e.currentTarget,
+                            1,
+                        );
+                    } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        focusAdjacentTreeItem(
+                            treeRef.current,
+                            e.currentTarget,
+                            -1,
+                        );
+                    }
+                }}
+                // Deliberately not the same hover treatment as queue/subscription rows: those select an
+                // entity on click, a topic row only ever toggles expansion, so it shouldn't read as the
+                // same kind of clickable target. The chevron button is the one dedicated toggle control.
+                className={`mx-1 flex min-h-7 cursor-pointer items-center gap-2 rounded-md px-2 py-0.5 text-left text-fg-muted hover:bg-surface-2/50 hover:text-fg ${
+                    selectedEntity?.entityPath === topic.entityPath
+                        ? "bg-accent-soft text-accent-ink"
+                        : ""
+                }`}
+            >
+                <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onToggle(topic.name);
+                    }}
+                    className="rounded p-0.5 text-fg-muted hover:bg-accent-soft hover:text-fg"
+                    data-testid={`entity-tree-topic-toggle-${topic.name}`}
+                    aria-label={
+                        isExpanded
+                            ? `Collapse ${topic.name}`
+                            : `Expand ${topic.name}`
+                    }
+                >
+                    {isExpanded ? (
+                        <ChevronDown className="h-3 w-3" />
+                    ) : (
+                        <ChevronRight className="h-3 w-3" />
+                    )}
+                </button>
+                <Folder className="h-4 w-4 text-fg-muted" />
+                <span className="truncate">{topic.name}</span>
+                <EntityStatsBadges
+                    entity={topic}
+                    onSelectEntity={onSelectEntity}
+                    dlqRollup={dlqRollup}
+                />
+            </div>
 
-      {isExpanded && (
-        <SubscriptionRows
-          topicName={topic.name}
-          subs={subs}
-          isLoading={subsLoading}
-          isError={subsIsError}
-          selectedEntity={selectedEntity}
-          onSelectEntity={onSelectEntity}
-          treeRef={treeRef}
-        />
-      )}
-    </div>
-  );
+            {isExpanded && (
+                <SubscriptionRows
+                    topicName={topic.name}
+                    subs={subs}
+                    isLoading={subsLoading}
+                    isError={subsIsError}
+                    selectedEntity={selectedEntity}
+                    onSelectEntity={onSelectEntity}
+                    treeRef={treeRef}
+                />
+            )}
+        </div>
+    );
 }
 
 function SubscriptionRows({
-  topicName,
-  subs,
-  isLoading,
-  isError,
-  selectedEntity,
-  onSelectEntity,
-  treeRef,
+    topicName,
+    subs,
+    isLoading,
+    isError,
+    selectedEntity,
+    onSelectEntity,
+    treeRef,
 }: {
-  topicName: string;
-  subs: SbEntityInfo[] | undefined;
-  isLoading: boolean;
-  isError: boolean;
-  selectedEntity: SbEntityInfo | null;
-  onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
-  treeRef: React.RefObject<HTMLDivElement | null>;
+    topicName: string;
+    subs: SbEntityInfo[] | undefined;
+    isLoading: boolean;
+    isError: boolean;
+    selectedEntity: SbEntityInfo | null;
+    onSelectEntity: (entity: SbEntityInfo, viewMode?: SbViewMode) => void;
+    treeRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  // A fetch failure here must not look like "this topic has no subscriptions" — same class of
-  // bug as the top-level Queues/Topics sections, just one level deeper in the tree.
-  if (isError) {
-    return (
-      <div className="px-6 py-1 text-xs text-destructive" data-testid={`entity-tree-sub-error-${topicName}`}>
-        Couldn't load subscriptions
-      </div>
-    );
-  }
-  if (isLoading) {
-    return <div className="px-6 py-1 text-xs text-muted-foreground">Loading...</div>;
-  }
-  if (!subs || subs.length === 0) {
-    return (
-      <div className="px-6 py-1 text-xs text-muted-foreground" data-testid={`entity-tree-sub-empty-${topicName}`}>
-        No subscriptions
-      </div>
-    );
-  }
+    // A fetch failure here must not look like "this topic has no subscriptions" — same class of
+    // bug as the top-level Queues/Topics sections, just one level deeper in the tree.
+    if (isError) {
+        return (
+            <div
+                className="px-6 py-1 text-xs text-state-blocked-ink"
+                data-testid={`entity-tree-sub-error-${topicName}`}
+            >
+                Couldn't load subscriptions
+            </div>
+        );
+    }
+    if (isLoading) {
+        return (
+            <div className="px-6 py-1 text-xs text-fg-muted">Loading...</div>
+        );
+    }
+    if (!subs || subs.length === 0) {
+        return (
+            <div
+                className="px-6 py-1 text-xs text-fg-muted"
+                data-testid={`entity-tree-sub-empty-${topicName}`}
+            >
+                No subscriptions
+            </div>
+        );
+    }
 
-  return (
-    <div className="ml-4" role="group" aria-label={`Subscriptions of ${topicName}`}>
-      {subs.map((sub) => (
+    return (
         <div
-          key={sub.entityPath}
-          role="treeitem"
-          aria-level={2}
-          aria-selected={selectedEntity?.entityPath === sub.entityPath}
-          tabIndex={0}
-          data-testid={`entity-tree-sub-${sub.name}`}
-          onClick={() => onSelectEntity(sub)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onSelectEntity(sub);
-            } else if (e.key === "ArrowDown") {
-              e.preventDefault();
-              focusAdjacentTreeItem(treeRef.current, e.currentTarget, 1);
-            } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
-              e.preventDefault();
-              focusAdjacentTreeItem(treeRef.current, e.currentTarget, -1);
-            }
-          }}
-          className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left hover:bg-accent ${
-            selectedEntity?.entityPath === sub.entityPath ? "bg-accent" : ""
-          }`}
+            className="ml-5 border-l"
+            role="group"
+            aria-label={`Subscriptions of ${topicName}`}
         >
-          <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="truncate flex-1">{sub.name}</span>
-          <SessionBadge entity={sub} />
-          <EntityStatsBadges entity={sub} onSelectEntity={onSelectEntity} />
+            {subs.map((sub) => (
+                <div
+                    key={sub.entityPath}
+                    role="treeitem"
+                    aria-level={2}
+                    aria-selected={
+                        selectedEntity?.entityPath === sub.entityPath
+                    }
+                    tabIndex={0}
+                    data-testid={`entity-tree-sub-${sub.name}`}
+                    onClick={() => onSelectEntity(sub)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onSelectEntity(sub);
+                        } else if (e.key === "ArrowDown") {
+                            e.preventDefault();
+                            focusAdjacentTreeItem(
+                                treeRef.current,
+                                e.currentTarget,
+                                1,
+                            );
+                        } else if (
+                            e.key === "ArrowUp" ||
+                            e.key === "ArrowLeft"
+                        ) {
+                            e.preventDefault();
+                            focusAdjacentTreeItem(
+                                treeRef.current,
+                                e.currentTarget,
+                                -1,
+                            );
+                        }
+                    }}
+                    className={`mx-1 flex min-h-7 cursor-pointer items-center gap-2 rounded-md px-2 py-0.5 text-left text-fg-muted hover:bg-surface-2 hover:text-fg ${
+                        selectedEntity?.entityPath === sub.entityPath
+                            ? "bg-accent-soft text-accent-ink"
+                            : ""
+                    }`}
+                >
+                    <Mail className="h-3.5 w-3.5 text-fg-muted" />
+                    <span className="truncate flex-1">{sub.name}</span>
+                    <SessionBadge entity={sub} />
+                    <EntityStatsBadges
+                        entity={sub}
+                        onSelectEntity={onSelectEntity}
+                    />
+                </div>
+            ))}
         </div>
-      ))}
-    </div>
-  );
+    );
 }

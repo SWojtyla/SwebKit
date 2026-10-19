@@ -7,22 +7,40 @@
 
 import type { ApiRequestMethod } from "@/lib/types";
 
-export type Tone = "info" | "success" | "warning" | "destructive" | "accent" | "neutral";
+export type Tone =
+    | "info"
+    | "success"
+    | "warning"
+    | "destructive"
+    | "accent"
+    | "neutral";
 
-/** CSS custom property backing each tone. */
-const TONE_VAR: Record<Tone, string> = {
-  info: "--info",
-  success: "--success",
-  warning: "--warning",
-  destructive: "--destructive",
-  accent: "--aurora-2",
-  neutral: "--muted-foreground",
+/** Ink token backing each tone — the readable text colour in the SwebOS
+ *  state vocabulary (`--state-*-ink`), matching the prototype's `.mtd-*` /
+ *  `.badge-*` choices: GET→working, POST→done, PUT→needs, DEL→blocked. */
+const TONE_INK_VAR: Record<Tone, string> = {
+    info: "--state-working-ink",
+    success: "--state-done-ink",
+    warning: "--state-needs-ink",
+    destructive: "--state-blocked-ink",
+    accent: "--accent-ink",
+    neutral: "--text-subtle",
+};
+
+/** Soft-fill token backing each tone — the pill/chip wash (`--state-*-soft`). */
+const TONE_SOFT_VAR: Record<Tone, string> = {
+    info: "--state-working-soft",
+    success: "--state-done-soft",
+    warning: "--state-needs-soft",
+    destructive: "--state-blocked-soft",
+    accent: "--accent-soft",
+    neutral: "--surface-2",
 };
 
 export interface MethodMeta {
-  /** Conventional short label. Never a truncated word. */
-  short: string;
-  tone: Tone;
+    /** Conventional short label. Never a truncated word. */
+    short: string;
+    tone: Tone;
 }
 
 /**
@@ -30,46 +48,45 @@ export interface MethodMeta {
  * label here is a compile error rather than a silent fallback.
  */
 export const METHOD_META: Record<ApiRequestMethod, MethodMeta> = {
-  Get: { short: "GET", tone: "info" },
-  Post: { short: "POST", tone: "success" },
-  Put: { short: "PUT", tone: "warning" },
-  Patch: { short: "PATCH", tone: "warning" },
-  Delete: { short: "DEL", tone: "destructive" },
-  Head: { short: "HEAD", tone: "neutral" },
-  Options: { short: "OPT", tone: "neutral" },
-  GraphQl: { short: "GQL", tone: "accent" },
-  WebSocket: { short: "WS", tone: "accent" },
+    Get: { short: "GET", tone: "info" },
+    Post: { short: "POST", tone: "success" },
+    Put: { short: "PUT", tone: "warning" },
+    Patch: { short: "PATCH", tone: "warning" },
+    Delete: { short: "DEL", tone: "destructive" },
+    Head: { short: "HEAD", tone: "neutral" },
+    Options: { short: "OPT", tone: "neutral" },
+    GraphQl: { short: "GQL", tone: "accent" },
+    WebSocket: { short: "WS", tone: "accent" },
 };
 
 const FALLBACK: MethodMeta = { short: "?", tone: "neutral" };
 
 /** Tolerates unknown strings, since tab state carries `method` as a plain string. */
 export function methodMeta(method: string): MethodMeta {
-  return METHOD_META[method as ApiRequestMethod] ?? FALLBACK;
+    return METHOD_META[method as ApiRequestMethod] ?? FALLBACK;
 }
 
 /** Inline style for text tinted with a tone. */
 export function toneTextStyle(tone: Tone): React.CSSProperties {
-  return { color: `var(${TONE_VAR[tone]})` };
+    return { color: `var(${TONE_INK_VAR[tone]})` };
 }
 
 /**
- * Inline style for a filled chip. The low-alpha background mirrors how response
- * status pills are already rendered, so methods and statuses read as one system.
+ * Inline style for a soft state pill: ink text on the tone's soft wash,
+ * mirroring the spec's `bg-{state}-soft` / `text-{state}-ink` pill.
  */
 export function toneChipStyle(tone: Tone): React.CSSProperties {
-  const v = TONE_VAR[tone];
-  return {
-    color: `var(${v})`,
-    backgroundColor: `color-mix(in oklch, var(${v}) 14%, transparent)`,
-  };
+    return {
+        color: `var(${TONE_INK_VAR[tone]})`,
+        backgroundColor: `var(${TONE_SOFT_VAR[tone]})`,
+    };
 }
 
 /** Maps an HTTP status code onto the shared tone vocabulary. */
 export function statusTone(code: number): Tone {
-  if (code === 0) return "destructive";
-  if (code >= 200 && code < 300) return "success";
-  if (code >= 300 && code < 400) return "info";
-  if (code >= 400 && code < 500) return "warning";
-  return "destructive";
+    if (code === 0) return "destructive";
+    if (code >= 200 && code < 300) return "success";
+    if (code >= 300 && code < 400) return "info";
+    if (code >= 400 && code < 500) return "warning";
+    return "destructive";
 }

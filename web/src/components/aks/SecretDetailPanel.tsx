@@ -73,25 +73,25 @@ export function SecretDetailPanel({ secret, onClose }: Props) {
             <div className="flex items-center justify-between border-b px-4 py-3">
                 <div>
                     <h2
-                        className="text-lg font-semibold"
+                        className="truncate font-mono text-sm font-semibold"
                         data-testid="secret-detail-name"
                     >
                         {secret.name}
                     </h2>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="mt-0.5 text-xs text-fg-muted">
                         {secret.namespace} · {secret.type}
                     </p>
                 </div>
                 <button
                     onClick={onClose}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                     data-testid="secret-detail-close"
                 >
                     <X className="h-4 w-4" />
                 </button>
             </div>
             <div className="flex-1 overflow-auto p-4">
-                <div className="rounded-lg border">
+                <div className="rounded-lg border bg-surface-1 shadow">
                     {secret.keys.map((key) => (
                         <div
                             key={key}
@@ -105,7 +105,7 @@ export function SecretDetailPanel({ secret, onClose }: Props) {
                                 <div className="flex items-center gap-1">
                                     <button
                                         onClick={() => toggleKey(key)}
-                                        className="rounded p-1 text-xs hover:bg-accent"
+                                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                                         data-testid={`secret-toggle-${key}`}
                                     >
                                         {showValues[key] ? (
@@ -116,7 +116,7 @@ export function SecretDetailPanel({ secret, onClose }: Props) {
                                     </button>
                                     <button
                                         onClick={() => copyValue(key)}
-                                        className="rounded p-1 text-xs hover:bg-accent"
+                                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                                         data-testid={`secret-copy-${key}`}
                                     >
                                         {copiedKey === key ? (
@@ -128,7 +128,7 @@ export function SecretDetailPanel({ secret, onClose }: Props) {
                                 </div>
                             </div>
                             <div
-                                className="mt-1 text-xs font-mono break-all text-muted-foreground"
+                                className="mt-1 text-xs font-mono break-all text-fg-muted"
                                 data-testid={`secret-value-${key}`}
                             >
                                 {showValues[key]
@@ -141,7 +141,7 @@ export function SecretDetailPanel({ secret, onClose }: Props) {
                         </div>
                     ))}
                     {secret.keys.length === 0 && (
-                        <div className="px-3 py-4 text-sm text-muted-foreground">
+                        <div className="px-3 py-4 text-sm text-fg-muted">
                             No data keys in this secret
                         </div>
                     )}

@@ -303,18 +303,18 @@ export function RequestEditor({
 
     return (
         <div
-            className="relative flex h-full min-w-0 flex-col border-r bg-card"
+            className="relative flex h-full min-w-0 flex-col border-r bg-surface-1"
             data-testid="request-editor"
         >
-            {/* URL bar */}
-            <div className="flex min-w-0 items-center gap-2 border-b p-3">
+            {/* URL bar — spec .urlbar: 32px controls, 92px method select */}
+            <div className="flex min-w-0 items-center gap-2 border-b px-4 py-2.5">
                 <select
                     data-testid="request-method-select"
                     value={request.method}
                     onChange={(e) =>
                         setMethod(e.target.value as ApiRequestMethod)
                     }
-                    className="shrink-0 rounded border bg-background px-2 py-1.5 text-sm font-semibold"
+                    className="h-8 w-[92px] shrink-0 rounded-md border bg-surface-1 px-2 text-sm font-semibold"
                     style={toneTextStyle(methodMeta(request.method).tone)}
                 >
                     {methods.map((m) => (
@@ -339,14 +339,14 @@ export function RequestEditor({
                         onClick={() => setShowVarPreview(!showVarPreview)}
                         title="Preview variable substitution"
                         aria-pressed={showVarPreview}
-                        className={`flex shrink-0 items-center gap-1 rounded border px-2 py-1.5 text-xs ${showVarPreview ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                        className={`flex h-8 shrink-0 items-center gap-1 rounded-md border px-2 text-xs ${showVarPreview ? "border-primary bg-accent-soft text-accent-ink" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}
                     >
                         <Eye className="h-3.5 w-3.5" />
                     </button>
                 </div>
                 <button
                     data-testid="request-ask-ai-button"
-                    className="shrink-0 flex items-center gap-1 rounded border px-2.5 py-1.5 text-sm hover:bg-accent"
+                    className="h-8 shrink-0 flex items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-sm text-fg-muted hover:bg-surface-2 hover:text-fg"
                     onClick={() => setShowGeneratePanel(true)}
                     title="Ask AI to generate or edit this request"
                 >
@@ -363,7 +363,7 @@ export function RequestEditor({
                 />
                 <button
                     data-testid="request-save-button"
-                    className="shrink-0 flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm font-medium hover:bg-accent"
+                    className="h-8 shrink-0 flex items-center gap-1.5 rounded-md border bg-surface-1 px-3 text-sm font-medium hover:bg-surface-2"
                     onClick={() => {
                         onSave();
                         setDirty(false);
@@ -374,8 +374,7 @@ export function RequestEditor({
                     Save
                     {dirty && (
                         <span
-                            className="h-1.5 w-1.5 rounded-full"
-                            style={{ backgroundColor: "var(--warning)" }}
+                            className="h-1.5 w-1.5 rounded-full bg-state-needs"
                             data-testid="request-dirty-dot"
                             aria-label="Unsaved changes"
                         />
@@ -402,12 +401,7 @@ export function RequestEditor({
           before a send that they expect to work. This banner is not. */}
             {unresolvedNames.length > 0 && (
                 <div
-                    className="border-b px-3 py-1.5 text-xs"
-                    style={{
-                        color: "var(--destructive)",
-                        backgroundColor:
-                            "color-mix(in oklch, var(--destructive) 10%, transparent)",
-                    }}
+                    className="border-b bg-state-blocked-soft px-3 py-1.5 text-xs text-state-blocked-ink"
                     data-testid="unresolved-variable-warning"
                 >
                     {unresolvedNames.length === 1
@@ -422,12 +416,10 @@ export function RequestEditor({
             {/* Variable preview */}
             {showVarPreview && (
                 <div
-                    className="border-b bg-muted/30 px-3 py-2"
+                    className="border-b bg-sunken px-3 py-2"
                     data-testid="variable-preview"
                 >
-                    <div className="text-xs text-muted-foreground">
-                        Resolved URL:
-                    </div>
+                    <div className="text-xs text-fg-muted">Resolved URL:</div>
                     <div className="break-all font-mono text-xs">
                         {substituteVariables(request.url, variableScope)}
                     </div>
@@ -436,7 +428,7 @@ export function RequestEditor({
                             {Object.entries(previewedVariables).map(
                                 ([key, value]) => (
                                     <Fragment key={key}>
-                                        <span className="text-muted-foreground">
+                                        <span className="text-fg-muted">
                                             {key}
                                         </span>
                                         <span className="font-mono">
@@ -498,10 +490,10 @@ export function RequestEditor({
                             <button
                                 key={tab}
                                 data-testid={`request-tab-${tab}`}
-                                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-4 py-2 text-sm font-medium capitalize ${
+                                className={`flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap -mb-px border-b-2 px-3 text-sm font-medium capitalize ${
                                     activeTab === tab
-                                        ? "border-b-2 border-primary text-foreground"
-                                        : "text-muted-foreground"
+                                        ? "border-primary text-fg"
+                                        : "border-transparent text-fg-muted hover:text-fg"
                                 }`}
                                 onClick={() => setActiveTab(tab)}
                             >

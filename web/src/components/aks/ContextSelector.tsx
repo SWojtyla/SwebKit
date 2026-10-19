@@ -111,20 +111,18 @@ export function ContextSelector({
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 title={display}
-                className="flex min-w-[12rem] items-center justify-between rounded-md border bg-card px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-70"
+                className="flex h-7 min-w-[12rem] items-center justify-between rounded-md border bg-surface-1 px-2.5 text-xs hover:bg-surface-2 disabled:opacity-70"
                 data-testid="aks-context-select"
             >
                 <span className="flex min-w-0 items-center gap-1.5">
                     <span className="truncate">{display}</span>
                 </span>
-                <span className="text-muted-foreground">
-                    {open ? "▲" : "▼"}
-                </span>
+                <span className="text-fg-muted">{open ? "▲" : "▼"}</span>
             </button>
 
             {open && (
                 <div
-                    className="absolute z-50 mt-1 w-96 rounded-md border bg-popover shadow-md"
+                    className="absolute z-50 mt-1 w-96 rounded-lg border bg-popover shadow-md"
                     role="listbox"
                     aria-label="Kubernetes contexts"
                     aria-multiselectable="true"
@@ -138,13 +136,13 @@ export function ContextSelector({
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Filter contexts..."
-                            className="w-full rounded border bg-background px-2 py-1 text-xs"
+                            className="h-7 w-full rounded-md border bg-surface-1 px-2 text-xs placeholder:text-fg-subtle"
                             data-testid="aks-context-filter"
                         />
                     </div>
                     <div className="max-h-60 overflow-auto p-1">
                         {sortedFiltered.length === 0 && (
-                            <div className="px-2 py-2 text-xs text-muted-foreground">
+                            <div className="px-2 py-2 text-xs text-fg-muted">
                                 No matches found
                             </div>
                         )}
@@ -187,7 +185,7 @@ export function ContextSelector({
                                             }
                                             onClick={(e) => e.stopPropagation()}
                                             onChange={() => onToggle(ctx.name)}
-                                            className="h-4 w-4"
+                                            className="h-3.5 w-3.5 accent-primary"
                                             data-testid={`aks-context-check-${ctx.name}`}
                                         />
                                         <div className="min-w-0 flex-1">
@@ -195,7 +193,7 @@ export function ContextSelector({
                                                 {ctx.name}
                                             </div>
                                             {subtitle && (
-                                                <div className="truncate text-xs text-muted-foreground">
+                                                <div className="truncate text-xs text-fg-muted">
                                                     {subtitle}
                                                 </div>
                                             )}
@@ -209,7 +207,7 @@ export function ContextSelector({
                                                 onSelectOnly(ctx.name);
                                                 close();
                                             }}
-                                            className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                                            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                                             data-testid={`aks-context-only-${ctx.name}`}
                                         >
                                             {isSelected &&
@@ -224,7 +222,7 @@ export function ContextSelector({
                             );
                         })}
                     </div>
-                    <div className="border-t px-2 py-1.5 text-[11px] text-muted-foreground">
+                    <div className="border-t px-2 py-1.5 text-xs text-fg-subtle">
                         Click a row to select just it · tick boxes to combine
                         clusters in the merged view
                     </div>

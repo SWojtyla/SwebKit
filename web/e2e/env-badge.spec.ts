@@ -52,6 +52,7 @@ test.describe("Environment badge", () => {
         await expect(badge).toHaveText("Default");
         await expect(badge).toHaveAttribute("data-env-tier", "neutral");
         await expect(page.getByTestId("env-prd-banner")).toHaveCount(0);
+        await page.getByTestId("status-popover-trigger").click();
         await expect(page.getByTestId("status-bar-env")).toHaveText("Default");
     });
 
@@ -71,6 +72,7 @@ test.describe("Environment badge", () => {
             "Production profile — mutations guarded",
         );
 
+        await page.getByTestId("status-popover-trigger").click();
         await expect(page.getByTestId("status-bar-env")).toHaveText("PRD");
     });
 

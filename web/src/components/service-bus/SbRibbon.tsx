@@ -99,14 +99,14 @@ function RibbonButton({
             onClick={onClick}
             disabled={disabled}
             title={title}
-            className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs whitespace-nowrap ${
+            className={`flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap ${
                 primary
-                    ? "border-primary bg-primary text-primary-foreground hover:opacity-90"
+                    ? "bg-primary text-primary-foreground shadow-sm hover:bg-accent-hover"
                     : danger
-                      ? "border-destructive/40 text-destructive hover:bg-destructive/10"
+                      ? "text-state-blocked-ink hover:bg-state-blocked-soft"
                       : active
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                        ? "bg-accent-soft text-accent-ink"
+                        : "text-fg-muted hover:bg-surface-2 hover:text-fg"
             } disabled:opacity-50`}
         >
             {Icon && <Icon className="h-3.5 w-3.5" />}
@@ -124,9 +124,9 @@ function RibbonGroup({
     children: ReactNode;
 }) {
     return (
-        <div className="flex flex-col justify-between border-r border-border/60 px-3 first:pl-1 last:border-r-0">
+        <div className="flex flex-col justify-between border-l border-border px-3 first:border-l-0 first:pl-1">
             <div className="flex items-center gap-1">{children}</div>
-            <div className="pt-0.5 text-center text-[9px] font-medium uppercase tracking-wider text-muted-foreground/70">
+            <div className="pt-0.5 text-center text-[10px] font-medium uppercase tracking-wider text-fg-subtle">
                 {label}
             </div>
         </div>
@@ -152,15 +152,15 @@ function RibbonSelect({
 }) {
     return (
         <label
-            className="flex items-center gap-1 rounded-md border bg-card px-1.5 py-1 text-xs"
+            className="flex h-7 items-center gap-1 self-center rounded-md border bg-surface-1 px-2 text-sm text-fg"
             title={title}
         >
-            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <Icon className="h-3.5 w-3.5 shrink-0 text-fg-muted" />
             <select
                 data-testid={testId}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="bg-transparent py-0.5 text-xs outline-none"
+                className="bg-transparent py-0.5 text-sm outline-none"
             >
                 {options.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -232,25 +232,11 @@ export function SbRibbon(p: SbRibbonProps) {
     return (
         <div className="border-b" data-testid="sb-ribbon">
             {/* Tab strip — namespace picker lives here because it's global context, not a per-tab command. */}
-            <div className="flex items-center gap-1 px-2 pt-1">
-                {TABS.map((t) => (
-                    <button
-                        key={t.id}
-                        type="button"
-                        data-testid={t.testId}
-                        onClick={() => selectTab(t.id)}
-                        className={`rounded-t-md border-b-2 px-3 py-1 text-xs font-medium ${
-                            tab === t.id && !collapsed
-                                ? "border-primary text-foreground"
-                                : "border-transparent text-muted-foreground hover:text-foreground"
-                        }`}
-                    >
-                        {t.label}
-                    </button>
-                ))}
-                <div className="flex-1" />
-                <div className="flex items-center gap-2 pb-1">
-                    <span className="text-[11px] text-muted-foreground">
+            <div className="flex items-end gap-1 px-3 pt-1">
+                {/* Selector leads the row like the account pickers in the other
+                    features (Storage/SQL put theirs next to the page title). */}
+                <div className="flex items-center gap-2 self-center">
+                    <span className="text-xs font-medium text-fg-muted">
                         Namespace
                     </span>
                     <SearchableSelect
@@ -273,8 +259,27 @@ export function SbRibbon(p: SbRibbonProps) {
                             { value: "", label: "Select namespace..." },
                         ]}
                         listAriaLabel="Service Bus namespaces"
-                        buttonClassName="min-w-[14rem]"
+                        buttonClassName="h-8 min-w-[14rem]"
                     />
+                </div>
+                <div className="mx-1 h-5 w-px self-center bg-border" />
+                {TABS.map((t) => (
+                    <button
+                        key={t.id}
+                        type="button"
+                        data-testid={t.testId}
+                        onClick={() => selectTab(t.id)}
+                        className={`-mb-px h-8 border-b-2 px-3 text-sm font-medium ${
+                            tab === t.id && !collapsed
+                                ? "border-primary text-accent-ink"
+                                : "border-transparent text-fg-muted hover:text-fg"
+                        }`}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+                <div className="flex-1" />
+                <div className="flex items-center gap-2 self-center">
                     <button
                         type="button"
                         data-testid="sb-ribbon-collapse"
@@ -282,7 +287,7 @@ export function SbRibbon(p: SbRibbonProps) {
                             setState((s) => ({ ...s, collapsed: !s.collapsed }))
                         }
                         title={collapsed ? "Expand ribbon" : "Collapse ribbon"}
-                        className="rounded-md px-1.5 py-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                     >
                         {collapsed ? (
                             <ChevronDown className="h-3.5 w-3.5" />
@@ -295,7 +300,7 @@ export function SbRibbon(p: SbRibbonProps) {
 
             {!collapsed && (
                 <div
-                    className="flex items-stretch border-t px-1 py-1"
+                    className="flex flex-wrap items-stretch border-t bg-surface-1 px-1 py-1"
                     data-testid="sb-ribbon-body"
                 >
                     {tab === "home" && (

@@ -128,8 +128,10 @@ function AksPageContent() {
           the toolbar genuinely does not fit on one line — without it the last
           controls were squeezed until their labels wrapped to three lines and the
           connection status was clipped off the right edge. */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2">
-                <span className="text-sm font-medium">Context:</span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2.5">
+                <span className="text-xs font-medium text-fg-muted">
+                    Context
+                </span>
                 <ContextSelector
                     contexts={ws.contexts}
                     selectedContexts={ws.selectedContexts}
@@ -137,7 +139,9 @@ function AksPageContent() {
                     onSelectOnly={(ctx) => ws.selectContexts([ctx])}
                 />
 
-                <span className="text-sm font-medium">Namespace:</span>
+                <span className="text-xs font-medium text-fg-muted">
+                    Namespace
+                </span>
                 <NamespaceSelector
                     scopes={ws.nsScopes}
                     selected={ws.selectedNamespaces}
@@ -164,7 +168,7 @@ function AksPageContent() {
 
                 {ws.nsLoading ? (
                     <div
-                        className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                        className="flex items-center gap-1.5 text-xs text-fg-muted"
                         data-testid="aks-ns-loading-indicator"
                     >
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -178,7 +182,7 @@ function AksPageContent() {
             of the toolbar sideways each time. */}
                 <div className="ml-auto flex items-center gap-2">
                     <label
-                        className="flex items-center gap-1.5 text-xs"
+                        className="flex items-center gap-1.5 text-xs text-fg-muted"
                         data-testid="aks-auto-refresh"
                         title="Automatically re-fetch the resources in view"
                     >
@@ -189,6 +193,7 @@ function AksPageContent() {
                                 ws.setAutoRefresh(e.target.checked)
                             }
                             disabled={ws.queryTargets.length === 0}
+                            className="h-3.5 w-3.5 accent-primary"
                             title={
                                 ws.queryTargets.length === 0
                                     ? "Namespace is still loading"
@@ -215,7 +220,7 @@ function AksPageContent() {
                                     ? "Intervals under 30s are floored to 30s while multiple clusters are attached"
                                     : undefined
                         }
-                        className="rounded-md border bg-card px-2 py-1 text-xs disabled:opacity-40"
+                        className="h-7 rounded-md border bg-surface-1 px-2 text-xs text-fg disabled:opacity-40"
                         aria-label="Auto-refresh interval"
                         data-testid="aks-refresh-interval"
                     >
@@ -240,7 +245,7 @@ function AksPageContent() {
                                 ? "Namespace is still loading"
                                 : "Refresh the resources in view"
                         }
-                        className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                        className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border bg-surface-1 px-2.5 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-50"
                         data-testid="aks-refresh-btn"
                     >
                         <RefreshCw
@@ -263,7 +268,7 @@ function AksPageContent() {
                                   ? "Pods are still loading"
                                   : "Stream logs from all pods at once"
                         }
-                        className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                        className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border bg-surface-1 px-2.5 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-50"
                         data-testid="aks-multi-pod-logs"
                     >
                         Multi-Pod Logs
@@ -272,11 +277,11 @@ function AksPageContent() {
 
                 {ws.testResult && (
                     <span
-                        className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs ${ws.testResult.connected ? "text-success" : "text-destructive"}`}
+                        className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs ${ws.testResult.connected ? "text-state-done-ink" : "text-state-blocked-ink"}`}
                         data-testid="aks-connection-status"
                     >
                         <span
-                            className={`h-2 w-2 rounded-full ${ws.testResult.connected ? "bg-success" : "bg-destructive"}`}
+                            className={`h-2 w-2 rounded-full ${ws.testResult.connected ? "bg-state-done" : "bg-state-blocked"}`}
                         />
                         {ws.testResult.connected ? "Connected" : "Disconnected"}
                         {ws.testResult.error && ` — ${ws.testResult.error}`}
@@ -320,7 +325,7 @@ function AksPageContent() {
                                                 state: { tab: "aks" },
                                             })
                                         }
-                                        className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90"
+                                        className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-accent-hover"
                                         data-testid="aks-configure-cta"
                                     >
                                         Configure kubeconfig
@@ -330,7 +335,7 @@ function AksPageContent() {
                             />
                         ) : ws.queryTargets.length === 0 ? (
                             <div
-                                className="flex h-full items-center justify-center text-sm text-muted-foreground"
+                                className="flex h-full items-center justify-center text-sm text-fg-muted"
                                 data-testid="aks-empty-state"
                             >
                                 {ws.selectedContexts.length === 0

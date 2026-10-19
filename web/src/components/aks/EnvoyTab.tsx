@@ -32,27 +32,27 @@ const columns: Column<EnvoyResourceInfo>[] = [
     {
         header: "Targets",
         cell: (r) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-fg-muted">
                 {r.targetRefs.length > 0 ? r.targetRefs.join(", ") : "—"}
             </span>
         ),
     },
     {
         header: "Highlights",
-        className: "py-2 pr-4",
+        className: "py-1 pr-4",
         cell: (r) => (
             <div className="flex flex-wrap gap-1">
                 {r.highlights.map((h, i) => (
                     <span
                         key={i}
-                        className="rounded bg-accent/60 px-1.5 py-0.5 text-[11px] whitespace-nowrap"
+                        className="rounded-full border bg-accent-soft px-1.5 py-0.5 text-[11px] text-accent-ink whitespace-nowrap"
                         title={`${h.label}: ${h.value}`}
                     >
                         {h.label}: {h.value}
                     </span>
                 ))}
                 {r.highlights.length === 0 && (
-                    <span className="text-xs text-muted-foreground">—</span>
+                    <span className="text-xs text-fg-muted">—</span>
                 )}
             </div>
         ),
@@ -118,10 +118,10 @@ export function EnvoyTab({
                         aria-selected={plural === k.plural}
                         onClick={() => setPlural(k.plural)}
                         data-testid={`envoy-kind-${k.plural}`}
-                        className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                        className={`h-7 rounded-full border px-2.5 text-xs transition-colors ${
                             plural === k.plural
-                                ? "border-primary bg-primary/10 text-foreground"
-                                : "border-border text-muted-foreground hover:text-foreground"
+                                ? "border-primary bg-primary/10 text-fg"
+                                : "border-border bg-surface-1 text-fg-muted hover:bg-surface-2 hover:text-fg"
                         }`}
                     >
                         {k.label}

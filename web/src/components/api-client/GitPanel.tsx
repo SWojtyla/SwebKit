@@ -46,7 +46,7 @@ import {
 } from "@/lib/stores/git-repo-preferences";
 import { useNotification } from "@/components/layout/notification-context";
 import { useLinkedRoots } from "@/lib/hooks";
-import { samePath } from "@/lib/linked-root-utils";
+import { samePath, isWithinPath } from "@/lib/linked-root-utils";
 import { NameDialog, ConfirmDialog } from "./Dialogs";
 import { GitFileList } from "./GitFileList";
 import { GitDiffPane } from "./GitDiffPane";
@@ -127,32 +127,47 @@ export function GitPanel({
         });
     }, [initialRepo]);
 
+    // Switching repos must never show the previous repo's data: a repo change
+    // clears it up front, and a stale in-flight refresh (started under the old
+    // repoPath) drops its results instead of overwriting the new repo's state.
+    const refreshSeq = useRef(0);
+    const dataForRepo = useRef<string | null>(null);
     const refresh = useCallback(async () => {
+        const seq = ++refreshSeq.current;
+        const isCurrent = () => seq === refreshSeq.current;
         if (!isGitAvailable()) {
             setUnavailable({ kind: "no-tauri" });
             return;
         }
         if (!repoPath) {
             setUnavailable({ kind: "no-repo" });
+            dataForRepo.current = null;
             return;
         }
 
         setLoading(true);
         setInlineError(null);
+        if (dataForRepo.current !== repoPath) {
+            setStatus(null);
+            setBranches([]);
+            setFiles([]);
+            setRemote(null);
+            dataForRepo.current = repoPath;
+        }
         try {
             // The allowed-roots grant list only holds folders the user picked in
             // an OS dialog. A repo the sidecar discovered (e.g. a linked API
             // root registered from config) is a real repo yet unauthorized here —
             // `gitIsRepo` would swallow the denial and lie "not a Git repository".
             if (!(await restoreAllowedRoot(repoPath))) {
-                setUnavailable({ kind: "not-authorized", path: repoPath });
-                setStatus(null);
+                if (isCurrent())
+                    setUnavailable({ kind: "not-authorized", path: repoPath });
                 return;
             }
 
             if (!(await gitIsRepo(repoPath))) {
-                setUnavailable({ kind: "not-a-repo", path: repoPath });
-                setStatus(null);
+                if (isCurrent())
+                    setUnavailable({ kind: "not-a-repo", path: repoPath });
                 return;
             }
 
@@ -162,12 +177,14 @@ export function GitPanel({
                 gitChangedFiles(repoPath, subpath),
                 gitRemoteUrl(repoPath).catch(() => null),
             ]);
+            if (!isCurrent()) return;
             setStatus(s);
             setBranches(b);
             setFiles(f);
             setRemote(r);
             setUnavailable(null);
         } catch (e) {
+            if (!isCurrent()) return;
             const message = e instanceof Error ? e.message : String(e);
             // git's own "not found" message is the one case worth a dedicated state.
             setUnavailable(
@@ -175,9 +192,8 @@ export function GitPanel({
                     ? { kind: "git-missing" }
                     : { kind: "error", message },
             );
-            setStatus(null);
         } finally {
-            setLoading(false);
+            if (isCurrent()) setLoading(false);
         }
     }, [repoPath, subpath]);
 
@@ -200,15 +216,22 @@ export function GitPanel({
 
     // The only honest way to grant a folder is the OS dialog itself — picking the
     // blocked repo's directory registers it in AllowedRoots, after which the
-    // normal refresh path works. Picking the same path leaves `repoPath`
-    // unchanged, so refresh is invoked manually (the effect wouldn't refire).
+    // normal refresh path works. The pick must cover `repoPath` itself (equal or
+    // an ancestor): anything else would silently switch the selection AND leave
+    // this repo unauthorized — which is exactly the "keeps asking" loop users hit.
     const authorizeRepo = async () => {
         try {
             const dir = await pickDirectory(
                 `Authorize this repository — select ${repoPath}`,
             );
             if (!dir) return;
-            persist(addRepo(repoState, dir));
+            if (!isWithinPath(repoPath, dir)) {
+                setInlineError(
+                    `That folder doesn't contain ${repoPath} — pick the repository root or a folder above it.`,
+                );
+                return;
+            }
+            persist(addRepo(repoState, repoPath!));
             void refresh();
         } catch (e) {
             setInlineError(e instanceof Error ? e.message : String(e));

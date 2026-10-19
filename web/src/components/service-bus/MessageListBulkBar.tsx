@@ -51,7 +51,7 @@ export function BulkActionBar(p: BulkActionBarProps) {
     const sessionBlocked = requiresSessions(p.entity);
     return (
         <div
-            className="flex items-center gap-2 border-b bg-primary/10 px-3 py-1.5"
+            className="flex items-center gap-2 border-b bg-accent-soft px-3 py-1.5"
             data-testid="bulk-action-bar"
         >
             {p.bulkProgress ? (
@@ -70,7 +70,7 @@ export function BulkActionBar(p: BulkActionBarProps) {
             )}
             {p.bulkProgress && (
                 <div
-                    className="h-1.5 w-24 overflow-hidden rounded bg-muted"
+                    className="h-1.5 w-24 overflow-hidden rounded bg-surface-1"
                     data-testid="bulk-progress-bar"
                 >
                     <div
@@ -83,7 +83,7 @@ export function BulkActionBar(p: BulkActionBarProps) {
             )}
             <button
                 onClick={p.onToggleSelectAll}
-                className="text-xs text-muted-foreground hover:text-foreground"
+                className="text-xs font-medium text-accent-ink hover:underline"
                 data-testid="bulk-select-all"
             >
                 {p.selectedCount === p.filteredCount
@@ -102,7 +102,7 @@ export function BulkActionBar(p: BulkActionBarProps) {
                                 ? "Cancelling…"
                                 : "Cancel each selected scheduled message — it never fires and is removed from the queue"
                         }
-                        className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                        className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg hover:bg-surface-2 disabled:opacity-50"
                         data-testid="bulk-cancel-scheduled"
                     >
                         <XCircle className="h-3 w-3" /> Cancel scheduled
@@ -122,7 +122,7 @@ export function BulkActionBar(p: BulkActionBarProps) {
                                       ? "Resending…"
                                       : "Send each selected message back to the queue it originally failed in (NServiceBus.FailedQ — or this entity if unset), then remove it here"
                             }
-                            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                            className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg hover:bg-surface-2 disabled:opacity-50"
                             data-testid="bulk-resend"
                         >
                             <CopyPlus className="h-3 w-3" /> Resend to origin
@@ -138,7 +138,7 @@ export function BulkActionBar(p: BulkActionBarProps) {
                                           ? "Resubmitting…"
                                           : `Send each selected message back to ${sendableEntityPath(p.entity)} — the entity this dead-letter queue belongs to — then remove it from the DLQ`
                                 }
-                                className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                                className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg hover:bg-surface-2 disabled:opacity-50"
                                 data-testid="bulk-resubmit"
                             >
                                 <ArrowUpRight className="h-3 w-3" /> Resubmit to{" "}
@@ -156,7 +156,7 @@ export function BulkActionBar(p: BulkActionBarProps) {
                                           ? "Dead-lettering…"
                                           : "Move each selected message into this entity's dead-letter queue — a broker move, not a copy (a dead-letter reason is recorded)"
                                 }
-                                className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                                className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg hover:bg-surface-2 disabled:opacity-50"
                                 data-testid="bulk-deadletter"
                             >
                                 <Ban className="h-3 w-3" /> Move to DLQ
@@ -172,7 +172,7 @@ export function BulkActionBar(p: BulkActionBarProps) {
                                       ? "Completing…"
                                       : `Settle each selected message — permanently removed from ${p.viewMode === "dlq" ? "the dead-letter queue" : "the queue"}, no redelivery`
                             }
-                            className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                            className="flex h-7 items-center gap-1 rounded-md border border-state-blocked/40 bg-surface-1 px-2.5 text-xs font-medium text-state-blocked-ink hover:bg-state-blocked-soft disabled:opacity-50"
                             data-testid="bulk-complete"
                         >
                             <Check className="h-3 w-3" /> Complete
@@ -181,7 +181,7 @@ export function BulkActionBar(p: BulkActionBarProps) {
                 )}
                 <button
                     onClick={p.onClearSelection}
-                    className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                    className="h-7 rounded-md px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
                 >
                     Cancel
                 </button>

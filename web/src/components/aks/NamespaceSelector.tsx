@@ -244,7 +244,7 @@ export function NamespaceSelector({
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 title={disabledReason ?? display}
-                className="flex min-w-[14rem] max-w-[24rem] items-center justify-between rounded-md border bg-card px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
+                className="flex h-7 min-w-[14rem] max-w-[24rem] items-center justify-between rounded-md border bg-surface-1 px-2.5 text-xs hover:bg-surface-2 disabled:opacity-50"
                 data-testid="aks-namespace-dropdown"
             >
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -253,9 +253,7 @@ export function NamespaceSelector({
                     )}
                     <span className="truncate">{display}</span>
                 </span>
-                <span className="text-muted-foreground">
-                    {open ? "▲" : "▼"}
-                </span>
+                <span className="text-fg-muted">{open ? "▲" : "▼"}</span>
             </button>
 
             {isAllSelected && (
@@ -269,7 +267,7 @@ export function NamespaceSelector({
 
             {error && (
                 <span
-                    className="flex items-center gap-1 text-xs text-destructive"
+                    className="flex items-center gap-1 text-xs text-state-blocked-ink"
                     title={error}
                     data-testid="aks-namespace-error"
                 >
@@ -282,7 +280,7 @@ export function NamespaceSelector({
 
             {open && (
                 <div
-                    className="absolute top-full z-50 mt-1 w-96 rounded-md border bg-popover shadow-md"
+                    className="absolute top-full z-50 mt-1 w-96 rounded-lg border bg-popover shadow-md"
                     data-testid="aks-namespace-menu"
                 >
                     <div className="border-b p-2">
@@ -292,21 +290,21 @@ export function NamespaceSelector({
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 placeholder="Search namespaces..."
-                                className="flex-1 rounded border bg-background px-2 py-1 text-xs"
+                                className="h-7 flex-1 rounded-md border bg-surface-1 px-2 text-xs placeholder:text-fg-subtle"
                                 aria-label="Filter namespaces"
                             />
                             {search && (
                                 <button
                                     type="button"
                                     onClick={() => setSearch("")}
-                                    className="text-xs text-muted-foreground hover:text-foreground"
+                                    className="text-xs text-fg-muted hover:text-fg"
                                 >
                                     Clear
                                 </button>
                             )}
                         </div>
                         {!multiContext && defaultContext && (
-                            <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
+                            <div className="mt-1 flex gap-2 text-xs text-fg-muted">
                                 <span
                                     className="truncate"
                                     data-testid="aks-namespace-context"
@@ -344,7 +342,7 @@ export function NamespaceSelector({
                                     data-testid={`aks-ns-group-${scope.context}`}
                                 >
                                     {multiContext && (
-                                        <div className="mt-1 flex items-center justify-between px-2 py-1 text-xs font-medium text-muted-foreground">
+                                        <div className="mt-1 flex items-center justify-between px-2 py-1 text-xs font-medium text-fg-muted">
                                             <span
                                                 className="truncate"
                                                 title={scope.context}
@@ -372,7 +370,7 @@ export function NamespaceSelector({
                                                             ),
                                                         ])
                                                     }
-                                                    className="hover:text-foreground"
+                                                    className="hover:text-fg"
                                                 >
                                                     All
                                                 </button>
@@ -387,7 +385,7 @@ export function NamespaceSelector({
                                                             ),
                                                         )
                                                     }
-                                                    className="hover:text-foreground"
+                                                    className="hover:text-fg"
                                                 >
                                                     None
                                                 </button>
@@ -395,14 +393,14 @@ export function NamespaceSelector({
                                         </div>
                                     )}
                                     {scope.isLoading && (
-                                        <div className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
+                                        <div className="flex items-center gap-2 px-2 py-2 text-xs text-fg-muted">
                                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                             Loading…
                                         </div>
                                     )}
                                     {scope.error && (
                                         <div
-                                            className="flex items-start gap-2 px-2 py-2 text-xs text-destructive"
+                                            className="flex items-start gap-2 px-2 py-2 text-xs text-state-blocked-ink"
                                             data-testid={`aks-namespace-error-detail${multiContext ? `-${scope.context}` : ""}`}
                                         >
                                             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -412,7 +410,7 @@ export function NamespaceSelector({
                                     {!scope.isLoading &&
                                         !scope.error &&
                                         sortedFiltered.length === 0 && (
-                                            <div className="px-2 py-2 text-xs text-muted-foreground">
+                                            <div className="px-2 py-2 text-xs text-fg-muted">
                                                 No namespaces found
                                             </div>
                                         )}
@@ -429,7 +427,7 @@ export function NamespaceSelector({
                                                         ns,
                                                     )
                                                 }
-                                                className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent ${isSelected ? "bg-accent/40" : ""}`}
+                                                className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent ${isSelected ? "bg-accent/40" : ""}`}
                                                 title="Click to select just this namespace, or use the checkbox to build a multi-namespace selection"
                                             >
                                                 <input
@@ -444,7 +442,7 @@ export function NamespaceSelector({
                                                             ns,
                                                         )
                                                     }
-                                                    className="h-4 w-4"
+                                                    className="h-3.5 w-3.5 accent-primary"
                                                 />
                                                 <span className="flex-1 truncate">
                                                     {ns}
@@ -464,14 +462,14 @@ export function NamespaceSelector({
                             <button
                                 type="button"
                                 onClick={selectAll}
-                                className="rounded px-2 py-1 hover:bg-accent"
+                                className="h-7 rounded-md px-2 text-xs hover:bg-surface-2"
                             >
                                 All
                             </button>
                             <button
                                 type="button"
                                 onClick={selectNone}
-                                className="rounded px-2 py-1 hover:bg-accent"
+                                className="h-7 rounded-md px-2 text-xs hover:bg-surface-2"
                             >
                                 None
                             </button>
@@ -485,7 +483,7 @@ export function NamespaceSelector({
                                     ? "No changes to apply — tick namespaces to build a multi-selection, or click a name to select just it"
                                     : undefined
                             }
-                            className="rounded bg-primary px-3 py-1 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                            className="h-7 rounded-md bg-primary px-3 text-xs text-primary-foreground hover:bg-accent-hover disabled:opacity-50"
                             data-testid="aks-namespace-apply"
                         >
                             Apply {pending.length > 0 && `(${pending.length})`}

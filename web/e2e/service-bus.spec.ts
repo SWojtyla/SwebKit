@@ -1235,7 +1235,10 @@ test.describe("Service Bus", () => {
         // the entity's DLQ view.
         await page.getByTestId("sb-overview-dlq-order-created").click();
         await expect(page.getByTestId("message-list")).toBeVisible();
-        await expect(page.getByTestId("sb-view-dlq")).toHaveClass(/bg-primary/);
+        await expect(page.getByTestId("sb-view-dlq")).toHaveAttribute(
+            "aria-selected",
+            "true",
+        );
     });
 
     test("entity tree is resizable and the width survives a reload", async ({

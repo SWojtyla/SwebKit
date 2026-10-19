@@ -111,9 +111,7 @@ export function SendSplitButton({
 
     const toggleCaret = () => {
         if (!anyOpen)
-            setAnchorRect(
-                caretRef.current?.getBoundingClientRect() ?? null,
-            );
+            setAnchorRect(caretRef.current?.getBoundingClientRect() ?? null);
         setOptionsOpen(false);
         setMenuOpen((v) => !v);
     };
@@ -128,7 +126,7 @@ export function SendSplitButton({
         <div className="flex shrink-0" data-testid="send-split-button">
             <button
                 data-testid="request-send-button"
-                className="flex items-center gap-1 rounded-l bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                className="btn-primary flex h-8 items-center gap-1 rounded-l-md px-3 text-sm font-medium disabled:opacity-50"
                 onClick={onSend}
                 disabled={disabled}
                 title={
@@ -146,7 +144,7 @@ export function SendSplitButton({
                 ref={caretRef}
                 type="button"
                 data-testid="send-menu-button"
-                className="flex items-center rounded-r border-l border-primary-foreground/25 bg-primary px-1.5 py-1.5 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                className="btn-primary flex h-8 items-center rounded-r-md border-l border-primary-foreground/25 px-1.5 disabled:opacity-50"
                 onClick={toggleCaret}
                 disabled={sending}
                 title="More send options"
@@ -212,7 +210,7 @@ export function SendSplitButton({
                         className="fixed z-50 w-64 rounded-md border bg-popover p-3 shadow-lg"
                         style={{ left: menuX, top: menuY }}
                     >
-                        <div className="mb-2 text-xs font-medium text-muted-foreground">
+                        <div className="mb-2 text-xs font-medium text-fg-muted">
                             Applies to dependency and batch runs
                         </div>
                         <label className="flex items-center gap-2 text-sm">
@@ -250,7 +248,7 @@ export function SendSplitButton({
                                         ),
                                     })
                                 }
-                                className="w-24 rounded border bg-background px-2 py-1 text-xs"
+                                className="h-7 w-24 rounded-md border bg-surface-1 px-2 text-xs"
                             />
                         </label>
                     </div>,

@@ -120,13 +120,13 @@ export function PortForwardDialog({
             <div className="flex items-start justify-between gap-3 border-b px-4 py-3">
                 <div className="min-w-0">
                     <h2 className="text-sm font-semibold">Forward a port</h2>
-                    <p className="truncate text-xs text-muted-foreground">
+                    <p className="truncate text-xs text-fg-muted">
                         Reach the pod at a localhost port on this machine
                     </p>
                 </div>
                 <button
                     onClick={onClose}
-                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                    className="shrink-0 text-fg-muted hover:text-fg"
                     aria-label="Close"
                     data-testid="port-forward-dialog-close"
                 >
@@ -139,7 +139,7 @@ export function PortForwardDialog({
                     <div>
                         <span className="text-xs font-medium">Pod</span>
                         <p
-                            className="mt-1 truncate rounded-md border bg-muted/40 px-2 py-1.5 font-mono text-xs"
+                            className="mt-1 truncate rounded-md border bg-sunken px-2 py-1.5 font-mono text-xs"
                             title={`${fixedPod.namespace}/${fixedPod.name}`}
                             data-testid="port-forward-pod"
                         >
@@ -169,7 +169,7 @@ export function PortForwardDialog({
                                 );
                                 setPicked(p ?? null);
                             }}
-                            className="mt-1 w-full rounded-md border bg-card px-2 py-1.5 text-xs"
+                            className="mt-1 h-7 w-full rounded-md border bg-surface-1 px-2 text-xs"
                             data-testid="port-forward-pod"
                         >
                             <option value="" disabled>
@@ -208,7 +208,7 @@ export function PortForwardDialog({
                                     : "e.g. 8080"
                             }
                             autoFocus={!!fixedPod}
-                            className="mt-1 w-full rounded-md border bg-card px-2 py-1.5 text-xs tabular-nums"
+                            className="mt-1 h-7 w-full rounded-md border bg-surface-1 px-2 text-xs tabular-nums"
                             data-testid="port-forward-remote-port"
                         />
                         <datalist id="port-forward-port-options">
@@ -225,13 +225,13 @@ export function PortForwardDialog({
                         {pod &&
                             !details.isLoading &&
                             declaredPorts.length === 0 && (
-                                <p className="mt-1 text-[11px] text-muted-foreground">
+                                <p className="mt-1 text-[11px] text-fg-muted">
                                     This pod declares no container ports — enter
                                     the port it listens on.
                                 </p>
                             )}
                         {remoteRaw !== "" && remotePort === null && (
-                            <p className="mt-1 text-[11px] text-destructive">
+                            <p className="mt-1 text-[11px] text-state-blocked-ink">
                                 Enter a port between 1 and 65535.
                             </p>
                         )}
@@ -250,11 +250,11 @@ export function PortForwardDialog({
                             value={localRaw}
                             onChange={(e) => setLocalRaw(e.target.value)}
                             placeholder="auto"
-                            className="mt-1 w-full rounded-md border bg-card px-2 py-1.5 text-xs tabular-nums"
+                            className="mt-1 h-7 w-full rounded-md border bg-surface-1 px-2 text-xs tabular-nums"
                             data-testid="port-forward-local-port"
                         />
                         {localRaw.trim() !== "" && localPort === null && (
-                            <p className="mt-1 text-[11px] text-destructive">
+                            <p className="mt-1 text-[11px] text-state-blocked-ink">
                                 Enter a port between 1 and 65535, or leave
                                 empty.
                             </p>
@@ -264,11 +264,11 @@ export function PortForwardDialog({
 
                 {pod && remotePort !== null && (
                     <p
-                        className="rounded-md bg-accent/40 px-3 py-2 text-xs text-muted-foreground"
+                        className="rounded-md bg-accent-soft px-3 py-2 text-xs text-accent-ink"
                         data-testid="port-forward-summary"
                     >
                         {pod.namespace}/{pod.name}:{remotePort} →{" "}
-                        <span className="font-medium text-foreground">
+                        <span className="font-medium text-fg">
                             localhost:{localPort === 0 ? "<auto>" : localPort}
                         </span>
                     </p>
@@ -276,7 +276,7 @@ export function PortForwardDialog({
 
                 {error && (
                     <p
-                        className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                        className="rounded-md border border-state-blocked bg-state-blocked-soft px-3 py-2 text-xs text-state-blocked-ink"
                         data-testid="port-forward-error"
                     >
                         {error}
@@ -287,7 +287,7 @@ export function PortForwardDialog({
             <div className="flex justify-end gap-2 border-t px-4 py-3">
                 <button
                     onClick={onClose}
-                    className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
+                    className="h-7 rounded-md border bg-surface-1 px-3 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                     data-testid="port-forward-cancel"
                 >
                     Cancel
@@ -306,7 +306,7 @@ export function PortForwardDialog({
                                   ? "Fix the local port"
                                   : undefined
                     }
-                    className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                    className="h-7 rounded-md bg-primary px-3 text-xs text-primary-foreground hover:bg-accent-hover disabled:opacity-50"
                     data-testid="port-forward-start"
                 >
                     {loading ? "Starting…" : "Start forwarding"}

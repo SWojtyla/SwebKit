@@ -167,17 +167,17 @@ export function YamlViewer({
     return (
         <div className="flex h-full flex-col" data-testid="yaml-viewer">
             <div className="flex items-center gap-2 border-b px-4 py-2">
-                <FileText className="h-4 w-4" />
-                <span className="text-sm font-medium">
+                <FileText className="h-4 w-4 text-fg-muted" />
+                <span className="truncate font-mono text-sm font-semibold">
                     {kind}/{name}
                 </span>
-                <span className="text-xs text-muted-foreground">YAML</span>
+                <span className="text-xs text-fg-muted">YAML</span>
                 {!editMode && filteredYaml.hidden > 0 && (
                     <button
                         onClick={() =>
                             setHideGeneratedAnnotations((hidden) => !hidden)
                         }
-                        className="rounded border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                        className="h-7 rounded-md border bg-surface-1 px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                         aria-pressed={hideGeneratedAnnotations}
                         data-testid="yaml-generated-annotations-toggle"
                     >
@@ -199,7 +199,7 @@ export function YamlViewer({
                                           ? "YAML is empty"
                                           : undefined
                                 }
-                                className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                                className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-50"
                                 data-testid="yaml-validate"
                             >
                                 {validateMutation.isPending ? (
@@ -219,7 +219,7 @@ export function YamlViewer({
                                           ? "YAML is empty"
                                           : undefined
                                 }
-                                className="flex items-center gap-1 rounded border border-primary bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20 disabled:opacity-50"
+                                className="flex h-7 items-center gap-1 rounded-md border border-primary bg-primary px-2 text-xs text-primary-foreground hover:bg-accent-hover disabled:opacity-50"
                                 data-testid="yaml-apply"
                             >
                                 {applyMutation.isPending ? (
@@ -233,7 +233,7 @@ export function YamlViewer({
                     )}
                     <button
                         onClick={toggleEdit}
-                        className={`flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent ${editMode ? "border-primary text-primary" : ""}`}
+                        className={`flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2 text-xs hover:bg-surface-2 hover:text-fg ${editMode ? "border-primary text-accent-ink" : "text-fg-muted"}`}
                         data-testid="yaml-edit-toggle"
                     >
                         {editMode ? (
@@ -245,14 +245,14 @@ export function YamlViewer({
                     </button>
                     <button
                         onClick={handleCopy}
-                        className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                        className="h-7 rounded-md border bg-surface-1 px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                         data-testid="yaml-copy"
                     >
                         {copied ? "Copied!" : "Copy"}
                     </button>
                     <button
                         onClick={onClose}
-                        className="rounded p-1 hover:bg-accent"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                     >
                         <X className="h-4 w-4" />
                     </button>
@@ -267,14 +267,14 @@ export function YamlViewer({
                     testId="yaml-apply-confirm"
                 />
             )}
-            <div className="flex-1 overflow-auto bg-card p-3">
+            <div className="flex-1 overflow-auto bg-sunken p-3">
                 {isLoading ? (
                     <div className="text-primary text-xs font-mono">
                         Loading YAML...
                     </div>
                 ) : error ? (
                     <div
-                        className="text-destructive text-xs font-mono"
+                        className="text-state-blocked-ink text-xs font-mono"
                         data-testid="yaml-error"
                     >
                         Error: {error.message}
@@ -283,7 +283,7 @@ export function YamlViewer({
                     <div className="flex h-full flex-col gap-2">
                         {validationError && (
                             <div
-                                className="flex items-start gap-2 rounded border border-destructive bg-destructive/10 p-2 text-xs text-destructive"
+                                className="flex items-start gap-2 rounded-md border border-state-blocked/30 bg-state-blocked-soft p-2 text-xs text-state-blocked-ink"
                                 data-testid="yaml-validation-error"
                             >
                                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -295,14 +295,14 @@ export function YamlViewer({
                         <textarea
                             value={editedYaml}
                             onChange={(e) => setEditedYaml(e.target.value)}
-                            className="h-full w-full flex-1 bg-background text-foreground text-xs font-mono resize-none border-none outline-none"
+                            className="h-full w-full flex-1 bg-surface-1 text-fg text-xs font-mono resize-none border-none outline-none"
                             data-testid="yaml-editor"
                             spellCheck={false}
                         />
                     </div>
                 ) : (
                     <pre
-                        className="yml-viewer whitespace-pre-wrap break-all text-xs font-mono text-foreground"
+                        className="yml-viewer whitespace-pre-wrap break-all text-xs font-mono text-fg"
                         data-testid="yaml-content"
                         dangerouslySetInnerHTML={{
                             __html: highlightYaml(displayedYaml, true),
