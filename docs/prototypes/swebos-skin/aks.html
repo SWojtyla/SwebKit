@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<title>AKS — SwebOS skin</title>
+<link rel="stylesheet" href="swebos.css">
+<style>
+  .pagebar {
+    flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+    border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .pagebar .flabel { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-right: -2px; }
+  .aks-body { flex: 1; min-height: 0; display: flex; }
+  .aks-rail {
+    width: 208px; flex: none; border-right: 1px solid var(--border); display: flex;
+    flex-direction: column; min-height: 0; background: var(--surface-1);
+  }
+  .clay .aks-rail, .clay.dark .aks-rail { border-right-color: var(--border); }
+  .aks-rail .rail-filter { padding: 8px; border-bottom: 1px solid var(--border); }
+  .aks-rail .rail-scroll { flex: 1; overflow: auto; padding: 4px 8px 8px; }
+  .aks-rail .rail-foot {
+    flex: none; border-top: 1px solid var(--border); padding: 8px 12px;
+    font-size: 12px; color: var(--text-subtle);
+  }
+  .rail-group { margin-top: 6px; }
+  .rail-group:first-child { margin-top: 0; }
+  .rail-group > .rail-group-label { width: 100%; background: none; border: none; cursor: pointer; font-family: var(--font-ui); }
+  .rail-group .chev { transition: transform var(--dur-fast) var(--ease); }
+  .rail-group.closed .chev { transform: rotate(-90deg); }
+  .rail-group.closed .rail-items { display: none; }
+  .rail-item .cnt { margin-left: auto; font-size: 12px; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+
+  .aks-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .tblbar {
+    flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tbl-wrap { flex: 1; overflow: auto; }
+  .podname { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+  .podname:hover { text-decoration: underline; }
+
+  .detail {
+    width: 360px; flex: none; border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; min-height: 0; background: var(--surface-1);
+  }
+  .detail-head { padding: 12px 12px 8px; display: flex; flex-direction: column; gap: 6px; }
+  .detail-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .detail-title .name { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .detail-actions { display: flex; gap: 2px; }
+  .logtools { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .logview {
+    flex: 1; overflow: auto; padding: 8px 12px; font-family: var(--font-mono);
+    font-size: 12px; line-height: 18px; background: var(--surface-sunken); white-space: pre-wrap; overflow-wrap: break-word;
+  }
+  .log-foot {
+    flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+    border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted);
+  }
+  .pulse { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+</style>
+</head>
+<body>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-dash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
+  <symbol id="i-sb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-aks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V22"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></symbol>
+  <symbol id="i-api" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></symbol>
+  <symbol id="i-sql" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m5 12-3 3 3 3"/><path d="m9 18 3-3-3-3"/></symbol>
+  <symbol id="i-stor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol>
+  <symbol id="i-mon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-cog" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-chevd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chevr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/></symbol>
+  <symbol id="i-jobs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+  <symbol id="i-cron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="2" x2="14" y2="2"/><line x1="12" y1="14" x2="15" y2="11"/><circle cx="12" cy="14" r="8"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></symbol>
+  <symbol id="i-helm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m4.93 19.07 4.24-4.24"/></symbol>
+  <symbol id="i-net" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></symbol>
+  <symbol id="i-ing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></symbol>
+  <symbol id="i-gw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 18h.01"/><path d="M12 2v8"/><path d="m9 5 3-3 3 3"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+  <symbol id="i-hist" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+  <symbol id="i-scale" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></symbol>
+  <symbol id="i-fwd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m18 8 4 4-4 4"/><path d="M2 12h20"/><path d="m6 8-4 4 4 4"/></symbol>
+  <symbol id="i-scan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="m16 16-1.9-1.9"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></symbol>
+  <symbol id="i-yaml" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m9 9 3 3-3 3"/><path d="m13 9 3 3-3 3"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+</svg>
+
+<div class="app-shell wash">
+  <!-- ═══ Sidebar ═══ -->
+  <nav class="shell-sidebar">
+    <div class="shell-brand">
+      <span class="shell-brand-mark"><svg><use href="#i-box"/></svg></span>
+      <span class="shell-brand-name">SwebKit</span>
+      <button class="icon-btn sm" style="margin-left:auto" title="Collapse sidebar"><svg class="ic"><use href="#i-panel"/></svg></button>
+    </div>
+    <div class="shell-nav">
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-dash"/></svg>Dashboard</a>
+      <a class="shell-nav-item" href="service-bus.html"><svg class="ic-20"><use href="#i-sb"/></svg>Service Bus</a>
+      <a class="shell-nav-item active" href="#"><svg class="ic-20"><use href="#i-aks"/></svg>AKS</a>
+      <a class="shell-nav-item" href="api-client.html"><svg class="ic-20"><use href="#i-api"/></svg>API Client</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-db"/></svg>Redis</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-sql"/></svg>SQL</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-stor"/></svg>Storage</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-bot"/></svg>AI Agent</a>
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-mon"/></svg>Monitoring</a>
+    </div>
+    <div class="shell-nav-sep"></div>
+    <div>
+      <div class="sec-label" style="padding:2px 8px 4px">Pinned</div>
+      <a class="shell-nav-item" href="#"><svg class="ic"><use href="#i-fwd"/></svg><span style="overflow:hidden;text-overflow:ellipsis">payments-api :8080</span></a>
+      <a class="shell-nav-item" href="#"><svg class="ic"><use href="#i-sb"/></svg><span style="overflow:hidden;text-overflow:ellipsis">orders.inbound · DLQ</span></a>
+    </div>
+    <div class="shell-side-foot">
+      <a class="shell-nav-item" href="#"><svg class="ic-20"><use href="#i-cog"/></svg>Settings</a>
+    </div>
+  </nav>
+
+  <!-- ═══ Main ═══ -->
+  <div class="shell-main">
+    <div class="shell-topbar">
+      <div class="crumbs"><span>SwebKit</span><span class="sep">›</span><b>AKS</b></div>
+      <div style="flex:1"></div>
+      <a class="shell-pill" href="#" title="2 active port-forwards"><span class="pdot" style="background:var(--state-working)"></span><strong>2</strong>&nbsp;forwards</a>
+      <a class="shell-pill" href="#" title="Environment"><span class="pdot" style="background:var(--state-working)"></span>dev</a>
+      <button class="shell-search"><svg class="ic"><use href="#i-search"/></svg>Search or run a command<span class="kbd">Ctrl K</span></button>
+      <button class="icon-btn" title="Notifications"><svg class="ic"><use href="#i-bell"/></svg></button>
+      <button class="icon-btn" title="System: all healthy"><span class="dot dot-done" style="width:10px;height:10px"></span></button>
+    </div>
+
+    <div class="shell-sheet">
+      <!-- page toolbar -->
+      <div class="pagebar">
+        <span class="flabel">Context</span>
+        <select class="select select-sm" style="width:190px"><option>aks-portima-dev</option><option>aks-portima-tst</option></select>
+        <span class="flabel">Namespace</span>
+        <select class="select select-sm" style="width:170px"><option>All namespaces</option><option>cloud-cti</option><option>default</option><option>ingress-nginx</option></select>
+        <div style="flex:1"></div>
+        <span class="t-xs subtle num">Refreshed 09:41:12</span>
+        <select class="select select-sm"><option>Off</option><option>Every 5s</option><option>Every 10s</option><option selected>Every 30s</option><option>Every 60s</option></select>
+        <button class="icon-btn sm bordered" title="Refresh"><svg class="ic"><use href="#i-refresh"/></svg></button>
+        <button class="icon-btn sm" title="Pin to sidebar"><svg class="ic"><use href="#i-pin"/></svg></button>
+      </div>
+
+      <div class="aks-body">
+        <!-- resource rail -->
+        <div class="aks-rail">
+          <div class="rail-filter"><input class="input input-sm" placeholder="Filter…" style="width:100%"></div>
+          <div class="rail-scroll">
+            <div class="rail-group">
+              <button class="rail-group-label"><svg class="ic chev"><use href="#i-chevd"/></svg>Workloads</button>
+              <div class="rail-items">
+                <a class="rail-item active" href="#"><svg class="ic"><use href="#i-box"/></svg>Pods</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-layers"/></svg>Deployments</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-server"/></svg>StatefulSets</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-jobs"/></svg>Jobs</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-cron"/></svg>CronJobs</a>
+              </div>
+            </div>
+            <div class="rail-group">
+              <button class="rail-group-label"><svg class="ic chev"><use href="#i-chevd"/></svg>Configuration</button>
+              <div class="rail-items">
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-file"/></svg>ConfigMaps</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-key"/></svg>Secrets</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-helm"/></svg>Helm releases</a>
+              </div>
+            </div>
+            <div class="rail-group">
+              <button class="rail-group-label"><svg class="ic chev"><use href="#i-chevd"/></svg>Network</button>
+              <div class="rail-items">
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-net"/></svg>Services</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-ing"/></svg>Ingresses</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-gw"/></svg>Gateways</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-route"/></svg>HTTPRoutes</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-layers"/></svg>GatewayClasses</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-zap"/></svg>Envoy</a>
+              </div>
+            </div>
+            <div class="rail-group">
+              <button class="rail-group-label"><svg class="ic chev"><use href="#i-chevd"/></svg>Operations</button>
+              <div class="rail-items">
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-hist"/></svg>Events</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-scale"/></svg>Autoscaling</a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-fwd"/></svg>Port-Forward <span class="cnt">2</span></a>
+                <a class="rail-item" href="#"><svg class="ic"><use href="#i-scan"/></svg>Analysis</a>
+              </div>
+            </div>
+          </div>
+          <div class="rail-foot">Workloads › <b style="color:var(--text-muted)">Pods</b></div>
+        </div>
+
+        <!-- table -->
+        <div class="aks-content">
+          <div class="tblbar">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-muted)"><input type="checkbox" class="check">Hide completed pods</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-muted)"><input type="checkbox" class="check" checked>Watch restarts</label>
+            <div style="flex:1"></div>
+            <span class="t-xs subtle num">24 pods · 2 need attention</span>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead>
+                <tr><th>Name<span class="sort">↑</span></th><th>Status</th><th>Ready</th><th class="num">CPU</th><th class="num">Memory</th><th class="num">Restarts</th><th>Node</th><th>Age</th><th></th></tr>
+              </thead>
+              <tbody>
+                <tr class="selected">
+                  <td><span class="podname">phonotif-api-7d9f4c6b8-qx2mt</span></td>
+                  <td><span class="badge b-sm badge-done"><span class="bdot"></span>Running</span></td>
+                  <td class="num">2/2</td><td class="num">84m</td><td class="num">412Mi</td><td class="num">0</td>
+                  <td class="mono t-xs muted">aks-nodepool1-7</td><td class="muted">12d</td>
+                  <td class="row-actions"><button class="icon-btn sm" title="More actions"><svg class="ic"><use href="#i-more"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td><span class="podname">phonotif-api-7d9f4c6b8-r8lpn</span></td>
+                  <td><span class="badge b-sm badge-done"><span class="bdot"></span>Running</span></td>
+                  <td class="num">2/2</td><td class="num">96m</td><td class="num">388Mi</td><td class="num">1</td>
+                  <td class="mono t-xs muted">aks-nodepool1-3</td><td class="muted">12d</td>
+                  <td class="row-actions"><button class="icon-btn sm"><svg class="ic"><use href="#i-more"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td><span class="podname">cloud-cti-gateway-5b8c9f7d6-wj4kx</span></td>
+                  <td><span class="badge b-sm badge-blocked"><span class="bdot"></span>CrashLoopBackOff</span></td>
+                  <td class="num">0/1</td><td class="num">2m</td><td class="num">61Mi</td><td class="num ink-blocked" style="font-weight:600">47</td>
+                  <td class="mono t-xs muted">aks-nodepool1-5</td><td class="muted">3d</td>
+                  <td class="row-actions"><button class="icon-btn sm"><svg class="ic"><use href="#i-more"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td><span class="podname">mail-ingest-6c7d8f9b5-m2vwt</span></td>
+                  <td><span class="badge b-sm badge-waiting"><span class="bdot"></span>Pending</span></td>
+                  <td class="num">0/1</td><td class="num">—</td><td class="num">—</td><td class="num">0</td>
+                  <td class="mono t-xs muted">—</td><td class="muted">4m</td>
+                  <td class="row-actions"><button class="icon-btn sm"><svg class="ic"><use href="#i-more"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td><span class="podname">mail-ingest-6c7d8f9b5-x9pqr</span></td>
+                  <td><span class="badge b-sm badge-done"><span class="bdot"></span>Running</span></td>
+                  <td class="num">1/1</td><td class="num">203m</td><td class="num">1.1Gi</td><td class="num">0</td>
+                  <td class="mono t-xs muted">aks-nodepool1-2</td><td class="muted">6d</td>
+                  <td class="row-actions"><button class="icon-btn sm"><svg class="ic"><use href="#i-more"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td><span class="podname">envoy-ingress-84f7c6d5b-z3kdl</span></td>
+                  <td><span class="badge b-sm badge-done"><span class="bdot"></span>Running</span></td>
+                  <td class="num">1/1</td><td class="num">45m</td><td class="num">178Mi</td><td class="num">0</td>
+                  <td class="mono t-xs muted">aks-nodepool1-1</td><td class="muted">21d</td>
+                  <td class="row-actions"><button class="icon-btn sm"><svg class="ic"><use href="#i-more"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td><span class="podname">nightly-sync-29384710-kx7tj</span></td>
+                  <td><span class="badge b-sm badge-queued"><span class="bdot"></span>Completed</span></td>
+                  <td class="num">0/1</td><td class="num">—</td><td class="num">—</td><td class="num">0</td>
+                  <td class="mono t-xs muted">aks-nodepool1-4</td><td class="muted">9h</td>
+                  <td class="row-actions"><button class="icon-btn sm"><svg class="ic"><use href="#i-more"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td><span class="podname">report-gen-5f8d9c7b4-h2vnm</span></td>
+                  <td><span class="badge b-sm badge-needs"><span class="bdot"></span>ImagePullBackOff</span></td>
+                  <td class="num">0/1</td><td class="num">—</td><td class="num">—</td><td class="num">0</td>
+                  <td class="mono t-xs muted">aks-nodepool1-6</td><td class="muted">38m</td>
+                  <td class="row-actions"><button class="icon-btn sm"><svg class="ic"><use href="#i-more"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td><span class="podname">sms-dispatch-7c9e8f6d5-p8wqr</span></td>
+                  <td><span class="badge b-sm badge-working"><span class="bdot"></span>Terminating</span></td>
+                  <td class="num">1/1</td><td class="num">12m</td><td class="num">96Mi</td><td class="num">0</td>
+                  <td class="mono t-xs muted">aks-nodepool1-3</td><td class="muted">2d</td>
+                  <td class="row-actions"><button class="icon-btn sm"><svg class="ic"><use href="#i-more"/></svg></button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- pod detail rail -->
+        <aside class="detail">
+          <div class="detail-head">
+            <div class="detail-title">
+              <span class="name">phonotif-api-7d9f4c6b8-qx2mt</span>
+              <span class="badge b-sm badge-done" style="flex:none"><span class="bdot"></span>Running</span>
+              <button class="icon-btn sm" style="margin-left:-4px" title="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+            </div>
+            <div class="t-xs muted mono">cloud-cti · aks-portima-dev</div>
+            <div class="detail-actions">
+              <button class="icon-btn bordered" title="View YAML"><svg class="ic"><use href="#i-yaml"/></svg></button>
+              <button class="icon-btn bordered" title="Open shell in pod"><svg class="ic"><use href="#i-term"/></svg></button>
+              <button class="icon-btn bordered" title="Port-forward…"><svg class="ic"><use href="#i-fwd"/></svg></button>
+              <button class="icon-btn bordered" title="Ask AI about this pod"><svg class="ic"><use href="#i-zap"/></svg></button>
+            </div>
+          </div>
+          <div class="tabs" style="padding:0 4px">
+            <button class="tab active">Logs</button>
+            <button class="tab">Containers <span class="cnt">2</span></button>
+          </div>
+          <div class="logtools">
+            <input class="input input-sm" placeholder="Search logs…" style="width:130px">
+            <select class="select select-sm"><option>Last 10m</option><option>Last 1h</option><option>All</option><option>Previous container</option></select>
+            <div style="flex:1"></div>
+            <button class="icon-btn sm" title="Copy visible"><svg class="ic"><use href="#i-file"/></svg></button>
+            <button class="icon-btn sm" title="Export all"><svg class="ic"><use href="#i-file"/></svg></button>
+          </div>
+          <div class="logview"><div class="log-line"><span class="lg-time">09:41:02.318</span> <span class="lg-info">INF</span> <span class="lg-loc">Phonotif.Api.CallRouter</span> — Inbound call <span class="lg-guid">8f2e…a91c</span> routed to queue <span class="tok-key">priority-2</span></div>
+<div class="log-line"><span class="lg-time">09:41:02.411</span> <span class="lg-info">INF</span> <span class="lg-loc">Phonotif.Api.SipBridge</span> — REGISTER refresh OK · next in <span class="tok-number">240s</span></div>
+<div class="log-line"><span class="lg-time">09:41:03.002</span> <span class="lg-warn">WRN</span> <span class="lg-loc">Phonotif.Api.RedisCache</span> — Slow HGETALL <span class="tok-key">agent:state</span> took <span class="tok-number">612ms</span></div>
+<div class="log-line"><span class="lg-time">09:41:03.118</span> <span class="lg-info">INF</span> <span class="lg-loc">Phonotif.Api.Health</span> — /healthz 200 in <span class="tok-number">3ms</span></div>
+<div class="log-line"><span class="lg-time">09:41:04.551</span> <span class="lg-dbg">DBG</span> <span class="lg-loc">Phonotif.Api.SipBridge</span> — OPTIONS keepalive to <span class="lg-url">sip:10.20.4.17:5060</span></div>
+<div class="log-line"><span class="lg-time">09:41:05.209</span> <span class="lg-err">ERR</span> <span class="lg-loc">Phonotif.Api.MailSender</span> — SMTP send failed for <span class="lg-guid">c41b…77e0</span>: mailbox unavailable</div>
+<div class="log-line"><span class="lg-sep">   --- End of inner exception stack trace ---</span></div>
+<div class="log-line"><span class="lg-time">09:41:05.394</span> <span class="lg-info">INF</span> <span class="lg-loc">Phonotif.Api.RetryQueue</span> — Scheduled retry <span class="tok-key">#2</span> in <span class="tok-number">30s</span></div>
+<div class="log-line"><span class="lg-time">09:41:06.770</span> <span class="lg-info">INF</span> <span class="lg-loc">Phonotif.Api.CallRouter</span> — Inbound call <span class="lg-guid">1b9d…e3f2</span> routed to queue <span class="tok-key">priority-1</span></div>
+<div class="log-line"><span class="lg-time">09:41:07.015</span> <span class="lg-info">INF</span> <span class="lg-loc">Phonotif.Api.Health</span> — /healthz 200 in <span class="tok-number">2ms</span></div>
+<div class="log-line"><span class="lg-time">09:41:08.620</span> <span class="lg-warn">WRN</span> <span class="lg-loc">Phonotif.Api.SipBridge</span> — Jitter <span class="tok-number">184ms</span> above threshold on trunk <span class="tok-key">proximus-01</span></div>
+<div class="log-line"><span class="lg-time">09:41:09.933</span> <span class="lg-info">INF</span> <span class="lg-loc">Phonotif.Api.CallRouter</span> — Call <span class="lg-guid">8f2e…a91c</span> answered by agent <span class="tok-key">s.wojtyla</span> after <span class="tok-number">4.2s</span></div></div>
+          <div class="log-foot"><span class="dot dot-done pulse"></span>Live · buffer holding <span class="num">2,143</span> lines</div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="theme-switch" id="ts">
+  <div class="ts-label">Theme (prototype)</div>
+  <button data-t=""><span class="sw" style="background:oklch(0.52 0.20 268)"></span>Aurora Light</button>
+  <button data-t="dark"><span class="sw sw-aurora"></span>Aurora Dark</button>
+  <button data-t="clay"><span class="sw" style="background:oklch(0.50 0.13 40)"></span>Clay Light</button>
+  <button data-t="clay dark"><span class="sw sw-clay"></span>Clay Dark</button>
+</div>
+<script>
+(function(){
+  var root = document.documentElement, box = document.getElementById('ts');
+  var saved = localStorage.getItem('swebos-skin-theme');
+  if (saved !== null) root.className = saved;
+  function mark(){ box.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.t === root.className); }); }
+  box.addEventListener('click', function(e){ var b = e.target.closest('button'); if(!b) return; root.className = b.dataset.t; localStorage.setItem('swebos-skin-theme', root.className); mark(); });
+  mark();
+})();
+</script>
+</body>
+</html>

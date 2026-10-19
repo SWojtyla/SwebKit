@@ -163,8 +163,8 @@ export function DeploymentsTab({
                     <span
                         className={
                             dep.readyReplicas === dep.replicas
-                                ? "text-success"
-                                : "text-warning"
+                                ? "text-state-done-ink"
+                                : "text-state-needs-ink"
                         }
                     >
                         {dep.readyReplicas}/{dep.replicas}
@@ -181,18 +181,16 @@ export function DeploymentsTab({
             {
                 header: "Image",
                 cell: (dep) => (
-                    <span className="text-muted-foreground">
-                        {dep.imageTag ?? "—"}
-                    </span>
+                    <span className="text-fg-muted">{dep.imageTag ?? "—"}</span>
                 ),
             },
             {
                 header: "Actions",
                 sortable: false,
-                className: "py-2 pr-4 w-px whitespace-nowrap",
+                className: "w-px whitespace-nowrap py-1 pr-4",
                 cell: (dep) => (
                     <div
-                        className="flex items-center gap-2"
+                        className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <button
@@ -203,13 +201,13 @@ export function DeploymentsTab({
                                     ? "Restarting…"
                                     : undefined
                             }
-                            className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                            className="h-7 rounded-md border bg-surface-1 px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-50"
                         >
                             Restart
                         </button>
                         <button
                             onClick={() => setScaleTarget(dep)}
-                            className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                            className="h-7 rounded-md border bg-surface-1 px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                             data-testid={`deployment-scale-${dep.name}`}
                         >
                             Scale
@@ -270,9 +268,9 @@ export function DeploymentsTab({
 function StatusBadge({ status }: { status: string }) {
     const color =
         status === "Available"
-            ? "text-success"
+            ? "text-state-done-ink"
             : status === "Progressing"
-              ? "text-warning"
-              : "text-destructive";
+              ? "text-state-working-ink"
+              : "text-state-blocked-ink";
     return <span className={color}>{status}</span>;
 }

@@ -94,10 +94,10 @@ export function HelmDetailPanel({
             key={id}
             onClick={() => setTab(id)}
             data-testid={`helm-tab-${id}`}
-            className={`flex items-center gap-1 px-4 py-2 text-sm font-medium ${
+            className={`-mb-px flex items-center gap-1 border-b-2 px-4 py-2 text-sm font-medium ${
                 tab === id
-                    ? "border-b-2 border-primary text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "border-primary text-fg"
+                    : "border-transparent text-fg-muted hover:text-fg"
             }`}
         >
             {icon} {label}
@@ -107,13 +107,13 @@ export function HelmDetailPanel({
     return (
         <div className="flex h-full flex-col" data-testid="helm-detail-panel">
             <div className="flex items-center gap-2 border-b px-4 py-2">
-                <span className="text-sm font-medium">{release}</span>
-                <span className="text-xs text-muted-foreground">
-                    Helm Release
+                <span className="truncate font-mono text-sm font-semibold">
+                    {release}
                 </span>
+                <span className="text-xs text-fg-muted">Helm Release</span>
                 <button
                     onClick={onClose}
-                    className="ml-auto rounded p-1 hover:bg-accent"
+                    className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                 >
                     <X className="h-4 w-4" />
                 </button>
@@ -146,11 +146,11 @@ export function HelmDetailPanel({
                 {tab === "history" && (
                     <div className="p-4">
                         {historyLoading ? (
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-sm text-fg-muted">
                                 Loading history...
                             </div>
                         ) : !history || history.length === 0 ? (
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-sm text-fg-muted">
                                 No history available
                             </div>
                         ) : (
@@ -159,7 +159,7 @@ export function HelmDetailPanel({
                                 data-testid="helm-history-table"
                             >
                                 <thead>
-                                    <tr className="border-b text-left text-xs text-muted-foreground">
+                                    <tr className="h-8 border-b text-left text-xs font-medium uppercase tracking-wide text-fg-muted">
                                         <th className="py-2 pr-4">Revision</th>
                                         <th className="py-2 pr-4">Status</th>
                                         <th className="py-2 pr-4">Chart</th>
@@ -176,7 +176,7 @@ export function HelmDetailPanel({
                                     {history.map((h) => (
                                         <tr
                                             key={h.revision}
-                                            className="border-b last:border-0"
+                                            className="h-9 border-b last:border-0"
                                         >
                                             <td className="py-2 pr-4 font-medium">
                                                 {h.revision}
@@ -185,28 +185,28 @@ export function HelmDetailPanel({
                                                 <span
                                                     className={
                                                         h.status === "deployed"
-                                                            ? "text-success"
-                                                            : "text-warning"
+                                                            ? "text-state-done-ink"
+                                                            : "text-state-needs-ink"
                                                     }
                                                 >
                                                     {h.status}
                                                 </span>
                                             </td>
-                                            <td className="py-2 pr-4 text-xs text-muted-foreground">
+                                            <td className="py-2 pr-4 text-xs text-fg-muted">
                                                 {h.chart}
                                             </td>
-                                            <td className="py-2 pr-4 text-xs text-muted-foreground">
+                                            <td className="py-2 pr-4 text-xs text-fg-muted">
                                                 {h.appVersion}
                                             </td>
-                                            <td className="py-2 pr-4 text-xs text-muted-foreground">
+                                            <td className="py-2 pr-4 text-xs text-fg-muted">
                                                 {h.description}
                                             </td>
-                                            <td className="py-2 pr-4 text-xs text-muted-foreground">
+                                            <td className="py-2 pr-4 text-xs text-fg-muted">
                                                 {h.updated
                                                     ? formatLocalDate(h.updated)
                                                     : "—"}
                                             </td>
-                                            <td className="py-2 pr-4">
+                                            <td className="py-1 pr-4">
                                                 {h.status !== "deployed" && (
                                                     <button
                                                         onClick={() =>
@@ -218,7 +218,7 @@ export function HelmDetailPanel({
                                                             rollback.isPending
                                                         }
                                                         title={`Rollback to revision ${h.revision}`}
-                                                        className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                                                        className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
                                                         data-testid={`helm-rollback-rev-${h.revision}`}
                                                     >
                                                         <RotateCcw className="h-3 w-3" />
@@ -241,11 +241,11 @@ export function HelmDetailPanel({
                 {tab === "values" && (
                     <div className="p-4">
                         {valuesLoading ? (
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-sm text-fg-muted">
                                 Loading values...
                             </div>
                         ) : !values ? (
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-sm text-fg-muted">
                                 No values available
                             </div>
                         ) : (
@@ -253,19 +253,19 @@ export function HelmDetailPanel({
                                 <div className="mb-2 flex gap-2">
                                     <button
                                         onClick={() => setValuesTab("user")}
-                                        className={`rounded border px-3 py-1 text-xs ${valuesTab === "user" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                                        className={`h-7 rounded-md border px-3 text-xs ${valuesTab === "user" ? "border-primary bg-primary text-primary-foreground" : "bg-surface-1 text-fg-muted hover:bg-surface-2 hover:text-fg"}`}
                                     >
                                         User Values
                                     </button>
                                     <button
                                         onClick={() => setValuesTab("computed")}
-                                        className={`rounded border px-3 py-1 text-xs ${valuesTab === "computed" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                                        className={`h-7 rounded-md border px-3 text-xs ${valuesTab === "computed" ? "border-primary bg-primary text-primary-foreground" : "bg-surface-1 text-fg-muted hover:bg-surface-2 hover:text-fg"}`}
                                     >
                                         Computed Values
                                     </button>
                                 </div>
                                 <pre
-                                    className="overflow-auto rounded border bg-card p-3 text-xs font-mono"
+                                    className="overflow-auto rounded-md border bg-sunken p-3 text-xs font-mono"
                                     data-testid="helm-values-content"
                                     dangerouslySetInnerHTML={{
                                         __html: highlightYaml(
@@ -282,16 +282,16 @@ export function HelmDetailPanel({
                 {tab === "notes" && (
                     <div className="p-4">
                         {notesLoading ? (
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-sm text-fg-muted">
                                 Loading notes...
                             </div>
                         ) : !notes ? (
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-sm text-fg-muted">
                                 No notes available
                             </div>
                         ) : (
                             <pre
-                                className="overflow-auto rounded border bg-card p-3 text-xs font-mono whitespace-pre-wrap"
+                                className="overflow-auto rounded-md border bg-sunken p-3 text-xs font-mono whitespace-pre-wrap"
                                 data-testid="helm-notes-content"
                             >
                                 {notes.notes || "No release notes provided."}
@@ -302,16 +302,16 @@ export function HelmDetailPanel({
                 {tab === "manifest" && (
                     <div className="p-4">
                         {manifestLoading ? (
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-sm text-fg-muted">
                                 Loading manifest...
                             </div>
                         ) : !manifest ? (
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-sm text-fg-muted">
                                 No manifest available
                             </div>
                         ) : (
                             <pre
-                                className="overflow-auto rounded border bg-card p-3 text-xs font-mono"
+                                className="overflow-auto rounded-md border bg-sunken p-3 text-xs font-mono"
                                 data-testid="helm-manifest-content"
                                 dangerouslySetInnerHTML={{
                                     __html: highlightYaml(manifest.manifest),

@@ -17,14 +17,12 @@ interface SecretsTabProps {
 const columns: Column<SecretInfo>[] = [
     {
         header: "Type",
-        cell: (secret) => (
-            <span className="text-muted-foreground">{secret.type}</span>
-        ),
+        cell: (secret) => <span className="text-fg-muted">{secret.type}</span>,
     },
     {
         header: "Keys",
         cell: (secret) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-fg-muted">
                 {secret.keys.length > 0 ? secret.keys.join(", ") : "—"}
             </span>
         ),

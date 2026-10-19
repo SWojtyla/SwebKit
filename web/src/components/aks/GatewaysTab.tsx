@@ -19,7 +19,7 @@ const columns: Column<GatewayInfo>[] = [
     {
         header: "Class",
         cell: (gw) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-fg-muted">
                 {gw.gatewayClass ?? "—"}
             </span>
         ),
@@ -30,10 +30,10 @@ const columns: Column<GatewayInfo>[] = [
             <span
                 className={
                     gw.status === "Ready"
-                        ? "text-success"
+                        ? "text-state-done-ink"
                         : gw.status === "Pending"
-                          ? "text-warning"
-                          : "text-muted-foreground"
+                          ? "text-state-waiting-ink"
+                          : "text-fg-muted"
                 }
             >
                 {gw.status}
@@ -44,7 +44,7 @@ const columns: Column<GatewayInfo>[] = [
     {
         header: "Addresses",
         cell: (gw) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="font-mono text-xs text-fg-muted">
                 {gw.addresses.length > 0 ? gw.addresses.join(", ") : "—"}
             </span>
         ),

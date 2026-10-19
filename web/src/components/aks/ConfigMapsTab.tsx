@@ -15,7 +15,7 @@ const columns: Column<ConfigMapInfo>[] = [
     {
         header: "Keys",
         cell: (cm) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-fg-muted">
                 {cm.keys.length > 0 ? cm.keys.join(", ") : "—"}
             </span>
         ),

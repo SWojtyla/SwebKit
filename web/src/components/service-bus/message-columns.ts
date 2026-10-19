@@ -4,17 +4,18 @@ import type { SbMessage } from "@/lib/types";
 import { isScheduledMessage } from "./filterLogic";
 
 export const densityClass: Record<RowDensity, string> = {
-    compact: "py-0.5",
-    default: "py-1.5",
-    comfort: "py-2.5",
+    compact: "py-1",
+    default: "py-2.5",
+    comfort: "py-3.5",
 };
 
 // Estimated row height per density, used as the virtualizer's initial size
 // guess before `measureElement` corrects it against the real rendered height.
+// SwebOS: default lands on the spec's 36px data-row (text-xs + py-2.5).
 export const ROW_HEIGHT_ESTIMATE: Record<RowDensity, number> = {
-    compact: 24,
-    default: 32,
-    comfort: 40,
+    compact: 26,
+    default: 36,
+    comfort: 44,
 };
 
 // The message list renders as a real data table (see ColumnDef below), but

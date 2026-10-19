@@ -23,8 +23,8 @@ const columns: Column<StatefulSetInfo>[] = [
             <span
                 className={
                     sts.readyReplicas === sts.replicas
-                        ? "text-success"
-                        : "text-warning"
+                        ? "text-state-done-ink"
+                        : "text-state-needs-ink"
                 }
             >
                 {sts.readyReplicas}/{sts.replicas}
@@ -35,7 +35,7 @@ const columns: Column<StatefulSetInfo>[] = [
     {
         header: "Current Rev",
         cell: (sts) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-fg-muted">
                 {sts.currentRevision ?? "—"}
             </span>
         ),
@@ -43,7 +43,7 @@ const columns: Column<StatefulSetInfo>[] = [
     {
         header: "Update Rev",
         cell: (sts) => (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-fg-muted">
                 {sts.updateRevision ?? "—"}
             </span>
         ),
@@ -93,14 +93,14 @@ export function StatefulSetsTab({
             {
                 header: "Actions",
                 sortable: false,
-                className: "py-2 pr-4 w-px whitespace-nowrap",
+                className: "w-px whitespace-nowrap py-1 pr-4",
                 cell: (sts) => (
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
                             setScaleTarget(sts);
                         }}
-                        className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                        className="h-7 rounded-md border bg-surface-1 px-2 text-xs text-fg-muted opacity-0 transition-opacity hover:bg-surface-2 hover:text-fg group-hover:opacity-100 focus:opacity-100"
                         data-testid={`statefulset-scale-${sts.name}`}
                     >
                         Scale

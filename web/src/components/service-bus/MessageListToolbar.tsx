@@ -31,15 +31,15 @@ export function SavedFiltersMenu({
                 onClick={() => p.setShowSavedFilters(!p.showSavedFilters)}
                 disabled={p.savedFilters.length === 0 && !p.canSaveFilter}
                 title="Saved filters"
-                className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                className="flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-50"
             >
                 <Bookmark className="h-3.5 w-3.5" />
                 Saved
             </button>
             {p.showSavedFilters && (
-                <div className="absolute left-0 top-full z-20 mt-1 w-64 rounded-md border bg-popover p-2 shadow-lg">
+                <div className="absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border bg-popover p-2 shadow-md">
                     {p.savedFilters.length === 0 ? (
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-fg-muted">
                             No saved filters
                         </div>
                     ) : (
@@ -50,14 +50,14 @@ export function SavedFiltersMenu({
                                     className="flex items-center justify-between gap-1"
                                 >
                                     <button
-                                        className="flex-1 rounded px-1 py-0.5 text-left text-xs hover:bg-accent"
+                                        className="flex-1 rounded px-1 py-0.5 text-left text-xs hover:bg-accent-soft"
                                         onClick={() => p.applySavedFilter(f)}
                                     >
                                         {f.name}
                                     </button>
                                     <button
                                         onClick={() => p.removeSavedFilter(f)}
-                                        className="text-muted-foreground hover:text-foreground"
+                                        className="text-fg-muted hover:text-fg"
                                         title="Delete saved filter"
                                     >
                                         <X className="h-3 w-3" />
@@ -78,7 +78,7 @@ export function SavedFiltersMenu({
                                     e.key === "Enter" && p.saveFilter()
                                 }
                                 placeholder="Filter name..."
-                                className="flex-1 rounded border bg-card px-2 py-1 text-xs"
+                                className="flex-1 rounded-md border bg-surface-1 px-2 py-1 text-xs"
                                 autoFocus
                             />
                             <button
@@ -89,7 +89,7 @@ export function SavedFiltersMenu({
                                         ? "Name the filter first"
                                         : undefined
                                 }
-                                className="rounded border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                                className="rounded-md border bg-surface-1 px-2 py-1 text-xs hover:bg-surface-2 disabled:opacity-50"
                             >
                                 Save
                             </button>
@@ -98,7 +98,7 @@ export function SavedFiltersMenu({
                                     p.setShowSaveFilterInput(false);
                                     p.setSaveFilterName("");
                                 }}
-                                className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                                className="rounded-md border bg-surface-1 px-2 py-1 text-xs hover:bg-surface-2"
                             >
                                 Cancel
                             </button>
@@ -107,7 +107,7 @@ export function SavedFiltersMenu({
                         p.canSaveFilter && (
                             <button
                                 onClick={() => p.setShowSaveFilterInput(true)}
-                                className="mt-2 w-full rounded border px-2 py-1 text-xs hover:bg-accent"
+                                className="mt-2 w-full rounded-md border bg-surface-1 px-2 py-1 text-xs hover:bg-surface-2"
                             >
                                 Save current filter
                             </button>
@@ -138,23 +138,23 @@ export function FilterChipBar({
     );
     return (
         <div
-            className="flex flex-wrap items-center gap-1.5 border-b px-2 py-1"
+            className="flex flex-wrap items-center gap-1.5 border-b px-3 py-1.5"
             data-testid="filter-chip-bar"
         >
             <div className="relative w-52">
-                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" />
                 <input
                     type="text"
                     data-testid="message-text-filter"
                     value={c.textFilter}
                     onChange={(e) => c.setTextFilter(e.target.value)}
                     placeholder="Search messages..."
-                    className="w-full rounded-md border bg-card py-1 pl-7 pr-6 text-xs"
+                    className="h-7 w-full rounded-md border bg-surface-1 pl-7 pr-6 text-sm placeholder:text-fg-subtle"
                 />
                 {c.textFilter && (
                     <button
                         onClick={() => c.setTextFilter("")}
-                        className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg"
                         title="Clear search"
                     >
                         <X className="h-3.5 w-3.5" />
@@ -194,7 +194,7 @@ export function FilterChipBar({
                 data-testid="filter-chip-add-rule"
                 onClick={c.addRule}
                 title="Add a typed filter rule (text, numeric or time)"
-                className="flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="flex h-6 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-accent-ink hover:bg-accent-soft"
             >
                 <Plus className="h-3 w-3" /> rule
             </button>
@@ -208,7 +208,7 @@ export function FilterChipBar({
                         data-testid="filters-off-chip"
                         onClick={() => c.setFiltersEnabled(true)}
                         title="Filters are configured but disabled — click to re-enable"
-                        className="flex items-center gap-1 rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-600 dark:text-amber-400"
+                        className="flex h-6 items-center gap-1 rounded-md border border-state-needs/40 bg-state-needs-soft px-2 text-xs font-medium text-state-needs-ink"
                     >
                         <Filter className="h-3 w-3" /> filters off — showing all
                     </button>
@@ -219,13 +219,13 @@ export function FilterChipBar({
                         data-testid="clear-all-filters"
                         onClick={c.clearAllFilters}
                         title="Clear all filters — text search, pinned session, and rules"
-                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                        className="flex items-center gap-1 text-xs text-fg-muted hover:text-fg"
                     >
                         <X className="h-3 w-3" /> Clear all
                     </button>
                 )}
                 <span
-                    className="text-xs text-muted-foreground"
+                    className="text-xs tabular-nums text-fg-subtle"
                     data-testid="filter-match-count"
                 >
                     {filteredCount === loadedCount
@@ -249,14 +249,14 @@ function Chip({
     return (
         <span
             data-testid={testId}
-            className="flex items-center gap-1 rounded-full border bg-accent/40 px-2 py-0.5 text-xs"
+            className="flex h-6 items-center gap-1 rounded-md bg-surface-2 pl-2 pr-1 text-xs text-fg"
         >
             {label}
             <button
                 type="button"
                 onClick={onRemove}
                 title="Remove this filter"
-                className="text-muted-foreground hover:text-foreground"
+                className="text-fg-subtle hover:text-fg"
             >
                 <X className="h-3 w-3" />
             </button>
@@ -281,10 +281,10 @@ export interface ColumnTogglePanelProps {
 export function ColumnTogglePanel(p: ColumnTogglePanelProps) {
     return (
         <div
-            className="border-b bg-muted/20 px-3 py-2"
+            className="border-b bg-surface-2 px-3 py-2"
             data-testid="column-toggle-dropdown"
         >
-            <div className="mb-2 text-xs font-medium text-muted-foreground">
+            <div className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
                 Built-in columns
             </div>
             <div className="flex flex-wrap gap-2">
@@ -305,19 +305,19 @@ export function ColumnTogglePanel(p: ColumnTogglePanelProps) {
             </div>
             {p.prefs.customColumns.length > 0 && (
                 <>
-                    <div className="mb-1 mt-2 text-xs font-medium text-muted-foreground">
+                    <div className="mb-1 mt-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
                         Custom property columns
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {p.prefs.customColumns.map((col) => (
                             <span
                                 key={col}
-                                className="flex items-center gap-1 rounded bg-accent px-1.5 py-0.5 text-xs"
+                                className="flex items-center gap-1 rounded bg-accent-soft px-1.5 py-0.5 text-xs text-accent-ink"
                             >
                                 {col}
                                 <button
                                     onClick={() => p.onRemoveCustomColumn(col)}
-                                    className="text-muted-foreground hover:text-foreground"
+                                    className="text-accent-ink/70 hover:text-accent-ink"
                                 >
                                     <X className="h-3 w-3" />
                                 </button>
@@ -328,7 +328,7 @@ export function ColumnTogglePanel(p: ColumnTogglePanelProps) {
             )}
             {p.suggestedColumns.length > 0 && (
                 <>
-                    <div className="mb-1 mt-2 text-xs font-medium text-muted-foreground">
+                    <div className="mb-1 mt-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
                         Suggested from data
                     </div>
                     <div className="flex flex-wrap gap-1">
@@ -344,7 +344,7 @@ export function ColumnTogglePanel(p: ColumnTogglePanelProps) {
                                         ],
                                     }))
                                 }
-                                className="flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-xs hover:bg-accent"
+                                className="flex items-center gap-0.5 rounded-md border bg-surface-1 px-1.5 py-0.5 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                                 data-testid={`suggest-column-${col}`}
                             >
                                 <Plus className="h-2.5 w-2.5" /> {col}
@@ -364,12 +364,12 @@ export function ColumnTogglePanel(p: ColumnTogglePanelProps) {
                         e.key === "Enter" && p.onAddCustomColumn()
                     }
                     placeholder="Add custom property column..."
-                    className="flex-1 rounded border bg-card px-2 py-1 text-xs"
+                    className="h-7 flex-1 rounded-md border bg-surface-1 px-2 text-sm placeholder:text-fg-subtle"
                     data-testid="custom-column-input"
                 />
                 <button
                     onClick={p.onAddCustomColumn}
-                    className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                    className="h-7 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
                     data-testid="add-custom-column"
                 >
                     Add
@@ -387,20 +387,20 @@ export function SessionPinFilter({
     onChange: (value: string | null) => void;
 }) {
     return (
-        <div className="flex items-center gap-1.5 border-b px-2 py-1">
-            <Pin className="h-3.5 w-3.5 text-muted-foreground" />
+        <div className="flex items-center gap-1.5 border-b px-3 py-1.5">
+            <Pin className="h-3.5 w-3.5 text-fg-muted" />
             <input
                 type="text"
                 data-testid="session-pin-filter"
                 value={pinnedSessionId ?? ""}
                 onChange={(e) => onChange(e.target.value || null)}
                 placeholder="Filter by Session ID..."
-                className="flex-1 rounded-md border bg-card px-2 py-1 text-xs"
+                className="h-7 flex-1 rounded-md border bg-surface-1 px-2 text-sm placeholder:text-fg-subtle"
             />
             {pinnedSessionId && (
                 <button
                     onClick={() => onChange(null)}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-fg-muted hover:text-fg"
                     data-testid="session-pin-clear"
                 >
                     <X className="h-3.5 w-3.5" />
@@ -427,13 +427,11 @@ export function SessionChipBar({
     if (sessions.length === 0) return null;
     return (
         <div
-            className="flex flex-wrap items-center gap-1 border-b px-2 py-1"
+            className="flex flex-wrap items-center gap-1 border-b px-3 py-1.5"
             data-testid="session-chip-bar"
         >
-            <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="mr-1 text-xs text-muted-foreground">
-                Sessions:
-            </span>
+            <Pin className="h-3.5 w-3.5 shrink-0 text-fg-muted" />
+            <span className="mr-1 text-xs text-fg-muted">Sessions:</span>
             {sessions.map((session) => {
                 const active = pinnedSessionId === session.sessionId;
                 return (
@@ -444,10 +442,10 @@ export function SessionChipBar({
                         aria-pressed={active}
                         onClick={() => onPin(active ? null : session.sessionId)}
                         title={`${session.messageCount} message(s) · ${formatLocalDateTime(session.firstEnqueuedAt)} – ${formatLocalDateTime(session.lastEnqueuedAt)}${active ? " · click to unpin" : " · click to pin this session"}`}
-                        className={`rounded-full border px-2 py-0.5 text-xs ${
+                        className={`h-6 rounded-full border px-2 text-xs ${
                             active
-                                ? "border-primary bg-primary/15 text-primary"
-                                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                                ? "border-primary bg-accent-soft text-accent-ink"
+                                : "text-fg-muted hover:bg-surface-2 hover:text-fg"
                         }`}
                     >
                         {session.sessionId} ({session.messageCount})
@@ -467,12 +465,14 @@ export function AdvancedFilterSection({
 }) {
     return (
         <>
-            <div className="flex items-center justify-between border-b bg-muted/20 px-2 py-1">
-                <span className="text-xs font-medium">Advanced filters</span>
+            <div className="flex items-center justify-between border-b bg-surface-2 px-3 py-1.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-fg-muted">
+                    Advanced filters
+                </span>
                 {rules.length > 0 && (
                     <button
                         onClick={() => onChange([])}
-                        className="text-xs text-muted-foreground hover:text-foreground"
+                        className="text-xs text-fg-muted hover:text-fg"
                     >
                         Clear all
                     </button>

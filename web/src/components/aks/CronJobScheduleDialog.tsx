@@ -33,8 +33,18 @@ const WEEKDAYS = [
 ];
 
 const MONTHS = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 ];
 
 /**
@@ -82,11 +92,13 @@ export function CronJobScheduleDialog({
               });
 
     const valid = preset === "custom" ? isValidCronExpression(schedule) : true;
-    const nextRun = valid ? nextCronRun(schedule, { timeZone: cronJob.timeZone }) : null;
+    const nextRun = valid
+        ? nextCronRun(schedule, { timeZone: cronJob.timeZone })
+        : null;
     const description = valid ? describeCronExpression(schedule) : null;
 
     const numberInput =
-        "mt-1 block w-24 rounded-md border bg-background px-2 py-1.5 text-sm tabular-nums";
+        "mt-1 block h-7 w-24 rounded-md border bg-surface-1 px-2 text-xs tabular-nums";
 
     return (
         <Dialog
@@ -99,18 +111,18 @@ export function CronJobScheduleDialog({
                 <div className="min-w-0">
                     <h2 className="text-sm font-semibold">Edit schedule</h2>
                     <p
-                        className="truncate text-xs text-muted-foreground"
+                        className="truncate text-xs text-fg-muted"
                         title={`${cronJob.namespace}/${cronJob.name}`}
                     >
                         {cronJob.namespace} /{" "}
-                        <span className="font-medium text-foreground">
+                        <span className="font-medium text-fg">
                             {cronJob.name}
                         </span>
                     </p>
                 </div>
                 <button
                     onClick={onCancel}
-                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                    className="shrink-0 text-fg-muted hover:text-fg"
                     aria-label="Close"
                     data-testid="cronjob-schedule-close"
                 >
@@ -123,8 +135,10 @@ export function CronJobScheduleDialog({
                     Runs
                     <select
                         value={preset}
-                        onChange={(e) => setPreset(e.target.value as CronPreset)}
-                        className="mt-1 block w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                        onChange={(e) =>
+                            setPreset(e.target.value as CronPreset)
+                        }
+                        className="mt-1 block h-7 w-full rounded-md border bg-surface-1 px-2 text-xs"
                         data-testid="cronjob-schedule-preset"
                     >
                         {PRESETS.map((p) => (
@@ -198,7 +212,7 @@ export function CronJobScheduleDialog({
                                     onChange={(e) =>
                                         setWeekday(parseInt(e.target.value, 10))
                                     }
-                                    className="mt-1 block rounded-md border bg-background px-2 py-1.5 text-sm"
+                                    className="mt-1 block h-7 rounded-md border bg-surface-1 px-2 text-xs"
                                     data-testid="cronjob-schedule-weekday"
                                 >
                                     {WEEKDAYS.map((d, i) => (
@@ -247,7 +261,7 @@ export function CronJobScheduleDialog({
                                                 parseInt(e.target.value, 10),
                                             )
                                         }
-                                        className="mt-1 block rounded-md border bg-background px-2 py-1.5 text-sm"
+                                        className="mt-1 block h-7 rounded-md border bg-surface-1 px-2 text-xs"
                                         data-testid="cronjob-schedule-month"
                                     >
                                         {MONTHS.map((m, i) => (
@@ -294,7 +308,7 @@ export function CronJobScheduleDialog({
                                     setHour(parseInt(h, 10) || 0);
                                     setMinute(parseInt(m, 10) || 0);
                                 }}
-                                className="mt-1 block rounded-md border bg-background px-2 py-1.5 text-sm tabular-nums"
+                                className="mt-1 block h-7 rounded-md border bg-surface-1 px-2 text-xs tabular-nums"
                                 data-testid="cronjob-schedule-time"
                             />
                         </label>
@@ -310,28 +324,26 @@ export function CronJobScheduleDialog({
                             onChange={(e) => setCustom(e.target.value)}
                             placeholder="minute hour day-of-month month weekday"
                             spellCheck={false}
-                            className="mt-1 block w-full rounded-md border bg-background px-2 py-1.5 font-mono text-sm"
+                            className="mt-1 block h-7 w-full rounded-md border bg-surface-1 px-2 font-mono text-xs"
                             data-testid="cronjob-schedule-custom"
                         />
                     </label>
                 )}
 
                 <div
-                    className="rounded-md border bg-muted/40 px-3 py-2 text-xs"
+                    className="rounded-md border bg-sunken px-3 py-2 text-xs"
                     data-testid="cronjob-schedule-preview"
                 >
                     <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">Schedule:</span>
+                        <span className="text-fg-muted">Schedule:</span>
                         <code className="font-mono">{schedule || "—"}</code>
                     </div>
                     {description && (
-                        <div className="mt-1 text-muted-foreground">
-                            {description}
-                        </div>
+                        <div className="mt-1 text-fg-muted">{description}</div>
                     )}
                     {!valid && (
                         <div
-                            className="mt-1 text-destructive"
+                            className="mt-1 text-state-blocked-ink"
                             data-testid="cronjob-schedule-invalid"
                         >
                             Invalid cron expression — use 5 fields (minute hour
@@ -340,7 +352,7 @@ export function CronJobScheduleDialog({
                     )}
                     {valid && (
                         <div className="mt-1">
-                            <span className="text-muted-foreground">
+                            <span className="text-fg-muted">
                                 Next run (local time):
                             </span>{" "}
                             <span data-testid="cronjob-schedule-next-run">
@@ -349,8 +361,9 @@ export function CronJobScheduleDialog({
                         </div>
                     )}
                     {cronJob.timeZone && (
-                        <div className="mt-1 text-muted-foreground">
-                            Schedule evaluates in {cronJob.timeZone} (spec.timeZone)
+                        <div className="mt-1 text-fg-muted">
+                            Schedule evaluates in {cronJob.timeZone}{" "}
+                            (spec.timeZone)
                         </div>
                     )}
                 </div>
@@ -360,7 +373,7 @@ export function CronJobScheduleDialog({
                 <button
                     onClick={onCancel}
                     disabled={isSaving}
-                    className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
+                    className="h-7 rounded-md border bg-surface-1 px-3 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-50"
                     data-testid="cronjob-schedule-cancel"
                 >
                     Cancel
@@ -375,7 +388,7 @@ export function CronJobScheduleDialog({
                               ? "Fix the cron expression first"
                               : undefined
                     }
-                    className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                    className="h-7 rounded-md bg-primary px-3 text-xs text-primary-foreground hover:bg-accent-hover disabled:opacity-50"
                     data-testid="cronjob-schedule-save"
                 >
                     {isSaving ? "Saving…" : "Save"}

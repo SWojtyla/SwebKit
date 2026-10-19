@@ -60,14 +60,12 @@ export function EventsTab({
     }, [events, warningsOnly]);
 
     if (isLoading)
-        return (
-            <div className="p-4 text-sm text-muted-foreground">Loading...</div>
-        );
+        return <div className="p-4 text-sm text-fg-muted">Loading...</div>;
 
     if (error) {
         return (
             <div
-                className="flex items-center gap-2 p-4 text-sm text-destructive"
+                className="flex items-center gap-2 p-4 text-sm text-state-blocked-ink"
                 data-testid="events-error"
             >
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -80,11 +78,12 @@ export function EventsTab({
 
     return (
         <div className="p-4" data-testid="events-list">
-            <label className="mb-2 flex items-center gap-2 text-xs">
+            <label className="mb-2 flex items-center gap-2 text-xs text-fg-muted">
                 <input
                     type="checkbox"
                     checked={warningsOnly}
                     onChange={(e) => setWarningsOnly(e.target.checked)}
+                    className="h-3.5 w-3.5 accent-primary"
                     data-testid="events-warnings-only"
                 />
                 Warnings only
@@ -97,7 +96,7 @@ export function EventsTab({
                     {contextErrors.map((e) => (
                         <div
                             key={e.context}
-                            className="flex items-center gap-2 rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive"
+                            className="flex items-center gap-2 rounded-md border border-state-blocked/30 bg-state-blocked-soft px-2 py-1.5 text-xs text-state-blocked-ink"
                             data-testid={`events-context-error-${e.context}`}
                         >
                             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
@@ -112,11 +111,9 @@ export function EventsTab({
                 </div>
             )}
             {!events || events.length === 0 ? (
-                <div className="text-sm text-muted-foreground">
-                    No events found
-                </div>
+                <div className="text-sm text-fg-muted">No events found</div>
             ) : visibleEvents.length === 0 ? (
-                <div className="text-sm text-muted-foreground">
+                <div className="text-sm text-fg-muted">
                     No warning events found
                 </div>
             ) : (
@@ -129,13 +126,13 @@ export function EventsTab({
                             <div
                                 key={`${evt.context}:${evt.namespace}/${evt.name}-${evt.involvedObjectName}`}
                                 data-testid={`event-item-${evt.name}`}
-                                className="flex items-start gap-3 rounded-md border p-2 text-sm"
+                                className="flex items-start gap-3 rounded-lg border bg-surface-1 p-3 text-sm shadow"
                             >
                                 <span
-                                    className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${
+                                    className={`mt-0.5 inline-flex h-5 shrink-0 items-center rounded-full px-2 text-xs font-semibold ${
                                         evt.type === "Warning"
-                                            ? "bg-warning/20 text-warning"
-                                            : "bg-success/20 text-success"
+                                            ? "bg-state-needs-soft text-state-needs-ink"
+                                            : "bg-state-done-soft text-state-done-ink"
                                     }`}
                                 >
                                     {evt.type}
@@ -144,14 +141,14 @@ export function EventsTab({
                                     <div className="flex items-center gap-2">
                                         {showContext && evt.context && (
                                             <span
-                                                className="rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium text-primary"
+                                                className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium text-accent-ink"
                                                 data-testid={`event-context-${evt.name}`}
                                             >
                                                 {evt.context}
                                             </span>
                                         )}
                                         {isMulti && (
-                                            <span className="text-xs text-muted-foreground">
+                                            <span className="text-xs text-fg-muted">
                                                 {evt.namespace}
                                             </span>
                                         )}
@@ -166,7 +163,7 @@ export function EventsTab({
                                                             targetTab,
                                                         )
                                                     }
-                                                    className="text-xs text-primary hover:underline"
+                                                    className="text-xs text-accent-ink hover:underline"
                                                     data-testid={`event-target-${evt.name}`}
                                                     title={`Go to ${evt.involvedObjectKind} in the ${targetTab} tab`}
                                                 >
@@ -174,22 +171,22 @@ export function EventsTab({
                                                     {evt.involvedObjectName}
                                                 </button>
                                             ) : (
-                                                <span className="text-xs text-muted-foreground">
+                                                <span className="text-xs text-fg-muted">
                                                     {evt.involvedObjectKind}/
                                                     {evt.involvedObjectName}
                                                 </span>
                                             ))}
                                         {evt.count > 1 && (
-                                            <span className="text-xs text-muted-foreground">
+                                            <span className="text-xs text-fg-muted">
                                                 ×{evt.count}
                                             </span>
                                         )}
                                     </div>
-                                    <p className="mt-0.5 text-xs text-muted-foreground">
+                                    <p className="mt-0.5 text-xs text-fg-muted">
                                         {evt.message}
                                     </p>
                                 </div>
-                                <span className="shrink-0 text-xs text-muted-foreground">
+                                <span className="shrink-0 text-xs text-fg-muted">
                                     {evt.lastTimestamp
                                         ? formatLocalTime(evt.lastTimestamp)
                                         : ""}

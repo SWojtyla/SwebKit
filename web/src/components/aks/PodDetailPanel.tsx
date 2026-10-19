@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { PodLogView } from "./PodLogView";
 import { ContainerDetailPanel } from "./ContainerDetailPanel";
+import { PhaseBadge } from "./shared/PhaseBadge";
 import type { PodInfo } from "@/lib/types";
 
 interface PodDetailPanelProps {
@@ -41,16 +42,17 @@ export function PodDetailPanel({
           buttons below for space (previously all of this shared one row and the last button —
           "Ask AI" — was silently clipped off the edge of the panel). */}
             <div className="flex items-center gap-2 border-b px-4 py-2">
-                <Terminal className="h-4 w-4 shrink-0" />
-                <span className="truncate text-sm font-medium" title={pod.name}>
+                <Terminal className="h-4 w-4 shrink-0 text-fg-muted" />
+                <span
+                    className="truncate font-mono text-sm font-semibold"
+                    title={pod.name}
+                >
                     {pod.name}
                 </span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                    · {pod.status}
-                </span>
+                <PhaseBadge phase={pod.status} className="shrink-0" />
                 {pod.context && (
                     <span
-                        className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary"
+                        className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-xs text-accent-ink"
                         title="Kubernetes context"
                         data-testid="pod-detail-context"
                     >
@@ -59,7 +61,7 @@ export function PodDetailPanel({
                 )}
                 <button
                     onClick={onClose}
-                    className="ml-auto shrink-0 rounded p-1 hover:bg-accent"
+                    className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                     aria-label="Close"
                     title="Close"
                 >
@@ -71,26 +73,26 @@ export function PodDetailPanel({
           they stay as labeled tabs; Shell/Port-Forward/Ask AI/YAML are one-shot actions that
           navigate elsewhere, so they're icon-only (with a tooltip) to stay compact regardless
           of how narrow the panel is resized. */}
-            <div className="flex items-center gap-1 border-b px-4 py-1.5">
+            <div className="flex items-center gap-1 border-b px-4">
                 <button
                     onClick={() => setActiveTab("logs")}
-                    className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${activeTab === "logs" ? "bg-accent" : "hover:bg-accent"}`}
+                    className={`-mb-px flex items-center gap-1.5 border-b-2 px-2 py-2 text-xs font-medium ${activeTab === "logs" ? "border-primary text-fg" : "border-transparent text-fg-muted hover:text-fg"}`}
                     data-testid="pod-tab-logs"
                 >
                     <Terminal className="h-3 w-3" /> Logs
                 </button>
                 <button
                     onClick={() => setActiveTab("containers")}
-                    className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${activeTab === "containers" ? "bg-accent" : "hover:bg-accent"}`}
+                    className={`-mb-px flex items-center gap-1.5 border-b-2 px-2 py-2 text-xs font-medium ${activeTab === "containers" ? "border-primary text-fg" : "border-transparent text-fg-muted hover:text-fg"}`}
                     data-testid="pod-tab-containers"
                 >
                     <Box className="h-3 w-3" /> Containers
                 </button>
-                <div className="ml-auto flex shrink-0 items-center gap-1">
+                <div className="ml-auto flex shrink-0 items-center gap-1 py-1">
                     {onViewYaml && (
                         <button
                             onClick={onViewYaml}
-                            className="rounded p-1.5 hover:bg-accent"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border bg-surface-1 text-fg-muted hover:bg-surface-2 hover:text-fg"
                             data-testid="pod-yaml-btn"
                             title="View YAML"
                             aria-label="View YAML"
@@ -101,7 +103,7 @@ export function PodDetailPanel({
                     {onOpenShell && (
                         <button
                             onClick={onOpenShell}
-                            className="rounded p-1.5 hover:bg-accent"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border bg-surface-1 text-fg-muted hover:bg-surface-2 hover:text-fg"
                             data-testid="pod-shell-btn"
                             title="Open shell in pod"
                             aria-label="Open shell in pod"
@@ -112,7 +114,7 @@ export function PodDetailPanel({
                     {onPortForward && (
                         <button
                             onClick={onPortForward}
-                            className="rounded p-1.5 hover:bg-accent"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border bg-surface-1 text-fg-muted hover:bg-surface-2 hover:text-fg"
                             data-testid="pod-port-forward-btn"
                             title="Port-forward…"
                             aria-label="Port-forward…"
@@ -123,7 +125,7 @@ export function PodDetailPanel({
                     {onAskAi && (
                         <button
                             onClick={onAskAi}
-                            className="rounded p-1.5 hover:bg-accent"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border bg-surface-1 text-fg-muted hover:bg-surface-2 hover:text-fg"
                             data-testid="pod-ask-ai-btn"
                             title="Ask AI about this pod"
                             aria-label="Ask AI about this pod"

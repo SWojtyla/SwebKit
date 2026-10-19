@@ -182,11 +182,11 @@ test.describe("AKS workspace UX", () => {
         await page.getByTestId("aks-namespace-select").selectOption(NAMESPACE);
         await expect(page.getByTestId("deployments-table-body")).toBeVisible();
 
-        // Cascade is the liquid-glass theme: --card is ~4% opaque there, which used
-        // to leave floating panels see-through and unreadable over the table. Floating
-        // surfaces must resolve to the dedicated --popover token (~92%) instead.
+        // Clay dark is the frame family: floating surfaces must resolve to the
+        // dedicated --popover token (an opaque sheet), not a translucent glass
+        // card over the table.
         await page.evaluate(() => {
-            document.documentElement.className = "cascade-dark";
+            document.documentElement.className = "clay dark";
         });
 
         const firstRow = page

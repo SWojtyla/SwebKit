@@ -40,9 +40,9 @@ const PROBE_LABEL: Record<ProbeState, string> = {
 };
 
 const PROBE_DOT_CLASS: Record<ProbeState, string> = {
-    checking: "bg-warning animate-pulse",
-    up: "bg-success",
-    down: "bg-destructive",
+    checking: "bg-state-needs animate-pulse",
+    up: "bg-state-done",
+    down: "bg-state-blocked",
 };
 
 /**
@@ -151,19 +151,21 @@ export function PortForwardPanel({
     return (
         <div className="p-4" data-testid="port-forward-panel">
             <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-sm font-semibold">Port forwards</h2>
+                <h2 className="text-xs font-medium uppercase tracking-wide text-fg-muted">
+                    Port forwards
+                </h2>
                 <div className="flex gap-2">
                     <button
                         onClick={refresh}
                         title="Refresh sessions"
-                        className="rounded-md border p-1.5 hover:bg-accent"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border bg-surface-1 text-fg-muted hover:bg-surface-2 hover:text-fg"
                         data-testid="port-forward-refresh"
                     >
                         <RefreshCw className="h-3.5 w-3.5" />
                     </button>
                     <button
                         onClick={() => setDialog({ pod: null })}
-                        className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground hover:opacity-90"
+                        className="flex h-7 items-center gap-1 rounded-md bg-primary px-2.5 text-xs text-primary-foreground hover:bg-accent-hover"
                         data-testid="port-forward-add"
                     >
                         <Plus className="h-3.5 w-3.5" />
@@ -174,7 +176,7 @@ export function PortForwardPanel({
 
             {error && (
                 <div
-                    className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                    className="mb-3 rounded-md border border-state-blocked/30 bg-state-blocked-soft px-3 py-2 text-xs text-state-blocked-ink"
                     data-testid="port-forward-error"
                 >
                     {error}
@@ -183,7 +185,7 @@ export function PortForwardPanel({
 
             {sessions.length === 0 ? (
                 <div
-                    className="flex flex-col items-center justify-center py-8 text-sm text-muted-foreground"
+                    className="flex flex-col items-center justify-center py-8 text-sm text-fg-muted"
                     data-testid="port-forward-empty"
                 >
                     <ArrowRightLeft className="mb-2 h-8 w-8 opacity-50" />
@@ -201,7 +203,7 @@ export function PortForwardPanel({
                         return (
                             <div
                                 key={s.localPort}
-                                className="flex items-center gap-3 rounded-md border px-3 py-2"
+                                className="flex items-center gap-3 rounded-lg border bg-surface-1 px-3 py-2 shadow"
                                 data-testid={`port-forward-session-${s.localPort}`}
                             >
                                 <span
@@ -212,12 +214,10 @@ export function PortForwardPanel({
                                 />
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-baseline gap-2 font-mono text-xs">
-                                        <span className="font-semibold text-primary">
+                                        <span className="font-semibold text-accent-ink">
                                             localhost:{s.localPort}
                                         </span>
-                                        <span className="text-muted-foreground">
-                                            →
-                                        </span>
+                                        <span className="text-fg-muted">→</span>
                                         <span
                                             className="truncate"
                                             title={`${s.namespace}/${s.pod}:${s.remotePort}`}
@@ -225,7 +225,7 @@ export function PortForwardPanel({
                                             {s.pod}:{s.remotePort}
                                         </span>
                                     </div>
-                                    <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                    <div className="mt-0.5 truncate text-[11px] text-fg-muted">
                                         {PROBE_LABEL[probe]} · {s.namespace}
                                         {s.context ? ` · ${s.context}` : ""}
                                     </div>
@@ -238,7 +238,7 @@ export function PortForwardPanel({
                                     }
                                     title="Copy localhost URL"
                                     aria-label="Copy localhost URL"
-                                    className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                                     data-testid={`port-forward-copy-${s.localPort}`}
                                 >
                                     <Copy className="h-3.5 w-3.5" />
@@ -247,7 +247,7 @@ export function PortForwardPanel({
                                     onClick={() => openExternal(url)}
                                     title="Open in browser"
                                     aria-label="Open in browser"
-                                    className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                                     data-testid={`port-forward-open-${s.localPort}`}
                                 >
                                     <ExternalLink className="h-3.5 w-3.5" />
@@ -256,7 +256,7 @@ export function PortForwardPanel({
                                     onClick={() => handleStop(s)}
                                     title="Stop forward"
                                     aria-label="Stop forward"
-                                    className="shrink-0 rounded p-1 text-destructive hover:bg-destructive/10"
+                                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-state-blocked-ink hover:bg-state-blocked-soft"
                                     data-testid={`port-forward-stop-${s.localPort}`}
                                 >
                                     <Square className="h-3.5 w-3.5" />

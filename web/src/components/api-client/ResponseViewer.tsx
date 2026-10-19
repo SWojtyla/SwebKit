@@ -163,7 +163,7 @@ export function ResponseViewer({
     if (sending && !response) {
         return (
             <div
-                className="flex h-full items-center justify-center text-sm text-muted-foreground"
+                className="flex h-full items-center justify-center text-sm text-fg-muted"
                 data-testid="response-viewer"
             >
                 Sending request...
@@ -174,7 +174,7 @@ export function ResponseViewer({
     if (!response) {
         return (
             <div
-                className="flex h-full items-center justify-center text-sm text-muted-foreground"
+                className="flex h-full items-center justify-center text-sm text-fg-muted"
                 data-testid="response-viewer"
             >
                 Click Send to see the response
@@ -249,7 +249,7 @@ export function ResponseViewer({
 
     return (
         <div
-            className={`flex h-full min-w-0 flex-col bg-card ${sending ? "opacity-60" : ""}`}
+            className={`flex h-full min-w-0 flex-col bg-surface-1 ${sending ? "opacity-60" : ""}`}
             data-testid="response-viewer"
         >
             {/* Resend-in-flight banner: the response below is the *previous* one,
@@ -257,7 +257,7 @@ export function ResponseViewer({
           does not lose its comparison point mid-request. */}
             {sending && (
                 <div
-                    className="flex items-center gap-2 border-b bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground"
+                    className="flex items-center gap-2 border-b bg-sunken px-3 py-1.5 text-xs text-fg-muted"
                     data-testid="response-resending-indicator"
                 >
                     <span
@@ -267,11 +267,11 @@ export function ResponseViewer({
                     Sending new request… showing the previous response below.
                 </div>
             )}
-            {/* Status bar */}
-            <div className="flex items-center gap-3 border-b p-3">
+            {/* Status bar — soft state pill + tabular sub-info per spec */}
+            <div className="flex items-center gap-2.5 border-b px-4 py-2">
                 <span
                     data-testid="response-status"
-                    className="rounded px-2 py-1 text-sm font-semibold"
+                    className="inline-flex h-5 items-center rounded-full px-2 text-xs font-semibold tabular-nums"
                     style={toneChipStyle(
                         isError
                             ? "destructive"
@@ -284,21 +284,18 @@ export function ResponseViewer({
                 </span>
                 <span
                     data-testid="response-elapsed"
-                    className="text-xs text-muted-foreground"
+                    className="text-xs text-fg-muted tabular-nums"
                 >
                     {formatElapsed(response.elapsedMs)}
                 </span>
                 <span
                     data-testid="response-size"
-                    className="text-xs text-muted-foreground"
+                    className="text-xs text-fg-muted tabular-nums"
                 >
                     {formatBytes(response.contentLength)}
                 </span>
                 {response.responseBodyTruncated && (
-                    <span
-                        className="text-xs"
-                        style={{ color: "var(--warning)" }}
-                    >
+                    <span className="text-xs text-state-needs">
                         (truncated)
                     </span>
                 )}
@@ -306,7 +303,7 @@ export function ResponseViewer({
                 {request && !isError && (
                     <button
                         onClick={() => setShowCurl(!showCurl)}
-                        className="flex items-center gap-1 rounded border px-2 py-1 text-xs hover:bg-accent"
+                        className="flex h-7 items-center gap-1 rounded-md border px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                         data-testid="response-curl-toggle"
                     >
                         <Terminal className="h-3 w-3" /> cURL
@@ -318,24 +315,14 @@ export function ResponseViewer({
             {response.captureWarnings &&
                 response.captureWarnings.length > 0 && (
                     <div
-                        className="border-b p-3"
-                        style={{
-                            backgroundColor:
-                                "color-mix(in oklch, var(--warning) 10%, transparent)",
-                        }}
+                        className="border-b bg-state-needs-soft p-3"
                         data-testid="response-capture-warnings"
                     >
-                        <div
-                            className="flex items-center gap-2 text-xs font-medium"
-                            style={{ color: "var(--warning)" }}
-                        >
+                        <div className="flex items-center gap-2 text-xs font-medium text-state-needs-ink">
                             <AlertCircle className="h-4 w-4" />
                             Warnings
                         </div>
-                        <ul
-                            className="mt-1 list-inside list-disc text-xs"
-                            style={{ color: "var(--warning)" }}
-                        >
+                        <ul className="mt-1 list-inside list-disc text-xs text-state-needs-ink">
                             {response.captureWarnings.map((w, i) => (
                                 <li key={i}>{w}</li>
                             ))}
@@ -346,11 +333,11 @@ export function ResponseViewer({
             {/* cURL preview */}
             {showCurl && request && !isError && (
                 <div
-                    className="border-b bg-muted/30 p-3"
+                    className="border-b bg-sunken p-3"
                     data-testid="response-curl-panel"
                 >
                     <div className="mb-1 flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">
+                        <span className="text-xs font-medium text-fg-muted">
                             cURL command
                             {response.sentHeaders &&
                                 response.sentHeaders.length > 0 &&
@@ -361,7 +348,7 @@ export function ResponseViewer({
                                 onClick={() =>
                                     setRevealCurlSecrets(!revealCurlSecrets)
                                 }
-                                className="text-xs text-primary hover:underline"
+                                className="text-xs font-medium text-accent-ink hover:underline"
                                 data-testid="response-curl-reveal"
                             >
                                 {revealCurlSecrets
@@ -370,7 +357,7 @@ export function ResponseViewer({
                             </button>
                             <button
                                 onClick={copyCurl}
-                                className="flex items-center gap-1 text-xs text-primary hover:underline"
+                                className="flex items-center gap-1 text-xs font-medium text-accent-ink hover:underline"
                                 data-testid="response-copy-curl"
                             >
                                 {copiedCurl ? (
@@ -399,10 +386,10 @@ export function ResponseViewer({
             <div className="flex border-b">
                 <button
                     data-testid="response-tab-body"
-                    className={`px-4 py-2 text-sm font-medium ${
+                    className={`min-h-9 -mb-px border-b-2 px-3 text-sm font-medium ${
                         activeTab === "body"
-                            ? "border-b-2 border-primary text-foreground"
-                            : "text-muted-foreground"
+                            ? "border-primary text-fg"
+                            : "border-transparent text-fg-muted hover:text-fg"
                     }`}
                     onClick={() => setActiveTab("body")}
                 >
@@ -410,10 +397,10 @@ export function ResponseViewer({
                 </button>
                 <button
                     data-testid="response-tab-headers"
-                    className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium ${
+                    className={`flex min-h-9 items-center gap-1.5 -mb-px border-b-2 px-3 text-sm font-medium ${
                         activeTab === "headers"
-                            ? "border-b-2 border-primary text-foreground"
-                            : "text-muted-foreground"
+                            ? "border-primary text-fg"
+                            : "border-transparent text-fg-muted hover:text-fg"
                     }`}
                     onClick={() => setActiveTab("headers")}
                 >
@@ -422,10 +409,10 @@ export function ResponseViewer({
                 </button>
                 <button
                     data-testid="response-tab-history"
-                    className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium ${
+                    className={`flex min-h-9 items-center gap-1.5 -mb-px border-b-2 px-3 text-sm font-medium ${
                         activeTab === "history"
-                            ? "border-b-2 border-primary text-foreground"
-                            : "text-muted-foreground"
+                            ? "border-primary text-fg"
+                            : "border-transparent text-fg-muted hover:text-fg"
                     }`}
                     onClick={() => setActiveTab("history")}
                 >
@@ -445,24 +432,12 @@ export function ResponseViewer({
                         {/* GraphQL errors */}
                         {graphQlErrors.length > 0 && (
                             <div
-                                className="mb-3 rounded-md border p-3"
-                                style={{
-                                    borderColor:
-                                        "color-mix(in oklch, var(--warning) 30%, transparent)",
-                                    backgroundColor:
-                                        "color-mix(in oklch, var(--warning) 10%, transparent)",
-                                }}
+                                className="mb-3 rounded-md border border-state-needs bg-state-needs-soft p-3"
                                 data-testid="graphql-errors"
                             >
                                 <div className="mb-1 flex items-center gap-2">
-                                    <AlertCircle
-                                        className="h-4 w-4"
-                                        style={{ color: "var(--warning)" }}
-                                    />
-                                    <span
-                                        className="text-sm font-medium"
-                                        style={{ color: "var(--warning)" }}
-                                    >
+                                    <AlertCircle className="h-4 w-4 text-state-needs-ink" />
+                                    <span className="text-sm font-medium text-state-needs-ink">
                                         GraphQL Errors
                                     </span>
                                 </div>
@@ -477,14 +452,14 @@ export function ResponseViewer({
                         {/* Body toolbar */}
                         <div className="mb-2 flex flex-wrap items-center gap-2">
                             <div
-                                className="flex overflow-hidden rounded border"
+                                className="inline-flex gap-0.5 rounded-md bg-surface-2 p-0.5"
                                 role="group"
                                 aria-label="Body formatting"
                             >
                                 <button
                                     onClick={() => setPretty(true)}
                                     aria-pressed={prettyPrinted}
-                                    className={`px-2 py-0.5 text-xs ${prettyPrinted ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                                    className={`h-6 rounded px-2.5 text-xs font-medium ${prettyPrinted ? "bg-surface-1 text-fg shadow-sm" : "text-fg-muted hover:text-fg"}`}
                                     data-testid="response-pretty-toggle"
                                 >
                                     Pretty
@@ -492,7 +467,7 @@ export function ResponseViewer({
                                 <button
                                     onClick={() => setPretty(false)}
                                     aria-pressed={!prettyPrinted}
-                                    className={`border-l px-2 py-0.5 text-xs ${!prettyPrinted ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+                                    className={`h-6 rounded px-2.5 text-xs font-medium ${!prettyPrinted ? "bg-surface-1 text-fg shadow-sm" : "text-fg-muted hover:text-fg"}`}
                                     data-testid="response-raw-toggle"
                                 >
                                     Raw
@@ -501,14 +476,14 @@ export function ResponseViewer({
                             <button
                                 onClick={toggleWrap}
                                 aria-pressed={wrap}
-                                className={`flex items-center gap-1 rounded border px-2 py-0.5 text-xs ${wrap ? "border-primary text-primary" : "hover:bg-accent"}`}
+                                className={`flex h-7 items-center gap-1 rounded-md border px-2 text-xs ${wrap ? "border-primary bg-accent-soft text-accent-ink" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}
                                 data-testid="response-wrap-toggle"
                             >
                                 <WrapText className="h-3 w-3" /> Wrap
                             </button>
                             <button
                                 onClick={copyBody}
-                                className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent"
+                                className="flex h-7 items-center gap-1 rounded-md border px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                                 data-testid="response-copy-body"
                             >
                                 {copied ? (
@@ -520,7 +495,7 @@ export function ResponseViewer({
                             </button>
                             <button
                                 onClick={downloadBody}
-                                className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent"
+                                className="flex h-7 items-center gap-1 rounded-md border px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                                 data-testid="response-download-body"
                             >
                                 <Download className="h-3 w-3" /> Download
@@ -530,7 +505,7 @@ export function ResponseViewer({
                                     onClick={() =>
                                         setShowSaveExample(!showSaveExample)
                                     }
-                                    className="flex items-center gap-1 rounded border px-2 py-0.5 text-xs hover:bg-accent"
+                                    className="flex h-7 items-center gap-1 rounded-md border px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                                     data-testid="response-save-example"
                                 >
                                     <Save className="h-3 w-3" /> Save Example
@@ -553,19 +528,19 @@ export function ResponseViewer({
                                         if (e.key === "Enter") submitExample();
                                     }}
                                     placeholder="Example name..."
-                                    className="flex-1 rounded border bg-background px-2 py-1 text-xs"
+                                    className="h-7 flex-1 rounded-md border bg-surface-1 px-2 text-xs"
                                     autoFocus
                                 />
                                 <button
                                     onClick={submitExample}
-                                    className="rounded bg-primary px-2 py-1 text-xs text-primary-foreground"
+                                    className="btn-primary h-7 rounded-md px-2 text-xs"
                                     data-testid="save-example-confirm"
                                 >
                                     Save
                                 </button>
                                 <button
                                     onClick={() => setShowSaveExample(false)}
-                                    className="rounded border px-2 py-1 text-xs"
+                                    className="h-7 rounded-md border px-2 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
                                 >
                                     Cancel
                                 </button>
@@ -577,7 +552,7 @@ export function ResponseViewer({
                                 className="mb-2 flex flex-wrap items-center gap-1"
                                 data-testid="saved-examples"
                             >
-                                <span className="text-xs text-muted-foreground">
+                                <span className="text-xs text-fg-muted">
                                     Saved examples:
                                 </span>
                                 {savedExamples.map((ex) => (
@@ -586,10 +561,10 @@ export function ResponseViewer({
                                         onClick={() =>
                                             setViewingExampleId(ex.id)
                                         }
-                                        className={`rounded border px-1.5 py-0.5 text-xs hover:bg-accent ${
+                                        className={`h-5 rounded-md border px-1.5 text-xs hover:bg-surface-2 ${
                                             viewingExampleId === ex.id
-                                                ? "border-primary text-primary"
-                                                : ""
+                                                ? "border-primary text-accent-ink"
+                                                : "text-fg-muted"
                                         }`}
                                         data-testid={`saved-example-${ex.name}`}
                                     >
@@ -601,11 +576,7 @@ export function ResponseViewer({
 
                         {viewingExample && (
                             <div
-                                className="mb-2 flex items-center gap-2 rounded border px-2 py-1 text-xs"
-                                style={{
-                                    borderColor: "var(--primary)",
-                                    color: "var(--primary)",
-                                }}
+                                className="mb-2 flex items-center gap-2 rounded-md border border-primary px-2 py-1 text-xs text-accent-ink"
                                 data-testid="viewing-example-banner"
                             >
                                 <span className="flex-1">
@@ -614,7 +585,7 @@ export function ResponseViewer({
                                 </span>
                                 <button
                                     onClick={() => setViewingExampleId(null)}
-                                    className="flex items-center gap-1 rounded border px-1.5 py-0.5 hover:bg-accent"
+                                    className="flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-fg-muted hover:bg-surface-2 hover:text-fg"
                                     data-testid="viewing-example-return"
                                 >
                                     <ArrowLeft className="h-3 w-3" /> Back to
@@ -643,7 +614,7 @@ export function ResponseViewer({
                                         key={i}
                                         data-testid={`response-header-row-${i}`}
                                     >
-                                        <td className="py-1 pr-4 align-top font-medium text-muted-foreground">
+                                        <td className="py-1 pr-4 align-top font-medium text-fg-muted">
                                             {h.name}
                                         </td>
                                         <td className="break-all py-1">
@@ -668,8 +639,8 @@ export function ResponseViewer({
                                 data-testid="response-time-sparkline"
                             >
                                 <div className="mb-1 flex items-center gap-2">
-                                    <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <span className="text-xs font-medium text-muted-foreground">
+                                    <TrendingUp className="h-3.5 w-3.5 text-fg-muted" />
+                                    <span className="text-xs font-medium text-fg-muted">
                                         Response times
                                     </span>
                                 </div>
@@ -678,7 +649,7 @@ export function ResponseViewer({
                         )}
                         {/* History list */}
                         {history.length === 0 ? (
-                            <div className="text-sm text-muted-foreground">
+                            <div className="text-sm text-fg-muted">
                                 No response history yet
                             </div>
                         ) : (
@@ -686,11 +657,11 @@ export function ResponseViewer({
                                 {history.map((h) => (
                                     <div
                                         key={h.id}
-                                        className="flex items-center gap-3 rounded border px-3 py-2 text-xs"
+                                        className="flex items-center gap-3 rounded-md border px-3 py-1.5 text-xs"
                                         data-testid={`response-history-item-${h.id}`}
                                     >
                                         <span
-                                            className="rounded px-1.5 py-0.5 font-semibold"
+                                            className="inline-flex h-5 items-center rounded-full px-1.5 font-semibold tabular-nums"
                                             style={toneChipStyle(
                                                 statusTone(
                                                     h.response.statusCode,
@@ -699,15 +670,15 @@ export function ResponseViewer({
                                         >
                                             {h.response.statusCode}
                                         </span>
-                                        <span className="text-muted-foreground">
+                                        <span className="text-fg-muted tabular-nums">
                                             {formatElapsed(
                                                 h.response.elapsedMs,
                                             )}
                                         </span>
-                                        <span className="text-muted-foreground">
+                                        <span className="text-fg-muted tabular-nums">
                                             {formatLocalTime(h.timestamp)}
                                         </span>
-                                        <span className="flex-1 truncate text-muted-foreground">
+                                        <span className="flex-1 truncate text-fg-muted">
                                             {h.response.resolvedUrl}
                                         </span>
                                     </div>

@@ -32,7 +32,7 @@ export function EntityPropertiesPanel({ nsId, entityPath }: Props) {
             <button
                 type="button"
                 onClick={() => setOpen((v) => !v)}
-                className="flex w-full items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                className="flex w-full items-center gap-2 px-4 py-1.5 text-xs font-medium uppercase tracking-wide text-fg-muted hover:text-fg"
                 aria-expanded={open}
                 data-testid="sb-entity-properties-toggle"
             >
@@ -42,20 +42,23 @@ export function EntityPropertiesPanel({ nsId, entityPath }: Props) {
                     <ChevronRight className="h-3.5 w-3.5" />
                 )}
                 Entity properties
-                <span className="text-muted-foreground/70">
+                <span className="normal-case text-fg-subtle">
                     — read-only broker configuration
                 </span>
             </button>
             {open && (
-                <div className="px-4 pb-3" data-testid="sb-entity-properties-body">
+                <div
+                    className="px-4 pb-3"
+                    data-testid="sb-entity-properties-body"
+                >
                     {props.isLoading && (
-                        <p className="py-2 text-xs text-muted-foreground">
+                        <p className="py-2 text-xs text-fg-muted">
                             Loading properties…
                         </p>
                     )}
                     {props.isError && (
                         <p
-                            className="py-2 text-xs text-destructive"
+                            className="py-2 text-xs text-state-blocked-ink"
                             data-testid="sb-entity-properties-error"
                         >
                             Couldn&apos;t load entity properties —{" "}
@@ -66,7 +69,7 @@ export function EntityPropertiesPanel({ nsId, entityPath }: Props) {
                         <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
                             {[...groups.entries()].map(([group, rows]) => (
                                 <div key={group}>
-                                    <div className="pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    <div className="pt-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
                                         {group}
                                     </div>
                                     <dl className="mt-1 space-y-0.5">
@@ -75,7 +78,7 @@ export function EntityPropertiesPanel({ nsId, entityPath }: Props) {
                                                 key={p.name}
                                                 className="flex items-baseline justify-between gap-3 text-xs"
                                             >
-                                                <dt className="text-muted-foreground">
+                                                <dt className="text-fg-muted">
                                                     {p.name}
                                                 </dt>
                                                 <dd

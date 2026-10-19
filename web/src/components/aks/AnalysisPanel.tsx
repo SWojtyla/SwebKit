@@ -18,14 +18,16 @@ export function AnalysisPanel({ targets, showContext }: Props) {
         <div className="space-y-6 p-4" data-testid="aks-analysis-panel">
             {/* Ingress Analysis */}
             <div>
-                <h3 className="mb-2 text-sm font-semibold">Ingress Analysis</h3>
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
+                    Ingress Analysis
+                </h3>
                 <div
-                    className="rounded-md border overflow-hidden"
+                    className="rounded-lg border bg-surface-1 shadow overflow-hidden"
                     data-testid="aks-ingress-analysis"
                 >
                     <table className="w-full text-sm">
-                        <thead className="border-b bg-muted/50">
-                            <tr>
+                        <thead className="border-b">
+                            <tr className="h-8 text-xs font-medium uppercase tracking-wide text-fg-muted">
                                 <th className="px-3 py-2 text-left">Name</th>
                                 <th className="px-3 py-2 text-left">Hosts</th>
                                 <th className="px-3 py-2 text-left">Paths</th>
@@ -59,7 +61,7 @@ export function AnalysisPanel({ targets, showContext }: Props) {
                                 return (
                                     <tr
                                         key={ing.name}
-                                        className="border-b last:border-0"
+                                        className="h-9 border-b last:border-0 hover:bg-surface-2"
                                     >
                                         <td className="px-3 py-2 font-mono text-xs">
                                             {ing.name}
@@ -74,14 +76,14 @@ export function AnalysisPanel({ targets, showContext }: Props) {
                                             <span
                                                 className={
                                                     hasTls
-                                                        ? "text-success"
-                                                        : "text-warning"
+                                                        ? "text-state-done-ink"
+                                                        : "text-state-needs-ink"
                                                 }
                                             >
                                                 {hasTls ? "Yes" : "No"}
                                             </span>
                                         </td>
-                                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                                        <td className="px-3 py-2 font-mono text-xs text-fg-muted">
                                             {backend || "-"}
                                         </td>
                                     </tr>
@@ -92,7 +94,7 @@ export function AnalysisPanel({ targets, showContext }: Props) {
                                 <tr>
                                     <td
                                         colSpan={5}
-                                        className="px-3 py-4 text-center text-muted-foreground"
+                                        className="px-3 py-4 text-center text-fg-muted"
                                     >
                                         No ingresses found
                                     </td>
@@ -105,16 +107,16 @@ export function AnalysisPanel({ targets, showContext }: Props) {
 
             {/* Probe Analysis */}
             <div>
-                <h3 className="mb-2 text-sm font-semibold">
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
                     Probe Analysis (ConfigMaps with probe configs)
                 </h3>
                 <div
-                    className="rounded-md border overflow-hidden"
+                    className="rounded-lg border bg-surface-1 shadow overflow-hidden"
                     data-testid="aks-probe-analysis"
                 >
                     <table className="w-full text-sm">
-                        <thead className="border-b bg-muted/50">
-                            <tr>
+                        <thead className="border-b">
+                            <tr className="h-8 text-xs font-medium uppercase tracking-wide text-fg-muted">
                                 <th className="px-3 py-2 text-left">
                                     ConfigMap
                                 </th>
@@ -129,7 +131,7 @@ export function AnalysisPanel({ targets, showContext }: Props) {
                             {configMaps.data?.map((cm) => (
                                 <tr
                                     key={cm.name}
-                                    className="border-b last:border-0"
+                                    className="h-9 border-b last:border-0 hover:bg-surface-2"
                                 >
                                     <td className="px-3 py-2 font-mono text-xs">
                                         {cm.name}
@@ -137,7 +139,7 @@ export function AnalysisPanel({ targets, showContext }: Props) {
                                     <td className="px-3 py-2 text-xs">
                                         {cm.keys.length}
                                     </td>
-                                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                                    <td className="px-3 py-2 text-xs text-fg-muted">
                                         {cm.dataSizeChars} chars
                                     </td>
                                 </tr>
@@ -147,7 +149,7 @@ export function AnalysisPanel({ targets, showContext }: Props) {
                                 <tr>
                                     <td
                                         colSpan={3}
-                                        className="px-3 py-4 text-center text-muted-foreground"
+                                        className="px-3 py-4 text-center text-fg-muted"
                                     >
                                         No configmaps found
                                     </td>
@@ -160,11 +162,11 @@ export function AnalysisPanel({ targets, showContext }: Props) {
 
             {/* Resource Quotas (from namespace events) */}
             <div>
-                <h3 className="mb-2 text-sm font-semibold">
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
                     Resource Quota Summary
                 </h3>
                 <div
-                    className="rounded-md border p-4 text-sm text-muted-foreground"
+                    className="rounded-lg border bg-surface-1 p-4 shadow text-sm text-fg-muted"
                     data-testid="aks-quota-summary"
                 >
                     <p>
@@ -178,17 +180,17 @@ export function AnalysisPanel({ targets, showContext }: Props) {
 
             {/* Network Policy Summary */}
             <div>
-                <h3 className="mb-2 text-sm font-semibold">
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-fg-muted">
                     Network Policy Summary
                 </h3>
                 <div
-                    className="rounded-md border p-4 text-sm text-muted-foreground"
+                    className="rounded-lg border bg-surface-1 p-4 shadow text-sm text-fg-muted"
                     data-testid="aks-network-policy-summary"
                 >
                     <p>
                         Network policies are not exposed via the current sidecar
                         API. Use{" "}
-                        <code className="rounded bg-muted px-1">
+                        <code className="rounded bg-surface-2 px-1">
                             kubectl get networkpolicies -n {scopeLabel}
                         </code>{" "}
                         for details.

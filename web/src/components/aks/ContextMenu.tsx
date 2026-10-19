@@ -60,7 +60,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         <div className="fixed inset-0 z-50" style={{ pointerEvents: "auto" }}>
             <div
                 ref={menuRef}
-                className="fixed min-w-[200px] rounded-md border bg-popover shadow-lg"
+                className="fixed min-w-[200px] rounded-md border bg-surface-1 shadow-lg"
                 style={{ left: adjustedX, top: adjustedY }}
                 data-testid="aks-context-menu"
             >
@@ -80,8 +80,8 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
                             }}
                             className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50 ${
                                 item.destructive
-                                    ? "text-destructive"
-                                    : "text-foreground"
+                                    ? "text-state-blocked-ink"
+                                    : "text-fg"
                             }`}
                             data-testid={`ctx-item-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                         >

@@ -146,7 +146,7 @@ export function MessageDetail({
     if (!message) {
         return (
             <div
-                className="flex h-full items-center justify-center text-sm text-muted-foreground"
+                className="flex h-full items-center justify-center text-sm text-fg-muted"
                 data-testid="message-detail-empty"
             >
                 Select a message to view details
@@ -307,22 +307,28 @@ export function MessageDetail({
                 <div className="flex items-start justify-between">
                     <div className="min-w-0 flex-1">
                         <h2
-                            className="truncate text-lg font-semibold"
+                            className="truncate text-base font-semibold"
                             data-testid="message-detail-subject"
                         >
                             {message.subject || message.messageId}
                         </h2>
                         <p
-                            className="mt-0.5 text-xs text-muted-foreground"
+                            className="mt-0.5 text-xs text-fg-muted"
                             data-testid="message-detail-meta"
                         >
-                            Message ID: {message.messageId} · Seq: #
-                            {message.sequenceNumber}
+                            Message ID:{" "}
+                            <span className="font-mono">
+                                {message.messageId}
+                            </span>{" "}
+                            · Seq:{" "}
+                            <span className="font-mono">
+                                #{message.sequenceNumber}
+                            </span>
                         </p>
                         {scheduled && (
                             <span
                                 data-testid="message-detail-scheduled-badge"
-                                className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+                                className="mt-1 inline-flex h-5 items-center gap-1 rounded-full bg-state-waiting-soft px-2 text-xs font-medium text-state-waiting-ink"
                             >
                                 <Clock className="h-3 w-3" />
                                 Scheduled — fires{" "}
@@ -337,7 +343,7 @@ export function MessageDetail({
                             <button
                                 data-testid="message-detail-close"
                                 onClick={onClose}
-                                className="rounded-md border px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg"
                                 title="Close message details"
                             >
                                 <X className="h-3.5 w-3.5" />
@@ -351,7 +357,7 @@ export function MessageDetail({
                                 onClick={onCancelScheduled}
                                 disabled={cancelScheduledMutation.isPending}
                                 title="Cancel this scheduled message — it never fires"
-                                className="rounded-md border border-destructive/40 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                                className="h-7 rounded-md border border-state-blocked/40 px-3 text-xs font-medium text-state-blocked-ink hover:bg-state-blocked-soft disabled:opacity-50"
                             >
                                 Cancel schedule
                             </button>
@@ -370,7 +376,7 @@ export function MessageDetail({
                                           ? "Completing…"
                                           : "Settle this message — permanently removed from the queue"
                                 }
-                                className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                                className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-sm hover:bg-accent-hover disabled:opacity-50"
                             >
                                 Complete
                             </button>
@@ -391,7 +397,7 @@ export function MessageDetail({
                                               ? "Resubmitting…"
                                               : `Send this message back to ${entity?.entityPath ?? "the source entity"} with a new Message ID, then remove it from the dead-letter queue`
                                     }
-                                    className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                                    className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-sm hover:bg-accent-hover disabled:opacity-50"
                                 >
                                     Resubmit
                                 </button>
@@ -409,7 +415,7 @@ export function MessageDetail({
                                               ? "Completing…"
                                               : "Permanently remove this message from the dead-letter queue"
                                     }
-                                    className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+                                    className="h-7 rounded-md border bg-surface-1 px-3 text-xs font-medium text-fg hover:bg-surface-2 disabled:opacity-50"
                                 >
                                     Complete DLQ
                                 </button>
@@ -421,11 +427,11 @@ export function MessageDetail({
                 {/* Action buttons row. Wraps: the panel is resizable down to 240px, and without
             wrapping the trailing actions were simply clipped off the right edge with no
             indication they existed. */}
-                <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <button
                         data-testid="message-copy-body"
                         onClick={copyBody}
-                        className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                        className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
                         title="Copy message body to clipboard"
                     >
                         {copyFeedback === "body" ? (
@@ -441,7 +447,7 @@ export function MessageDetail({
                     <button
                         data-testid="message-copy-full"
                         onClick={copyFullMessage}
-                        className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                        className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
                         title="Copy full message (all properties + body) as JSON"
                     >
                         {copyFeedback === "full" ? (
@@ -457,7 +463,7 @@ export function MessageDetail({
                     <button
                         data-testid="message-download-json"
                         onClick={downloadJson}
-                        className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                        className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
                         title="Download message as JSON"
                     >
                         <Download className="h-3 w-3" /> JSON
@@ -465,7 +471,7 @@ export function MessageDetail({
                     <button
                         data-testid="message-download-zip"
                         onClick={downloadZip}
-                        className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                        className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
                         title="Download message as ZIP"
                     >
                         <FileArchive className="h-3 w-3" /> ZIP
@@ -473,7 +479,7 @@ export function MessageDetail({
                     <button
                         data-testid="message-save-template"
                         onClick={() => setShowSaveTemplate(true)}
-                        className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                        className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
                         title="Save this message as a reusable template"
                     >
                         <Save className="h-3 w-3" /> Save as Template
@@ -483,7 +489,7 @@ export function MessageDetail({
                             data-testid="message-edit-resubmit"
                             onClick={() => onEditResubmit(message)}
                             disabled={sessionBlocked && viewMode === "dlq"}
-                            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                            className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg disabled:opacity-50"
                             title={
                                 sessionBlocked && viewMode === "dlq"
                                     ? SESSIONS_NOT_SUPPORTED_TOOLTIP
@@ -499,7 +505,7 @@ export function MessageDetail({
                         <button
                             data-testid="message-replay"
                             onClick={() => onReplay(message)}
-                            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                            className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
                             title="Replay this message"
                         >
                             <RotateCcw className="h-3 w-3" /> Replay
@@ -509,7 +515,7 @@ export function MessageDetail({
                         <button
                             data-testid="message-schedule"
                             onClick={() => onSchedule(message)}
-                            className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                            className="flex h-7 items-center gap-1 rounded-md border bg-surface-1 px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
                             title="Schedule this message for later delivery"
                         >
                             <Clock className="h-3 w-3" /> Schedule
@@ -521,17 +527,17 @@ export function MessageDetail({
             {/* Save as template dialog */}
             {showSaveTemplate && (
                 <div
-                    className="flex items-center gap-3 border-b bg-primary/5 px-4 py-3"
+                    className="flex items-center gap-3 border-b bg-accent-soft px-4 py-3"
                     data-testid="save-template-dialog"
                 >
-                    <Save className="h-5 w-5 shrink-0 text-primary" />
+                    <Save className="h-5 w-5 shrink-0 text-accent-ink" />
                     <input
                         type="text"
                         data-testid="template-name-input"
                         value={templateName}
                         onChange={(e) => setTemplateName(e.target.value)}
                         placeholder="Template name..."
-                        className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm"
+                        className="h-7 flex-1 rounded-md border bg-surface-1 px-3 text-sm placeholder:text-fg-subtle"
                         autoFocus
                         onKeyDown={(e) => {
                             if (e.key === "Enter") onSaveAsTemplate();
@@ -551,7 +557,7 @@ export function MessageDetail({
                                   ? "Name the template first"
                                   : undefined
                         }
-                        className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                        className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-sm hover:bg-accent-hover disabled:opacity-50"
                     >
                         Save
                     </button>
@@ -561,7 +567,7 @@ export function MessageDetail({
                             setShowSaveTemplate(false);
                             setTemplateName("");
                         }}
-                        className="rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
+                        className="h-7 rounded-md border bg-surface-1 px-3 text-xs font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
                     >
                         Cancel
                     </button>
@@ -575,10 +581,10 @@ export function MessageDetail({
                         key={tab.id}
                         data-testid={`detail-tab-${tab.id}`}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`px-4 py-2 text-sm font-medium ${
+                        className={`-mb-px h-9 border-b-2 px-4 text-sm font-medium ${
                             activeTab === tab.id
-                                ? "border-b-2 border-primary text-foreground"
-                                : "text-muted-foreground hover:text-foreground"
+                                ? "border-primary text-accent-ink"
+                                : "border-transparent text-fg-muted hover:text-fg"
                         }`}
                     >
                         {tab.label}
@@ -590,7 +596,7 @@ export function MessageDetail({
             <div className="flex-1 overflow-auto p-4">
                 {activeTab === "body" && (
                     <div data-testid="detail-tab-content-body">
-                        <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-fg-muted">
                             <span data-testid="body-format">
                                 Format: {bodyFormat.toUpperCase()}
                             </span>
@@ -606,7 +612,7 @@ export function MessageDetail({
                                     <button
                                         onClick={() => togglePretty(true)}
                                         aria-pressed={prettyPrinted}
-                                        className={`rounded border px-2 py-0.5 ${prettyPrinted ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                                        className={`h-6 rounded-md border px-2 ${prettyPrinted ? "border-primary bg-accent-soft text-accent-ink" : "border-transparent text-fg-muted hover:bg-surface-2 hover:text-fg"}`}
                                         data-testid="body-pretty-toggle"
                                     >
                                         Pretty
@@ -614,7 +620,7 @@ export function MessageDetail({
                                     <button
                                         onClick={() => togglePretty(false)}
                                         aria-pressed={!prettyPrinted}
-                                        className={`rounded border px-2 py-0.5 ${!prettyPrinted ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                                        className={`h-6 rounded-md border px-2 ${!prettyPrinted ? "border-primary bg-accent-soft text-accent-ink" : "border-transparent text-fg-muted hover:bg-surface-2 hover:text-fg"}`}
                                         data-testid="body-raw-toggle"
                                     >
                                         Raw
@@ -626,7 +632,7 @@ export function MessageDetail({
                   looks like JSON but does not parse used to present. */}
                             {bodyFormat === "json" && prettyBody === null && (
                                 <span
-                                    className="text-warning"
+                                    className="text-state-needs-ink"
                                     data-testid="body-unparseable"
                                 >
                                     Not valid JSON — showing raw
@@ -636,7 +642,7 @@ export function MessageDetail({
                             <button
                                 onClick={toggleWrap}
                                 aria-pressed={wrapBody}
-                                className={`rounded border px-2 py-0.5 ${wrapBody ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                                className={`h-6 rounded-md border px-2 ${wrapBody ? "border-primary bg-accent-soft text-accent-ink" : "border-transparent text-fg-muted hover:bg-surface-2 hover:text-fg"}`}
                                 data-testid="body-wrap-toggle"
                                 title="Wrap long lines"
                             >
@@ -645,7 +651,7 @@ export function MessageDetail({
 
                             <button
                                 onClick={copyBody}
-                                className="flex items-center gap-1 rounded border px-2 py-0.5 hover:bg-accent"
+                                className="flex h-6 items-center gap-1 rounded-md border bg-surface-1 px-2 text-fg-muted hover:bg-surface-2 hover:text-fg"
                                 data-testid="body-copy-btn"
                             >
                                 {copyFeedback === "body" ? (
@@ -661,7 +667,7 @@ export function MessageDetail({
                         </div>
                         <pre
                             data-testid="message-detail-body"
-                            className={`max-h-[60vh] overflow-auto rounded-lg border bg-card p-3 text-xs ${
+                            className={`max-h-[60vh] overflow-auto rounded-md border bg-sunken p-3 font-mono text-xs ${
                                 wrapBody
                                     ? "whitespace-pre-wrap break-all"
                                     : "whitespace-pre"
@@ -682,7 +688,7 @@ export function MessageDetail({
                         0 ? (
                             <>
                                 <div className="relative mb-2">
-                                    <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                                    <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" />
                                     <input
                                         type="text"
                                         data-testid="prop-filter-input"
@@ -691,18 +697,18 @@ export function MessageDetail({
                                             setPropFilter(e.target.value)
                                         }
                                         placeholder="Filter properties..."
-                                        className="w-full rounded-md border bg-card py-1.5 pl-8 pr-7 text-xs"
+                                        className="h-7 w-full rounded-md border bg-surface-1 pl-8 pr-7 text-sm placeholder:text-fg-subtle"
                                     />
                                     {propFilter && (
                                         <button
                                             onClick={() => setPropFilter("")}
-                                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg"
                                         >
                                             <X className="h-3.5 w-3.5" />
                                         </button>
                                     )}
                                 </div>
-                                <div className="rounded-lg border">
+                                <div className="rounded-md border">
                                     {filteredProps.map(([key, value]) => (
                                         // A two-column grid rather than a fixed-width span: `w-48 shrink-0` gave
                                         // the key a hard 192px with nothing to stop a longer name spilling over
@@ -713,19 +719,19 @@ export function MessageDetail({
                                             className="group grid grid-cols-[minmax(0,14rem)_1fr_auto] items-start gap-x-3 border-b px-3 py-1.5 text-xs last:border-0"
                                         >
                                             <span
-                                                className="break-all font-medium text-muted-foreground"
+                                                className="break-all font-medium text-fg-muted"
                                                 title={key}
                                             >
                                                 {key}
                                             </span>
-                                            <span className="min-w-0 break-all">
+                                            <span className="min-w-0 break-all font-mono">
                                                 {String(value)}
                                             </span>
                                             <button
                                                 onClick={() =>
                                                     copyProp(key, value)
                                                 }
-                                                className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-within:opacity-100"
+                                                className="shrink-0 text-fg-muted opacity-0 transition-opacity hover:text-fg group-hover:opacity-100 focus-within:opacity-100"
                                                 data-testid={`prop-copy-${key}`}
                                                 title="Copy value"
                                             >
@@ -738,14 +744,14 @@ export function MessageDetail({
                                         </div>
                                     ))}
                                     {filteredProps.length === 0 && (
-                                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                                        <div className="px-3 py-2 text-xs text-fg-muted">
                                             No properties match filter
                                         </div>
                                     )}
                                 </div>
                             </>
                         ) : (
-                            <span className="text-sm text-muted-foreground">
+                            <span className="text-sm text-fg-muted">
                                 No application properties
                             </span>
                         )}
@@ -836,18 +842,18 @@ export function MessageDetail({
                         data-testid="detail-tab-content-dlq"
                         className="space-y-3"
                     >
-                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                        <div className="rounded-md border border-state-blocked/40 bg-state-blocked-soft p-4">
                             <div className="flex items-center gap-2">
-                                <AlertTriangle className="h-4 w-4 text-destructive" />
-                                <span className="text-sm font-semibold text-destructive">
+                                <AlertTriangle className="h-4 w-4 text-state-blocked-ink" />
+                                <span className="text-sm font-semibold text-state-blocked-ink">
                                     Dead-Letter Reason
                                 </span>
                             </div>
-                            <p className="mt-1 text-sm">
+                            <p className="mt-1 text-sm text-state-blocked-ink">
                                 {message.deadLetterReason}
                             </p>
                             {message.deadLetterErrorDescription && (
-                                <p className="mt-2 text-xs text-muted-foreground">
+                                <p className="mt-2 text-xs text-state-blocked-ink/80">
                                     {message.deadLetterErrorDescription}
                                 </p>
                             )}
@@ -868,10 +874,10 @@ function Field({
 }) {
     return (
         <div className="min-w-0">
-            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className="text-xs text-fg-muted">{label}</span>
             {/* A message id is longer than the column at most panel widths, and without this it
           ran over the field beside it. */}
-            <p className="break-all text-sm">{value || "—"}</p>
+            <p className="break-all font-mono text-sm">{value || "—"}</p>
         </div>
     );
 }
