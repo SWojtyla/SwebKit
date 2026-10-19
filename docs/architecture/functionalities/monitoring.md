@@ -170,7 +170,7 @@ Two honesty constraints are load-bearing:
   one eval interval late. Open incidents carry `ruleIntervalSeconds` as that bound (null for
   deleted rules); the tab renders it as "≤ X detection".
 
-## Proactive AI investigation (agent-workspace-awareness)
+## Proactive AI investigation
 
 Each rule carries `AiInvestigationEnabled` (default `true`, editable in
 `AlertRuleDialog` and shown as an AI badge on `AlertRuleRow`). When a qualifying
