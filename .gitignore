@@ -74,3 +74,6 @@ tauri_build_err.txt
 # Literal file created when a Git Bash redirect uses `> nul` (Windows null device
 # name is not special under Git Bash) — never a real artifact.
 nul
+
+# Local demo/recording scratch output — never a build artifact.
+brag-output/
