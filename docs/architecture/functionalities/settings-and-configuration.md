@@ -92,7 +92,7 @@ Settings component
 
 The GET endpoint clones profile data before applying demo overlays. The PUT endpoint removes known demo IDs before persistence so toggling demo mode cannot poison real configuration.
 
-## Access report (access-awareness-pipeline)
+## Access report
 
 `AccessReportService` probes what the configured identity can actually do per feature area
 — Service Bus management vs. data-plane peek are separate capabilities, alongside SQL

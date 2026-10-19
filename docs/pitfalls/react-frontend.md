@@ -244,6 +244,15 @@ a captured base is correct there.
 
 Without it, dragging a divider selects the text underneath it.
 
+### Theme ids are a closed set — migrate at hydration, not at render
+
+Only four themes exist: `light`/`dark` (Aurora) and `clay`/`clay-dark`, applied as classes on
+`<html>` (`dark`, `clay`, `clay dark`). Retired ids must be mapped by `migrateTheme` in
+`lib/stores/settings.ts` **when the persisted store hydrates** — if components render with the raw
+stored value, a stale `liquid-glass` arrives as an unstyled flash and hydration then snaps the theme
+under the user's feet. Legacy utility names still resolve through the bridge block in
+`globals.css`, so untouched components keep working — but don't add new uses of them.
+
 ## TanStack Query
 
 ### `invalidateQueries({ queryKey: ["aks-"] })` matches nothing
@@ -273,6 +282,14 @@ Two things fix it together: take an **updater function** and evaluate it inside 
 `queryClient.getQueryData`, and give the mutation a **`scope`** so saves to the same store are
 serialized rather than overlapping. Also give such a mutation an `onError` — a silently swallowed
 save is indistinguishable from the user never having typed anything.
+
+### Two hooks can share one query key on purpose
+
+`useCollections` and `useLinkedRoots` in `web/src/lib/hooks/` both query `["collections"]` — the
+linked roots ride inside the `/api/config/collections/store` payload, so one fetch feeds both
+hooks and one invalidation refreshes both. When a "linked root missing" bug looks like a fetch
+problem, check that the _second_ hook isn't returning a stale slice of the shared cache, and don't
+"fix" it by giving the second hook its own key — you'd split one payload into two fetches.
 
 Corollary for tests: once saves are serialized, an assertion fired immediately after the action can
 read the pre-save state. Use `expect.poll`, not a single `allTextContents()`.

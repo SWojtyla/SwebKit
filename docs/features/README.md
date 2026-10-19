@@ -12,25 +12,8 @@ Plan files are the shared intent record: any tool or later session reads them to
   line from this catalog. Git history preserves the full record.
 
 - `codebase-quality-program.md` — phased deep-scan megaplan: hygiene, architecture, per-feature deep dives, Dashboard AI cockpit.
-- `agent-mcp-evolution.md` — external MCP passthrough for ACP profiles, harness tool-quality pass (composite tools, memoization, projection caps), standalone MCP exposure of the SwebKit tools bridge (read-only default), and an MCP client adapter proxying external tools into non-ACP profiles with a confirm-before-execute pipeline.
-- `access-denial-awareness.md` — phase 1: structured `access_denied` agent tool results with least-privilege remedies, SQL hidden-metadata detection via `sys.fn_my_permissions`, restricted demo connection.
-- `access-awareness-pipeline.md` — phases 2–4: per-env access report, request artifacts (principal/scope/`az` line), declared-object SQL browsing, generic request webhook (Teams Power App hook point).
-- `agent-colleague.md` — deep-linked evidence, structured access gaps, "watch this"→rule draft, entity-indexed screen state, feedback capture, change timeline, cross-env compare.
-- `monitoring-closed-loop.md` — alert→autofix proposals (BackgroundProposalEligible gate), rule suggestions from surfaces, silence windows, persisted alert history + ops dashboard.
-- `service-bus-power-ops.md` — reach-message DLQ-park/restore op, DLQ triage + resend-with-edit fix, session awareness, cross-env replay.
-- `ux-power-pack.md` — palette deepening, pinned rail, env badgeing, keyboard grids, toast dedupe.
-- `distribution-onboarding.md` — team workspace packs, "PRD day" demo tour stop, update channel, `swebkit://` deep links.
-- `aks-multi-context.md` — phased multi-context AKS workspace: attached secondary contexts (URL/view-pref state), grouped namespace picker, merged resource tables with a Context column, context-routed mutations; primary context keeps profile semantics.
-- `api-client-agent-fixes.md` — agent create-request resolves collection by id-or-name and auto-creates missing collection/folders, `list_api_collections` tool, non-AI cURL import dialog, chat markdown styling + drop stale context-window stats.
-- `api-client-agent-variables.md` — `propose_collection_variable_change` tool (static + generator vars incl. guid), file-typed multipart form fields (`FormDataField.IsFile`) across model/executor/UI/agent schema, Postman file-field import.
-- `api-client-settings-tab.md` — API Client settings split out of General into their own tab (incl. Key Vaults), and a Storage section showing the real `collections.json` path via `GET /api/config/collections/location`.
-- `api-client-workspace.md` — file visibility (reveal-in-explorer, labeled imports, preview/warnings, git honesty) plus linked collection roots: `.swebkit-api` folders on disk as first-class read/write collection sources with per-request files, content-stamp conflicts, git badges, and import-into-root — the Bruno-style workspace model.
-- `api-client-request-runs.md` — request runs: same-collection `dependsOnRequestIds` chains (topo-ordered, cycle-checked) plus folder/subtree and ctrl-click multi-select batch runs, executed server-side through a `POST /api/api-client/run` SSE stream with live step progress, stop-on-error, delay, and a run-results drawer.
-- `api-request-chains.md` — persisted named request chains spanning collections: ordered steps anywhere (internal + linked roots), cross-collection deps, run-scoped variable overlay for captures, chain editor + "Add to chain" UI, demo seed, pack export.
-- `aks-rail-nav.md` — AKS navigation as a left rail (`prototypes/aks/rail.html`): the 4 task groups are permanent collapsible sections; rail minimizes to glyphs, filter box, persisted state. Also fixes the linked-root Git "not a repository" lie (allowed-roots grant state + authorize CTA).
 - `demo-tour-refresh.md` — 16-stop full-surface tour with ungated "Try it" hints and Escape-to-stop; drops the PRD-day stops (access-awareness feature stays, unadvertised).
-- `aks-topbar-nav.md` — AKS top-bar declutter: the flat 18-tab strip replaced by 4 task-grouped dropdown menus (Workloads / Configuration / Network / Operations) via `AksNavBar` + `navGroups`; `aks-tab-*` testids and `?tab=` deep links preserved.
-- `aks-metrics-and-hpa-disable-fixes.md` — pod CPU/mem severity judged against per-pod requests/limits instead of fixed ceilings; HPA disable fixed for KEDA-adopted (ownerRef-only) HPAs, freeze no longer inflates to maxReplicas, demo mirrors the frozen bounds.
+- `error-detail-payload.md` — failures must say _why_: surface real sidecar error detail instead of coarse "Internal server error" classifications.
 
 ## Plan file contract
 
