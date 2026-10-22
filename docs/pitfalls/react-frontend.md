@@ -482,6 +482,17 @@ response is still on screen. Meanwhile the Send button is disabled mid-flight, s
 swallowed and the test silently exercises fewer sends than it looks like. Wait on something that
 advances — a history count, a new row — not on a value that is already there.
 
+### A `$`-anchored URL assertion rejects params the page legitimately appends
+
+`toHaveURL(/\/aks$/)` in the demo-tour spec flaked: the AKS workspace restores a
+persisted/defaulted namespace selection into the URL (`?ns=ecommerce`) as soon as
+the warmed namespace list is in cache — which is right at mount, still inside the
+assertion window. The page behaving correctly is what fails the test. Assert the
+route loosely — `/\/aks($|\?)/` — and let the page own its params.
+
+Same spec file, different flake seen once: the notification-bell test timed out on
+a `pinned-rail-item` boundingBox; rerun passed — timing, not the pin flow.
+
 ### A `.last()` locator resolves at action time, not at assertion time
 
 `page.locator('[data-testid^="redis-database-"]').last()` binds to whichever row is last

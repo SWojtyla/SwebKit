@@ -53,7 +53,7 @@ test.describe("Dashboard", () => {
     test("navigates to AKS and Settings from dashboard", async ({ page }) => {
         await page.goto("/");
         await page.getByTestId("service-card-aks").click();
-        await expect(page).toHaveURL(/\/aks$/);
+        await expect(page).toHaveURL(/\/aks($|\?)/);
         await page.getByTestId("nav-dashboard").click();
         await expect(page).toHaveURL(/\/$/);
         await page.getByTestId("settings-quick-link").click();
@@ -194,7 +194,7 @@ test.describe("Dashboard", () => {
         );
         await expect(page.getByTestId("demo-tour-try-it")).toBeVisible();
         await page.getByTestId("demo-tour-next").click();
-        await expect(page).toHaveURL(/\/aks$/);
+        await expect(page).toHaveURL(/\/aks($|\?)/);
         await expect(page.getByTestId("demo-tour-step-title")).toHaveText(
             "AKS: pick your clusters",
         );
@@ -211,7 +211,7 @@ test.describe("Dashboard", () => {
             await page.getByTestId("demo-tour-next").click();
         }
         // Still on /aks — this step just re-spotlights the same page's resource table.
-        await expect(page).toHaveURL(/\/aks$/);
+        await expect(page).toHaveURL(/\/aks($|\?)/);
         await expect(page.getByTestId("demo-tour-step-title")).toHaveText(
             "Rows: click vs. right-click",
         );
@@ -235,10 +235,10 @@ test.describe("Dashboard", () => {
         const stops: { title: string; url: RegExp }[] = [
             { title: "Welcome to the cockpit", url: /\/$/ },
             { title: "Command palette", url: /\/$/ },
-            { title: "AKS: pick your clusters", url: /\/aks$/ },
-            { title: "Namespaces, grouped per cluster", url: /\/aks$/ },
-            { title: "Rows: click vs. right-click", url: /\/aks$/ },
-            { title: "Logs, shell, port-forward", url: /\/aks$/ },
+            { title: "AKS: pick your clusters", url: /\/aks($|\?)/ },
+            { title: "Namespaces, grouped per cluster", url: /\/aks($|\?)/ },
+            { title: "Rows: click vs. right-click", url: /\/aks($|\?)/ },
+            { title: "Logs, shell, port-forward", url: /\/aks($|\?)/ },
             { title: "Service Bus explorer", url: /\/service-bus$/ },
             { title: "Filters that understand values", url: /\/service-bus$/ },
             { title: "Dead-letter triage", url: /\/service-bus$/ },

@@ -55,8 +55,10 @@ Stop the dashboard from claiming states that aren't true:
 - `npm run build` (tsc -b && vite build) — clean.
 - `npx vitest run useServiceHealth.test.ts` — 8/8 pass.
 - `npx playwright test e2e/layout.spec.ts e2e/dashboard.spec.ts` — 19/21 on the
-  first run; the 2 failures (demo-tour URL race on `?ns=`, pinned-rail timing)
-  are pre-existing flakes unrelated to this change — both pass on rerun.
+  first run; both flakes pass on rerun. Root-caused the demo-tour one: the
+  `/\/aks$/` assertions raced the workspace's legitimate `?ns=` restore —
+  relaxed to `/\/aks($|\?)/` in the same branch; the pinned-rail flake is
+  recorded in `docs/pitfalls/react-frontend.md`.
 
 ## Test plan
 
@@ -69,4 +71,3 @@ Stop the dashboard from claiming states that aren't true:
 - Manual: against a real profile — AKS card shows "Connecting…" until the AKS
   page's namespace selector resolves; SQL card shows "6 connections / On
   demand" with neutral dots and zero `/api/sql/*/test` calls.
-
