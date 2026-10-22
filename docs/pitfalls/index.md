@@ -4,7 +4,7 @@ Quick-reference files for recurring bugs in this codebase. Add an entry to the r
 
 | File                                   | Covers                                                                                                |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| [react-frontend.md](react-frontend.md) | React/Tauri frontend: CodeMirror theming, Tauri serialization boundary, `AllowedRoots`, server-sent events, panel layout, Playwright traps |
+| [react-frontend.md](react-frontend.md) | React/Tauri frontend: CodeMirror theming, Tauri serialization boundary, `AllowedRoots`, server-sent events, render cost, startup appearance, panel layout, Playwright traps |
 | [api-client.md](api-client.md)         | API client: fields that reach the wire without `{{variable}}` substitution or visibility, write-only secret inputs |
 | [azure-sdk.md](azure-sdk.md)           | Azure SDK auth, connection strings, `AsyncPageable` resource management                               |
 | [dotnet-csharp.md](dotnet-csharp.md)   | General .NET / C# traps (`required`, cancellation, nullability)                                       |

@@ -1,4 +1,5 @@
 import {
+    memo,
     useEffect,
     useId,
     useMemo,
@@ -150,7 +151,9 @@ function MdAnchor({
     );
 }
 
-export function AgentMarkdown({
+// Memoized: a streaming reply rebuilds the messages array per token, and every
+// earlier message would otherwise be re-parsed by react-markdown each time.
+export const AgentMarkdown = memo(function AgentMarkdown({
     content,
     className,
     renderVisualBlocks = true,
@@ -252,4 +255,4 @@ export function AgentMarkdown({
             </ReactMarkdown>
         </div>
     );
-}
+});

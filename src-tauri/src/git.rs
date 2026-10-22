@@ -598,16 +598,26 @@ pub async fn git_commit(
     commit_impl(&path, &message, subpath, &roots)
 }
 
+/// Runs a network-bound git command (push/pull) on the blocking pool. `run_git` is a
+/// synchronous `Command::output()`, and an `async` command still executes on a shared
+/// async-runtime worker — a slow remote or a credential prompt would park that worker
+/// for the whole round trip and starve every other async command queued behind it.
+async fn run_git_blocking(repo: PathBuf, args: &'static [&'static str]) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || run_git(&repo, args))
+        .await
+        .map_err(|e| format!("git {} task failed: {e}", args.join(" ")))?
+}
+
 #[tauri::command]
 pub async fn git_push(path: String, roots: State<'_, AllowedRoots>) -> Result<String, String> {
     let repo = repo_dir(&path, &roots)?;
-    run_git(&repo, &["push"])
+    run_git_blocking(repo, &["push"]).await
 }
 
 #[tauri::command]
 pub async fn git_pull(path: String, roots: State<'_, AllowedRoots>) -> Result<String, String> {
     let repo = repo_dir(&path, &roots)?;
-    run_git(&repo, &["pull"])
+    run_git_blocking(repo, &["pull"]).await
 }
 
 #[tauri::command]

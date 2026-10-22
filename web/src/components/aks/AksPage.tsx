@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { AksWorkspaceProvider } from "./shared/AksWorkspaceContext";
 import {
     useAksCluster,
@@ -37,7 +38,6 @@ import { MultiPodLogView } from "./MultiPodLogView";
 import { AksNavRail } from "./AksNavRail";
 import { ContextMenu } from "./ContextMenu";
 import { ContainerDetailPanel } from "./ContainerDetailPanel";
-import { PodShellPanel } from "./PodShellPanel";
 import { ContextualAssistant } from "@/components/agent/ContextualAssistant";
 import { ConfirmBar } from "@/components/shared/ConfirmBar";
 import { LastRefreshed } from "@/components/shared/LastRefreshed";
@@ -49,6 +49,11 @@ import { pinAksNamespaces } from "@/lib/pinned-resources";
 import { RefreshCw, Loader2, Ship } from "lucide-react";
 import { useNavigate } from "react-router";
 import { EmptyState } from "@/components/shared/EmptyState";
+
+// xterm is only needed once a shell is opened — keep it out of the AKS page chunk.
+const PodShellPanel = lazy(() =>
+    import("./PodShellPanel").then((m) => ({ default: m.PodShellPanel })),
+);
 
 export function AksPage() {
     return (
@@ -481,14 +486,16 @@ function AksPageContent() {
             than competing for the right-hand panel slot, and stays open across tab switches
             (the context clears it on cluster change, not on tab change). */}
                     {ws.shellPod && (
-                        <PodShellPanel
-                            namespace={ws.shellPod.namespace}
-                            pod={ws.shellPod.name}
-                            container={ws.shellPod.containers[0] ?? null}
-                            context={ws.shellPod.context ?? ws.defaultContext}
-                            kubeconfig={ws.kubeconfigPath}
-                            onClose={() => ws.setShellPod(null)}
-                        />
+                        <Suspense fallback={null}>
+                            <PodShellPanel
+                                namespace={ws.shellPod.namespace}
+                                pod={ws.shellPod.name}
+                                container={ws.shellPod.containers[0] ?? null}
+                                context={ws.shellPod.context ?? ws.defaultContext}
+                                kubeconfig={ws.kubeconfigPath}
+                                onClose={() => ws.setShellPod(null)}
+                            />
+                        </Suspense>
                     )}
                 </div>
 

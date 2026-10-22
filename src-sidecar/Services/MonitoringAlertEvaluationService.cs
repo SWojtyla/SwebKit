@@ -20,6 +20,14 @@ public sealed class MonitoringAlertEvaluationService : BackgroundService
     private static readonly TimeSpan DefaultTickInterval = TimeSpan.FromSeconds(10);
     private const double MaxBackoffSeconds = 600; // 10 minutes
 
+    /// <summary>
+    /// How long the hosted loop waits after startup before its first evaluation. Every due rule
+    /// evaluates on the first pass, and each one needs a cold client (an AKS build runs
+    /// kubelogin/<c>az</c>); at t=0 that competes with the UI's first page load for the same
+    /// builds. A short head start lets the page win. Settable so tests don't wait it out.
+    /// </summary>
+    internal TimeSpan InitialDelay { get; init; } = TimeSpan.FromSeconds(10);
+
     private readonly IAlertRuleRepository _repository;
     private readonly IMonitoringConnectionPool _pool;
     private readonly IEnumerable<IAlertSignalSource> _sources;
@@ -108,12 +116,17 @@ public sealed class MonitoringAlertEvaluationService : BackgroundService
         _sourceMap = _sources.ToDictionary(s => s.Source);
         _rules = [.. await _repository.GetAllAsync().ConfigureAwait(false)];
         _started = true;
-        _timer = new PeriodicTimer(DefaultTickInterval);
 
         try
         {
+            if (InitialDelay > TimeSpan.Zero)
+                await Task.Delay(InitialDelay, stoppingToken).ConfigureAwait(false);
+
+            // Created after the delay: a PeriodicTimer started before it would already owe a tick,
+            // and the first pass would run twice back to back.
+            var timer = _timer = new PeriodicTimer(DefaultTickInterval);
             await EvaluateDueRulesAsync(stoppingToken).ConfigureAwait(false);
-            while (await _timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
                 await EvaluateDueRulesAsync(stoppingToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)

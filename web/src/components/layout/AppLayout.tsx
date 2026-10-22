@@ -1,4 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+    useState,
+    useEffect,
+    useCallback,
+    useRef,
+    lazy,
+    Suspense,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router";
 import {
@@ -29,7 +36,6 @@ import { PinnedRail } from "./PinnedRail";
 import { setNotificationBellSlot } from "./notification-bell-slot";
 import { EnvironmentBadge } from "./EnvironmentBadge";
 import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
-import { GlobalAgentPanel } from "@/components/agent/GlobalAgentPanel";
 import { DemoTour } from "./DemoTour";
 import {
     useDemoMode,
@@ -47,7 +53,11 @@ import {
 } from "@/lib/stores/panel-preferences";
 import { notifyScreenRouteChanged } from "@/lib/stores/screen-state";
 import { initDeepLinks, type DeepLinkContext } from "@/lib/deep-links";
-import { useSettingsStore, migrateTheme } from "@/lib/stores/settings";
+import {
+    useSettingsStore,
+    migrateTheme,
+    BOOT_FONT_SIZE_PREF,
+} from "@/lib/stores/settings";
 import { useAgentPanelStore } from "@/lib/stores/agent-panel";
 import { useMonitoringStream } from "@/lib/hooks/useMonitoring";
 import {
@@ -78,6 +88,14 @@ const navItems = [
     { to: "/settings", label: "Settings", icon: Settings },
 ];
 
+// Loaded on first open, then kept mounted (it owns the global conversation's stream): until then
+// the markdown stack stays out of the startup chunk and its agent status/permission polls don't run.
+const GlobalAgentPanel = lazy(() =>
+    import("@/components/agent/GlobalAgentPanel").then((m) => ({
+        default: m.GlobalAgentPanel,
+    })),
+);
+
 export function AppLayout() {
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -87,6 +105,8 @@ export function AppLayout() {
     const agentPanelOpen = useAgentPanelStore((s) => s.open);
     const setAgentPanelOpen = useAgentPanelStore((s) => s.setOpen);
     const toggleAgentPanel = useAgentPanelStore((s) => s.toggle);
+    const [agentPanelMounted, setAgentPanelMounted] = useState(agentPanelOpen);
+    if (agentPanelOpen && !agentPanelMounted) setAgentPanelMounted(true);
     const navigate = useNavigate();
     const location = useLocation();
     const onAgentPage = location.pathname === "/agent";
@@ -166,8 +186,9 @@ export function AppLayout() {
             medium: "16px",
             large: "18px",
         };
-        document.documentElement.style.fontSize =
-            fontSizeMap[userSettings.fontSize] ?? "16px";
+        const fontSize = fontSizeMap[userSettings.fontSize] ?? "16px";
+        document.documentElement.style.fontSize = fontSize;
+        saveViewPreference(BOOT_FONT_SIZE_PREF, fontSize);
         document.documentElement.dataset.density =
             userSettings.density ?? "comfortable";
     }, [userSettings]);
@@ -773,10 +794,14 @@ export function AppLayout() {
                 </main>
             </div>
 
-            <GlobalAgentPanel
-                open={agentPanelOpen}
-                onClose={() => setAgentPanelOpen(false)}
-            />
+            {agentPanelMounted && (
+                <Suspense fallback={null}>
+                    <GlobalAgentPanel
+                        open={agentPanelOpen}
+                        onClose={() => setAgentPanelOpen(false)}
+                    />
+                </Suspense>
+            )}
 
             <CommandPalette
                 open={paletteOpen}

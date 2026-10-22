@@ -506,7 +506,6 @@ await app.Services.GetRequiredService<CollectionRepository>().LoadAsync();
 // agent's ApiClientAgentService both see the registered on-disk roots.
 await app.Services.GetRequiredService<LinkedCollectionRootRepository>().LoadAsync();
 await userSettingsRepository.LoadAsync();
-await app.Services.GetRequiredService<SwebKit.Core.Configuration.AlertRuleRepository>().GetAllAsync();
 // Force-instantiate now so its constructor subscribes to MonitoringAlertEvaluationService.AlertFired
 // before the first alert can possibly fire — a plain AddSingleton registration alone only makes it
 // resolvable, it doesn't construct it until something asks for it.

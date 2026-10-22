@@ -254,31 +254,7 @@ public static class RedisEndpoints
             if (cache is null) return ApiErrors.NotFound("Cache not found");
 
             var client = await pool.GetOrCreateAsync(cache, ct);
-            var data = new Dictionary<string, object?>();
-            foreach (var key in req.Keys)
-            {
-                try
-                {
-                    var info = await client.GetKeyInfoAsync(key, ct);
-                    object? value = info.Type switch
-                    {
-                        "string" => await client.GetKeyValueAsync(key, ct),
-                        "hash" => (await client.GetHashFieldsAsync(key, ct))
-                            .ToDictionary(field => field.Field, field => field.Value),
-                        "list" => await client.GetListItemsAsync(key, ct: ct),
-                        "set" => await client.GetSetMembersAsync(key, ct),
-                        "zset" => await client.GetSortedSetMembersAsync(key, ct: ct),
-                        _ => null
-                    };
-                    data[key] = value;
-                }
-                catch
-                {
-                    data[key] = "<error reading key>";
-                }
-            }
-
-            return Results.Ok(data);
+            return Results.Ok(await ExportKeysAsync(client, req.Keys, ct));
         });
 
         // ── Key mutations ──────────────────────────────────────────────────────
@@ -385,6 +361,56 @@ public static class RedisEndpoints
     }
 
     // ── Extracted mutation handlers (unit-testable without a WebApplicationFactory) ────────────
+
+    /// <summary>Upper bound on keys read at once by <see cref="ExportKeysAsync"/>.</summary>
+    internal const int ExportConcurrency = 32;
+
+    /// <summary>
+    /// Reads every key's value for an export, keyed in request order. Each key needs two dependent
+    /// round trips (type, then the type-specific read), so the keys are read concurrently —
+    /// StackExchange.Redis pipelines them over the one multiplexer — instead of paying 2×N serial
+    /// latencies. Bounded so a large selection doesn't queue thousands of commands at once and
+    /// push the later ones past the client's timeout. A key that fails to read becomes a
+    /// placeholder rather than failing the whole export.
+    /// </summary>
+    internal static async Task<Dictionary<string, object?>> ExportKeysAsync(
+        IRedisClient client,
+        IReadOnlyList<string> keys,
+        CancellationToken ct)
+    {
+        var data = new Dictionary<string, object?>(keys.Count);
+        await foreach (var (key, value) in OrderedFanOut.StreamInOrderAsync<string, (string Key, object? Value)>(
+            keys,
+            async (key, token) => [(key, await ReadKeyForExportAsync(client, key, token).ConfigureAwait(false))],
+            ExportConcurrency,
+            ct).ConfigureAwait(false))
+        {
+            data[key] = value;
+        }
+        return data;
+    }
+
+    private static async Task<object?> ReadKeyForExportAsync(IRedisClient client, string key, CancellationToken ct)
+    {
+        try
+        {
+            var info = await client.GetKeyInfoAsync(key, ct).ConfigureAwait(false);
+            return info.Type switch
+            {
+                "string" => await client.GetKeyValueAsync(key, ct).ConfigureAwait(false),
+                "hash" => (await client.GetHashFieldsAsync(key, ct).ConfigureAwait(false))
+                    .ToDictionary(field => field.Field, field => field.Value),
+                "list" => await client.GetListItemsAsync(key, ct: ct).ConfigureAwait(false),
+                "set" => await client.GetSetMembersAsync(key, ct).ConfigureAwait(false),
+                "zset" => await client.GetSortedSetMembersAsync(key, ct: ct).ConfigureAwait(false),
+                _ => null
+            };
+        }
+        catch
+        {
+            return "<error reading key>";
+        }
+    }
 
     internal static async Task<IResult> DeleteKeysAsync(
         string cacheId,

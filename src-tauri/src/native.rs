@@ -134,9 +134,30 @@ impl PortForwardState {
 /// Tauri command: start a port-forward session by spawning a real `kubectl port-forward`
 /// subprocess. `context`/`kubeconfig` mirror the AKS config already used elsewhere in the app —
 /// when omitted, kubectl falls back to its own default context/kubeconfig resolution.
+///
+/// `async` + `spawn_blocking`: a sync command runs on the main (event-loop) thread, and the
+/// readiness wait below can take up to `FORWARD_READY_TIMEOUT` — the whole UI froze for that long.
 #[tauri::command]
-pub fn start_port_forward(
-    state: State<PortForwardState>,
+pub async fn start_port_forward(
+    app: tauri::AppHandle,
+    namespace: String,
+    pod: String,
+    remote_port: u16,
+    local_port: Option<u16>,
+    context: Option<String>,
+    kubeconfig: Option<String>,
+) -> Result<u16, String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<PortForwardState>();
+        start_port_forward_blocking(&state, namespace, pod, remote_port, local_port, context, kubeconfig)
+    })
+    .await
+    .map_err(|e| format!("Port-forward task failed: {e}"))?
+}
+
+fn start_port_forward_blocking(
+    state: &PortForwardState,
     namespace: String,
     pod: String,
     remote_port: u16,

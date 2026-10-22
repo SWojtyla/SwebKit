@@ -21,8 +21,8 @@ internal sealed class TrackedAksClient : DemoAksClient, IDisposable
 }
 
 /// <summary>
-/// Builds <see cref="TrackedAksClient"/> instances, and can be gated so two callers are provably
-/// inside the factory at the same time — the race that used to orphan a client.
+/// Builds <see cref="TrackedAksClient"/> instances, and can be gated to hold a build in flight —
+/// so a test can prove concurrent callers share it, or evict while it is running.
 /// </summary>
 internal sealed class TrackedAksClientFactory : IAksClientFactory
 {
@@ -51,10 +51,23 @@ internal sealed class TrackedAksClientFactory : IAksClientFactory
     }
 }
 
+/// <summary>Fails its first <see cref="Create"/> call, then succeeds — a transient kubelogin/az failure.</summary>
+internal sealed class ThrowOnceAksClientFactory : IAksClientFactory
+{
+    private int _calls;
+
+    public int Calls => _calls;
+
+    public IAksClient Create(string? context, string? kubeconfigPath) =>
+        Interlocked.Increment(ref _calls) == 1
+            ? throw new InvalidOperationException("kubelogin failed")
+            : new TrackedAksClient();
+}
+
 /// <summary>
 /// Covers the pooled-client lifetime rules in <see cref="SidecarMonitoringConnectionPool"/>:
-/// every cached client is disposed when it leaves the cache, and a concurrent first-use never
-/// leaves a second client orphaned.
+/// every cached client is disposed when it leaves the cache, and a concurrent first-use builds
+/// exactly one client.
 /// </summary>
 public class SidecarMonitoringConnectionPoolDisposalTests
 {
@@ -129,29 +142,76 @@ public class SidecarMonitoringConnectionPoolDisposalTests
     }
 
     [Fact]
-    public async Task ConcurrentFirstUse_CachesOneClient_AndDisposesTheLoserInsteadOfOrphaningIt()
+    public async Task ConcurrentFirstUse_BuildsTheClientOnce_AndEveryCallerGetsIt()
     {
         var (pool, _, _, factory) = Build();
-        using var entered = new CountdownEvent(2);
+        using var entered = new CountdownEvent(1);
         using var hold = new ManualResetEventSlim(false);
         factory.Entered = entered;
         factory.Hold = hold;
 
-        // Both callers are held inside the factory, so both miss the cache and both build a client —
-        // exactly the interleaving the old TryGetValue-then-indexer code turned into a leak.
+        // The first caller is held inside the factory (the real one runs kubelogin/az for seconds);
+        // the others miss the cache meanwhile and must wait on that build, not start their own.
         var first = Task.Run(() => pool.GetAksClient());
-        var second = Task.Run(() => pool.GetAksClient());
-        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "both callers should reach the factory");
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the first caller should reach the factory");
+        var others = Enumerable.Range(0, 4).Select(_ => Task.Run(() => pool.GetAksClient())).ToList();
+        await Task.Delay(50);
         hold.Set();
 
-        var a = await first;
-        var b = await second;
+        var results = await Task.WhenAll([first, .. others]);
 
-        Assert.Equal(2, factory.Created.Count);
-        Assert.Same(a, b);
-        Assert.Equal(1, factory.Created.Count(c => c.DisposeCount == 1));
-        Assert.Equal(1, factory.Created.Count(c => c.DisposeCount == 0));
-        Assert.Same(a, factory.Created.Single(c => c.DisposeCount == 0));
+        var built = Assert.Single(factory.Created);
+        Assert.All(results, r => Assert.Same(built, r));
+        Assert.Equal(0, built.DisposeCount);
+    }
+
+    [Fact]
+    public void FactoryFailure_IsNotCached_NextCallRetries()
+    {
+        var profile = new ProfileRepository();
+        var factory = new ThrowOnceAksClientFactory();
+        var pool = new SidecarMonitoringConnectionPool(
+            profile,
+            new DemoModeService(),
+            factory,
+            new NullServiceBusClientFactory(),
+            new NullRedisClientFactory(),
+            NullLogger<SidecarMonitoringConnectionPool>.Instance);
+        profile.Config.AksConfig = new AksConfig { KubeconfigContext = "ctx-a", KubeconfigPath = "/tmp/kubeconfig" };
+
+        Assert.Throws<InvalidOperationException>(() => pool.GetAksClient());
+        var client = pool.GetAksClient();
+
+        Assert.NotNull(client);
+        Assert.Equal(2, factory.Calls);
+    }
+
+    [Fact]
+    public async Task EvictionDuringBuild_DisposesTheClientOnceTheBuildCompletes()
+    {
+        var (pool, _, _, factory) = Build();
+        using var entered = new CountdownEvent(1);
+        using var hold = new ManualResetEventSlim(false);
+        factory.Entered = entered;
+        factory.Hold = hold;
+
+        var pending = Task.Run(() => pool.GetAksClient());
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the build should be in flight");
+
+        // A profile save lands mid-build: there is nothing to dispose yet, so the pool must hand the
+        // disposal to the build instead of forgetting the client it is about to produce.
+        pool.EvictAksClients();
+        hold.Set();
+        await pending;
+
+        // Disposal runs as a continuation of the build, so it may land just after the caller resumes.
+        var orphan = Assert.Single(factory.Created);
+        Assert.True(SpinWait.SpinUntil(() => orphan.DisposeCount == 1, TimeSpan.FromSeconds(5)));
+
+        // The evicted key rebuilds on next use.
+        factory.Entered = null;
+        factory.Hold = null;
+        Assert.NotSame(orphan, pool.GetAksClient());
     }
 
     [Fact]

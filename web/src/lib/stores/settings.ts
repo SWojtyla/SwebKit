@@ -1,4 +1,10 @@
 import { create } from "zustand";
+import { loadViewPreference, saveViewPreference } from "./panel-preferences";
+
+// Local mirrors of the sidecar-held appearance, read by public/boot-appearance.js before first
+// paint so a launch starts on the user's theme instead of flashing the default first.
+export const BOOT_THEME_PREF = "boot-theme";
+export const BOOT_FONT_SIZE_PREF = "boot-font-size";
 
 // SwebOS families: Aurora light/dark reuse the historic `light`/`dark` ids so
 // existing user-settings.json values keep meaning; Clay is the second family.
@@ -54,10 +60,12 @@ function applyThemeClass(theme: Theme) {
     } else if (theme === "clay-dark") {
         document.documentElement.classList.add("clay", "dark");
     }
+    saveViewPreference(BOOT_THEME_PREF, theme);
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
-    theme: "dark",
+    // Starts from the boot mirror, which boot-appearance.js has already applied to the DOM.
+    theme: migrateTheme(loadViewPreference(BOOT_THEME_PREF, "")) ?? "dark",
     toggleTheme: () => {
         const next =
             THEME_CYCLE[

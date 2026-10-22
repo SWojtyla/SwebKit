@@ -745,18 +745,19 @@ public static class LinkedRootsEndpoints
     /// Builds the wire summary for every registered root. Enabled roots are fully loaded; disabled
     /// roots are listed but never read from disk. A root that fails to load surfaces as an
     /// <c>isValid: false</c> entry with diagnostics rather than failing the whole list.
+    /// Roots are independent trees on disk (each load also shells out to <c>git status</c>), so
+    /// they load concurrently; <c>Task.WhenAll</c> keeps the summaries in registration order.
     /// </summary>
     internal static async Task<List<LinkedCollectionRootSummary>> BuildRootSummariesAsync(
         LinkedCollectionRootRepository roots,
         LinkedCollectionFileService files,
         CancellationToken cancellationToken)
     {
-        var summaries = new List<LinkedCollectionRootSummary>(roots.Roots.Count);
-        foreach (var root in roots.Roots)
-        {
-            summaries.Add(await BuildSummaryAsync(root, files, cancellationToken).ConfigureAwait(false));
-        }
-        return summaries;
+        // Snapshot first: the repository's list can change under a concurrent register/unregister.
+        var registered = roots.Roots.ToList();
+        var summaries = await Task.WhenAll(
+            registered.Select(root => BuildSummaryAsync(root, files, cancellationToken))).ConfigureAwait(false);
+        return [.. summaries];
     }
 
     internal static async Task<LinkedCollectionRootSummary> BuildSummaryAsync(

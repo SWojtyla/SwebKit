@@ -248,6 +248,8 @@ export function RedisPageProvider({ children }: { children: ReactNode }): JSX.El
     // broken (see docs/pitfalls/react-frontend.md's TanStack Query section).
     queryClient.invalidateQueries({ queryKey: ["redis"] });
     const id = setInterval(() => {
+      // Same as AKS: a hidden window shouldn't keep polling the cache.
+      if (document.visibilityState === "hidden") return;
       queryClient.invalidateQueries({ queryKey: ["redis"] });
     }, refreshInterval * 1000);
     return () => clearInterval(id);

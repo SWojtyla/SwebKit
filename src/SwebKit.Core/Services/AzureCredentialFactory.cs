@@ -17,26 +17,61 @@ namespace SwebKit.Core.Services;
 /// visible indication of which identity is actually being used. Excluding
 /// <see cref="EnvironmentCredential"/> here ensures the app always falls through to the
 /// developer's interactive credential instead. See docs/pitfalls/azure-sdk.md (AZ-4).
+/// <para>The parameterless <see cref="CreateDefault()"/> returns one shared instance. Each fresh
+/// <see cref="DefaultAzureCredential"/> re-walks the credential chain from scratch, probing every
+/// leg ahead of the one that works before <c>AzureCliCredential</c> spawns
+/// <c>az account get-access-token</c> (1-3s on Windows); a reused one remembers which leg
+/// succeeded, and MSAL-backed legs keep their token cache across every client built from it.
+/// Microsoft's guidance is to reuse credential instances for exactly this reason.
+/// Call <see cref="Reset"/> when the identity may have changed (profile save/import) so the next
+/// caller re-resolves the chain — e.g. after an <c>az login</c> to a different account.</para>
 /// </remarks>
 public static class AzureCredentialFactory
 {
-    /// <summary>Creates the app-wide default Entra ID credential.</summary>
-    public static TokenCredential CreateDefault() =>
-        CreateDefault(new DefaultAzureCredentialOptions
-        {
-            ExcludeEnvironmentCredential = true,
-            // This is a desktop app running on developer machines, never on Azure VMs.
-            // ManagedIdentityCredential probes the IMDS endpoint (169.254.169.254) which
-            // doesn't exist locally, causing a 6-retry socket timeout before falling through
-            // to the next credential. Excluding it eliminates the delay and the confusing error.
-            ExcludeManagedIdentityCredential = true
-        });
+    private static readonly object Gate = new();
+    private static TokenCredential? _shared;
 
     /// <summary>
-    /// Creates an Entra ID credential with the specified options.
+    /// Returns the app-wide default Entra ID credential — a cached instance shared by every caller
+    /// until <see cref="Reset"/> is called.
+    /// </summary>
+    public static TokenCredential CreateDefault()
+    {
+        var shared = Volatile.Read(ref _shared);
+        if (shared is not null)
+            return shared;
+
+        lock (Gate)
+            return _shared ??= CreateDefault(DefaultOptions());
+    }
+
+    /// <summary>
+    /// Drops the shared credential so the next <see cref="CreateDefault()"/> builds a fresh one.
+    /// Clients already holding the old instance keep it; the connection pools are invalidated on
+    /// the same profile-save path, so they rebuild against the new one.
+    /// </summary>
+    public static void Reset()
+    {
+        lock (Gate)
+            _shared = null;
+    }
+
+    /// <summary>
+    /// Creates an Entra ID credential with the specified options. Never cached — every call
+    /// returns a new instance, since options differ per caller.
     /// Use this overload when a caller needs different exclusion settings
     /// (e.g., KubernetesAksClient excludes WorkloadIdentityCredential).
     /// </summary>
     public static TokenCredential CreateDefault(DefaultAzureCredentialOptions options) =>
         new DefaultAzureCredential(options);
+
+    private static DefaultAzureCredentialOptions DefaultOptions() => new()
+    {
+        ExcludeEnvironmentCredential = true,
+        // This is a desktop app running on developer machines, never on Azure VMs.
+        // ManagedIdentityCredential probes the IMDS endpoint (169.254.169.254) which
+        // doesn't exist locally, causing a 6-retry socket timeout before falling through
+        // to the next credential. Excluding it eliminates the delay and the confusing error.
+        ExcludeManagedIdentityCredential = true
+    };
 }

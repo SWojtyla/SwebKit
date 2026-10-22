@@ -7,9 +7,6 @@ import { NotificationProvider } from "./components/layout/NotificationSystem";
 import { initSidecarBaseUrl } from "./lib/api";
 import "./styles/globals.css";
 
-// Initialize theme class on document element
-document.documentElement.classList.add("dark");
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

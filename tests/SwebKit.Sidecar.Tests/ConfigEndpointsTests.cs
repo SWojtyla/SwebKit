@@ -238,6 +238,28 @@ public class ConfigEndpointsTests
     }
 
     [Fact]
+    public async Task SaveProfileAsync_ResetsTheSharedAzureCredential()
+    {
+        // The shared credential remembers which chain leg won; a save (often right after an
+        // `az login` to another account) must let the rebuilt clients re-resolve the identity.
+        using var sandbox = new AppDataSandbox();
+        var profile = new ProfileRepository();
+        var before = AzureCredentialFactory.CreateDefault();
+
+        await ConfigEndpoints.SaveProfileAsync(
+            profile,
+            profile.GetProfileData(),
+            new NoopStorageConnectionPool(),
+            new TrackingRedisConnectionPool(),
+            new TrackingServiceBusConnectionPool(),
+            new TrackingSqlConnectionPool(),
+            new TrackingMonitoringConnectionPool(), new FakeCredentialStore(),
+            new TrackingAccessReportService());
+
+        Assert.NotSame(before, AzureCredentialFactory.CreateDefault());
+    }
+
+    [Fact]
     public async Task SaveProfileAsync_StripsDemoOverlayEntities()
     {
         // The profile GET overlays demo namespaces/cache/storage while demo mode is on, and saves
