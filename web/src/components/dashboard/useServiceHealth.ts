@@ -153,10 +153,11 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
 
     // Warm-up off = no early cluster calls at all, so AKS gets the same neutral
     // "on-demand" state as SQL/Redis until the user actually opens the page.
+    // Demo mode included: the toggle means "no startup calls", whatever answers them.
     const warmupOn =
         settings != null && settings.warmupConnectionsOnStartup !== false;
     const aksConfigured = isDemo || !!profile?.config.aksConfig;
-    const aksProbing = aksConfigured && (isDemo || warmupOn);
+    const aksProbing = aksConfigured && warmupOn;
 
     const aksHealth = useAksTestConnection({ enabled: aksProbing });
     const aksNamespaces = useAksNamespaces(

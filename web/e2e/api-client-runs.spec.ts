@@ -87,14 +87,16 @@ test.describe("API Client — request runs (demo)", () => {
         await folder.click({ button: "right" });
         await page.getByTestId("ctx-run-in-order").click();
 
+        // The folder holds the two-step token chain plus the three create → read → delete
+        // steps of the named-chain demo (DemoApiCollectionFactory.CreateRequestChainFolder).
         const drawer = page.getByTestId("run-drawer");
         await expect(drawer).toBeVisible();
-        await expect(drawer.getByTestId("run-status-1")).toHaveAttribute(
+        await expect(drawer.getByTestId("run-status-4")).toHaveAttribute(
             "data-status",
             "completed",
             { timeout: 30_000 },
         );
-        await expect(drawer.getByTestId("run-progress")).toContainText("2/2");
+        await expect(drawer.getByTestId("run-progress")).toContainText("5/5");
     });
 
     test("ctrl+click multi-select then 'Run selection' runs picked requests", async ({
