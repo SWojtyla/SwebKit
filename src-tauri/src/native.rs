@@ -880,15 +880,22 @@ mod granted_roots_tests {
     use super::grant_covers;
     use std::path::PathBuf;
 
-    fn grants(paths: &[&str]) -> Vec<PathBuf> {
-        paths.iter().map(PathBuf::from).collect()
+    // Built from components on the host's own root: a backslashed Windows
+    // literal is a single file name on Linux (CI), where `\` is not a separator.
+    fn path(parts: &[&str]) -> PathBuf {
+        let root = PathBuf::from(if cfg!(windows) { r"C:\" } else { "/" });
+        parts.iter().fold(root, |p, part| p.join(part))
+    }
+
+    fn grants(paths: &[&[&str]]) -> Vec<PathBuf> {
+        paths.iter().map(|p| path(p)).collect()
     }
 
     #[test]
     fn exact_match_covers() {
         assert!(grant_covers(
-            &grants(&[r"C:\Repos\api"]),
-            &PathBuf::from(r"C:\Repos\api"),
+            &grants(&[&["Repos", "api"]]),
+            &path(&["Repos", "api"]),
         ));
     }
 
@@ -897,8 +904,8 @@ mod granted_roots_tests {
         // The case that used to fail: granted the workspace root, the repo
         // inside it kept reporting "not authorized".
         assert!(grant_covers(
-            &grants(&[r"C:\Repos"]),
-            &PathBuf::from(r"C:\Repos\api\collections"),
+            &grants(&[&["Repos"]]),
+            &path(&["Repos", "api", "collections"]),
         ));
     }
 
@@ -906,16 +913,16 @@ mod granted_roots_tests {
     fn descendant_grant_does_not_cover_ancestor() {
         // Granting a subfolder must not unlock the repo root above it.
         assert!(!grant_covers(
-            &grants(&[r"C:\Repos\api"]),
-            &PathBuf::from(r"C:\Repos"),
+            &grants(&[&["Repos", "api"]]),
+            &path(&["Repos"]),
         ));
     }
 
     #[test]
     fn sibling_paths_do_not_cover() {
         assert!(!grant_covers(
-            &grants(&[r"C:\Repos\api"]),
-            &PathBuf::from(r"C:\Repos\api2"),
+            &grants(&[&["Repos", "api"]]),
+            &path(&["Repos", "api2"]),
         ));
     }
 }
