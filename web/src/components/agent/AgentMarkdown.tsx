@@ -1,4 +1,5 @@
 import {
+    memo,
     useEffect,
     useId,
     useMemo,
@@ -9,10 +10,14 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components, ExtraProps } from "react-markdown";
-import { useSettingsStore } from "@/lib/stores/settings";
+import {
+    isDarkTheme,
+    useSettingsStore,
+    type Theme,
+} from "@/lib/stores/settings";
 
-function getMermaidTheme(theme: string): "default" | "dark" {
-    return theme === "dark" || theme === "clay-dark" ? "dark" : "default";
+function getMermaidTheme(theme: Theme): "default" | "dark" {
+    return isDarkTheme(theme) ? "dark" : "default";
 }
 
 export function MermaidBlock({ code }: { code: string }) {
@@ -150,7 +155,9 @@ function MdAnchor({
     );
 }
 
-export function AgentMarkdown({
+// Memoized: a streaming reply rebuilds the messages array per token, and every
+// earlier message would otherwise be re-parsed by react-markdown each time.
+export const AgentMarkdown = memo(function AgentMarkdown({
     content,
     className,
     renderVisualBlocks = true,
@@ -252,4 +259,4 @@ export function AgentMarkdown({
             </ReactMarkdown>
         </div>
     );
-}
+});

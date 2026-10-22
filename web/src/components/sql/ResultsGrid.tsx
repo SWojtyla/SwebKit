@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import { Download } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { downloadText } from "@/lib/download";
@@ -132,34 +132,14 @@ export function ResultsGrid({
                     </thead>
                     <tbody>
                         {result.rows.map((row, i) => (
-                            <tr
+                            <ResultRow
                                 key={i}
-                                tabIndex={gridNav.focusedIndex === i ? 0 : -1}
-                                data-grid-nav-row={i}
-                                onFocus={() => gridNav.setFocusedIndex(i)}
-                                className={`outline-none odd:bg-muted/30 ${
-                                    gridNav.focusedIndex === i
-                                        ? "bg-accent/70"
-                                        : ""
-                                }`}
-                            >
-                                {result.columns.map((col) => (
-                                    <td
-                                        key={col.name}
-                                        className="max-w-64 truncate border-b px-2 py-1"
-                                        title={cellText(row[col.name])}
-                                    >
-                                        {row[col.name] === null ||
-                                        row[col.name] === undefined ? (
-                                            <span className="italic text-muted-foreground">
-                                                NULL
-                                            </span>
-                                        ) : (
-                                            cellText(row[col.name])
-                                        )}
-                                    </td>
-                                ))}
-                            </tr>
+                                row={row}
+                                index={i}
+                                columns={result.columns}
+                                focused={gridNav.focusedIndex === i}
+                                onFocusRow={gridNav.setFocusedIndex}
+                            />
                         ))}
                     </tbody>
                 </table>
@@ -167,3 +147,48 @@ export function ResultsGrid({
         </div>
     );
 }
+
+// Memoized so moving the keyboard focus re-renders the two rows that changed,
+// not every cell of a result set that can reach the 5000-row cap.
+const ResultRow = memo(function ResultRow({
+    row,
+    index,
+    columns,
+    focused,
+    onFocusRow,
+}: {
+    row: SqlQueryResult["rows"][number];
+    index: number;
+    columns: SqlQueryResult["columns"];
+    focused: boolean;
+    onFocusRow: (index: number) => void;
+}) {
+    return (
+        <tr
+            tabIndex={focused ? 0 : -1}
+            data-grid-nav-row={index}
+            onFocus={() => onFocusRow(index)}
+            className={`outline-none odd:bg-muted/30 ${focused ? "bg-accent/70" : ""}`}
+        >
+            {columns.map((col) => {
+                const value = row[col.name];
+                const text = cellText(value);
+                return (
+                    <td
+                        key={col.name}
+                        className="max-w-64 truncate border-b px-2 py-1"
+                        title={text}
+                    >
+                        {value === null || value === undefined ? (
+                            <span className="italic text-muted-foreground">
+                                NULL
+                            </span>
+                        ) : (
+                            text
+                        )}
+                    </td>
+                );
+            })}
+        </tr>
+    );
+});

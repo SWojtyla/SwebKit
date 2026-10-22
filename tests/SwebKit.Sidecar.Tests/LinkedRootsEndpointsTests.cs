@@ -159,6 +159,32 @@ public class LinkedRootsEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task GetRootsAsync_ManyRoots_KeepRegistrationOrder_AndPerRootState()
+    {
+        // Summaries load concurrently; the response must still list roots in registration order,
+        // and a disabled root must still skip loading.
+        var names = new[] { "Zeta", "Alpha", "Mid", "Beta" };
+        var ids = new List<string>();
+        foreach (var name in names)
+        {
+            var dir = Path.Combine(_rootDir, name);
+            Directory.CreateDirectory(dir);
+            var created = await LinkedRootsEndpoints.CreateRootAsync(
+                new CreateLinkedRootRequest { Path = dir, Name = name }, _roots, _files, _demo, CancellationToken.None);
+            ids.Add(Value<LinkedCollectionRootSummary>(created).Id);
+        }
+        await LinkedRootsEndpoints.UpdateRootAsync(
+            ids[2], new UpdateLinkedRootRequest { IsEnabled = false }, _roots, _files, _demo, CancellationToken.None);
+
+        var roots = RootsOf(await LinkedRootsEndpoints.GetRootsAsync(_roots, _files, _demo, CancellationToken.None));
+
+        Assert.Equal(ids, roots.Select(r => r.Id));
+        Assert.Equal(names, roots.Select(r => r.Name));
+        Assert.Equal([true, true, false, true], roots.Select(r => r.IsEnabled));
+        Assert.All(roots, r => Assert.True(r.IsValid));
+    }
+
+    [Fact]
     public async Task UpdateRootAsync_Renames()
     {
         var root = await AddRootAsync();

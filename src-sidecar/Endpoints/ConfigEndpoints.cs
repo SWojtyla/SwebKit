@@ -63,6 +63,8 @@ public static class ConfigEndpoints
         await svc.ImportAsync(bundle).ConfigureAwait(false);
         // An import replaces the whole profile — every cached probe result belongs to the old one.
         accessReports.InvalidateAll();
+        // Same for the shared Entra credential: let the next client re-resolve the identity.
+        AzureCredentialFactory.Reset();
         return TypedResults.Ok();
     }
 
@@ -248,6 +250,10 @@ public static class ConfigEndpoints
 
         repo.ReplaceProfileData(data);
         await repo.SaveAsync();
+        // The shared Entra credential remembers which chain leg (VS, az CLI, ...) won; a save is the
+        // user's "I fixed my config" moment — often right after an `az login` to another account —
+        // so drop it and let the rebuilt clients below re-resolve the identity.
+        AzureCredentialFactory.Reset();
         // A save may have edited a connection string, credential key or auth mode; drop every
         // cached client so the very next request picks up the new config instead of reusing a
         // client built from stale credentials. Redis and Service Bus cache clients for the same

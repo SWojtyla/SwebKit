@@ -129,6 +129,18 @@ Two rules that are easy to miss:
 **Rule:** any SDK client that owns a connection gets pooled and disposed. If you are writing
 `factory.Create(...)` inside a request handler, that is the smell.
 
+Two follow-ups from the performance pass:
+
+- **Concurrent cold misses must build once.** `ClientCache` and `SidecarMonitoringConnectionPool`
+  used to run the factory outside the dictionary, so a cold dashboard (dashboard, namespace loader
+  and alert engine at once) built the same AKS client several times, each running kubelogin/`az`
+  synchronously on a threadpool thread. Both now sit on `SingleFlightCache<T>`: one build per key,
+  a failed build is evicted so it never poisons the key.
+- **Share the default credential.** `AzureCredentialFactory.CreateDefault()` returns one cached
+  `DefaultAzureCredential` (a fresh one re-walks the chain and loses MSAL token caches);
+  `ConfigEndpoints` calls `AzureCredentialFactory.Reset()` on profile save/import so an account
+  switch still takes effect.
+
 ---
 
 ## AZ-7 — `Parallel.ForEachAsync` over entities is an N+1 the SDK already has a bulk call for

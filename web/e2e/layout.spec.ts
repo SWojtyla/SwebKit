@@ -40,7 +40,11 @@ test.describe("Layout", () => {
         );
         await expect(
             page.getByTestId("status-bar-health-redis"),
-        ).toHaveAttribute("aria-label", "Redis: Connected");
+        ).toHaveAttribute("aria-label", "Redis: On demand");
+        await expect(page.getByTestId("status-bar-health-sql")).toHaveAttribute(
+            "aria-label",
+            "SQL: On demand",
+        );
         await expect(
             page.getByTestId("status-bar-health-storage"),
         ).toHaveAttribute("aria-label", "Storage: Connected");

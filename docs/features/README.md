@@ -14,6 +14,7 @@ Plan files are the shared intent record: any tool or later session reads them to
 - `codebase-quality-program.md` — phased deep-scan megaplan: hygiene, architecture, per-feature deep dives, Dashboard AI cockpit.
 - `demo-tour-refresh.md` — 16-stop full-surface tour with ungated "Try it" hints and Escape-to-stop; drops the PRD-day stops (access-awareness feature stays, unadvertised).
 - `error-detail-payload.md` — failures must say _why_: surface real sidecar error detail instead of coarse "Internal server error" classifications.
+- `dashboard-service-status.md` — honest service cards: AKS "Connected" waits for namespaces; SQL/Redis are on-demand, never probed.
 
 ## Plan file contract
 

@@ -2,19 +2,19 @@ import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import {
+    useAksNamespaces,
     useAksTestConnection,
     useProfile,
     useDemoMode,
+    useUserSettings,
 } from "@/lib/hooks";
-import type {
-    ConnectionTestResult,
-    RedisServerInfo,
-    StorageContainerItem,
-} from "@/lib/types";
+import type { ConnectionTestResult, StorageContainerItem } from "@/lib/types";
 
 export type ServiceConnectivity =
     | "not-configured"
+    | "on-demand"
     | "checking"
+    | "connecting"
     | "connected"
     | "degraded"
     | "unavailable";
@@ -22,10 +22,8 @@ export type ServiceConnectivity =
 export interface ServiceEntityHealth {
     id: string;
     label: string;
-    connected: boolean | null; // null = still loading
+    connected: boolean | null; // null = still loading, or never probed
     detail?: string;
-    /** Redis only — keyspace hit ratio (0..1) for the cache, when loaded. */
-    hitRatio?: number;
 }
 
 export interface ServiceHealth {
@@ -53,15 +51,87 @@ function summarize(
     return "degraded";
 }
 
+export interface AksConnectivityInput {
+    configured: boolean;
+    /** False when startup warm-up is disabled — no cluster calls just for a badge. */
+    probing: boolean;
+    testPending: boolean;
+    /** undefined while the ping hasn't resolved; the `testPending` flag decides. */
+    testConnected?: boolean;
+    testDetail?: string;
+    namespacesPending: boolean;
+    namespacesError?: string;
+    namespaceCount?: number;
+}
+
+export interface AksConnectivity {
+    connectivity: ServiceConnectivity;
+    connected: boolean | null;
+    detail?: string;
+}
+
 /**
- * Live connectivity for every configured resource — not just the first one.
- * Each entity gets its own query with the same queryKey/queryFn the per-page
- * hooks use, so results share React Query cache with the status bar and the
- * feature pages instead of firing duplicate requests.
+ * "Connected" must mean *usable*: the ping can pass in ~1s while the namespace
+ * list — the actual gate for the AKS page — takes ~18s cold on a large cluster.
+ * So the card walks checking → connecting (ping OK, listing namespaces) →
+ * connected (list resolved), and reports degraded when the cluster answers the
+ * ping but can't enumerate namespaces.
+ */
+export function deriveAksConnectivity(
+    input: AksConnectivityInput,
+): AksConnectivity {
+    if (!input.configured) {
+        return { connectivity: "not-configured", connected: null };
+    }
+    if (!input.probing) {
+        return { connectivity: "on-demand", connected: null };
+    }
+    if (input.testPending) {
+        return { connectivity: "checking", connected: null };
+    }
+    if (input.testConnected === false) {
+        return {
+            connectivity: "unavailable",
+            connected: false,
+            detail: input.testDetail,
+        };
+    }
+    if (input.namespacesError != null) {
+        return {
+            connectivity: "degraded",
+            connected: false,
+            detail: input.namespacesError,
+        };
+    }
+    if (input.namespacesPending) {
+        return {
+            connectivity: "connecting",
+            connected: null,
+            detail: "Loading namespaces…",
+        };
+    }
+    return {
+        connectivity: "connected",
+        connected: true,
+        detail:
+            input.namespaceCount != null
+                ? `${input.namespaceCount} namespaces`
+                : undefined,
+    };
+}
+
+/**
+ * Live connectivity for the *probed* services — Service Bus, Storage, and AKS
+ * (AKS only while startup warm-up is on; its namespaces query shares the
+ * warm-up's query key, so the card piggybacks on the same in-flight request).
+ * SQL and Redis are on-demand connections: nothing keeps them open, so the
+ * dashboard lists what's configured without firing per-entity test calls that
+ * would only ever report "you haven't connected yet".
  */
 export function useServiceHealth(): Record<string, ServiceHealth> {
     const { data: profile } = useProfile();
     const { data: demoMode } = useDemoMode();
+    const { data: settings } = useUserSettings();
     const isDemo = demoMode?.isDemoMode ?? false;
 
     const sbNamespaces = useMemo(
@@ -80,28 +150,31 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
         () => profile?.config.sqlConfig?.connections ?? [],
         [profile],
     );
-    const aksConfigured = isDemo || !!profile?.config.aksConfig;
 
-    const aksHealth = useAksTestConnection({ enabled: aksConfigured });
+    // Warm-up off = no early cluster calls at all, so AKS gets the same neutral
+    // "on-demand" state as SQL/Redis until the user actually opens the page.
+    // Demo mode included: the toggle means "no startup calls", whatever answers them.
+    const warmupOn =
+        settings != null && settings.warmupConnectionsOnStartup !== false;
+    const aksConfigured = isDemo || !!profile?.config.aksConfig;
+    const aksProbing = aksConfigured && warmupOn;
+
+    const aksHealth = useAksTestConnection({ enabled: aksProbing });
+    const aksNamespaces = useAksNamespaces(
+        aksProbing && aksHealth.data?.connected === true,
+    );
 
     const sbQueries = useQueries({
         queries: sbNamespaces.map((ns) => ({
             queryKey: ["sb-test", ns.id],
             queryFn: ({ signal }: { signal: AbortSignal }) =>
-                apiFetch<ConnectionTestResult>(`/api/servicebus/${ns.id}/test`, {
-                    signal,
-                }),
+                apiFetch<ConnectionTestResult>(
+                    `/api/servicebus/${ns.id}/test`,
+                    {
+                        signal,
+                    },
+                ),
             staleTime: 30_000,
-        })),
-    });
-
-    const redisQueries = useQueries({
-        queries: redisCaches.map((cache) => ({
-            queryKey: ["redis", cache.id, "info"],
-            queryFn: ({ signal }: { signal: AbortSignal }) =>
-                apiFetch<RedisServerInfo>(`/api/redis/${cache.id}/info`, {
-                    signal,
-                }),
         })),
     });
 
@@ -116,48 +189,18 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
         })),
     });
 
-    const sqlQueries = useQueries({
-        queries: sqlConnections.map((conn) => ({
-            queryKey: ["sql", conn.id, "test"],
-            queryFn: ({ signal }: { signal: AbortSignal }) =>
-                apiFetch<ConnectionTestResult>(`/api/sql/${conn.id}/test`, { signal }),
-            retry: false,
-        })),
-    });
-
     return useMemo(() => {
-        const sbEntities: ServiceEntityHealth[] = sbNamespaces.map(
-            (ns, i) => ({
-                id: ns.id,
-                label: ns.alias || ns.fullyQualifiedNamespace,
-                connected: sbQueries[i].isPending
-                    ? null
-                    : (sbQueries[i].data?.connected ?? false),
-                detail:
-                    sbQueries[i].data?.connected === false
-                        ? (sbQueries[i].data.detail ??
-                          sbQueries[i].data.error)
-                        : undefined,
-            }),
-        );
-        const redisEntities: ServiceEntityHealth[] = redisCaches.map(
-            (cache, i) => {
-                const info = redisQueries[i].data;
-                return {
-                    id: cache.id,
-                    label: cache.displayName || cache.cacheName,
-                    connected: redisQueries[i].isPending
-                        ? null
-                        : info != null,
-                    detail: info
-                        ? `${(info.keyspaceHitRatio * 100).toFixed(1)}% hit`
-                        : (redisQueries[i].error instanceof Error
-                              ? redisQueries[i].error.message
-                              : undefined),
-                    hitRatio: info?.keyspaceHitRatio,
-                };
-            },
-        );
+        const sbEntities: ServiceEntityHealth[] = sbNamespaces.map((ns, i) => ({
+            id: ns.id,
+            label: ns.alias || ns.fullyQualifiedNamespace,
+            connected: sbQueries[i].isPending
+                ? null
+                : (sbQueries[i].data?.connected ?? false),
+            detail:
+                sbQueries[i].data?.connected === false
+                    ? (sbQueries[i].data.detail ?? sbQueries[i].data.error)
+                    : undefined,
+        }));
         const storageEntities: ServiceEntityHealth[] = storageAccounts.map(
             (account, i) => ({
                 id: account.id,
@@ -167,39 +210,57 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
                     : storageQueries[i].data != null,
                 detail: storageQueries[i].data
                     ? `${storageQueries[i].data.length} containers`
-                    : (storageQueries[i].error instanceof Error
-                          ? storageQueries[i].error.message
-                          : undefined),
-            }),
-        );
-        const sqlEntities: ServiceEntityHealth[] = sqlConnections.map(
-            (conn, i) => ({
-                id: conn.id,
-                label:
-                    conn.displayName || `${conn.server}/${conn.database}`,
-                connected: sqlQueries[i].isPending
-                    ? null
-                    : (sqlQueries[i].data?.connected ?? false),
-                detail:
-                    sqlQueries[i].data?.connected === false
-                        ? (sqlQueries[i].data.detail ??
-                          sqlQueries[i].data.error)
-                        : undefined,
+                    : storageQueries[i].error instanceof Error
+                      ? storageQueries[i].error.message
+                      : undefined,
             }),
         );
 
+        // On-demand services: entity names still list on the card, always with
+        // the neutral "never probed" dot — `connected` stays null by design.
+        const redisEntities: ServiceEntityHealth[] = redisCaches.map(
+            (cache) => ({
+                id: cache.id,
+                label: cache.displayName || cache.cacheName,
+                connected: null,
+            }),
+        );
+        const sqlEntities: ServiceEntityHealth[] = sqlConnections.map(
+            (conn) => ({
+                id: conn.id,
+                label: conn.displayName || `${conn.server}/${conn.database}`,
+                connected: null,
+            }),
+        );
+
+        const aks = deriveAksConnectivity({
+            configured: aksConfigured,
+            probing: aksProbing,
+            testPending: aksProbing && aksHealth.isPending,
+            // A transport-level failure (query error, not a `connected:false`
+            // payload) is a failed test too — otherwise the card would sit on
+            // "connecting" forever since the namespaces query never enables.
+            testConnected: aksHealth.error ? false : aksHealth.data?.connected,
+            testDetail:
+                aksHealth.data?.connected === false
+                    ? (aksHealth.data.detail ?? aksHealth.data.error)
+                    : aksHealth.error instanceof Error
+                      ? aksHealth.error.message
+                      : undefined,
+            namespacesPending: aksNamespaces.isPending,
+            namespacesError:
+                aksNamespaces.error instanceof Error
+                    ? aksNamespaces.error.message
+                    : undefined,
+            namespaceCount: aksNamespaces.data?.length,
+        });
         const aksEntity: ServiceEntityHealth = {
             id: "cluster",
             label:
                 profile?.config.aksConfig?.kubeconfigContext ??
                 "Current context",
-            connected: aksHealth.isPending
-                ? null
-                : (aksHealth.data?.connected ?? false),
-            detail:
-                aksHealth.data?.connected === false
-                    ? (aksHealth.data.detail ?? aksHealth.data.error)
-                    : undefined,
+            connected: aks.connected,
+            detail: aks.detail,
         };
 
         return {
@@ -214,16 +275,15 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
             },
             aks: {
                 key: "aks",
-                connectivity: summarize(aksConfigured, [aksEntity], isDemo),
+                connectivity: aks.connectivity,
                 entities: aksConfigured ? [aksEntity] : [],
             },
             redis: {
                 key: "redis",
-                connectivity: summarize(
-                    isDemo || redisCaches.length > 0,
-                    redisEntities,
-                    isDemo,
-                ),
+                connectivity:
+                    isDemo || redisCaches.length > 0
+                        ? "on-demand"
+                        : "not-configured",
                 entities: redisEntities,
             },
             storage: {
@@ -237,11 +297,10 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
             },
             sql: {
                 key: "sql",
-                connectivity: summarize(
-                    isDemo || sqlConnections.length > 0,
-                    sqlEntities,
-                    isDemo,
-                ),
+                connectivity:
+                    isDemo || sqlConnections.length > 0
+                        ? "on-demand"
+                        : "not-configured",
                 entities: sqlEntities,
             },
         };
@@ -251,11 +310,14 @@ export function useServiceHealth(): Record<string, ServiceHealth> {
         storageAccounts,
         sqlConnections,
         sbQueries,
-        redisQueries,
         storageQueries,
-        sqlQueries,
+        aksProbing,
         aksHealth.isPending,
         aksHealth.data,
+        aksHealth.error,
+        aksNamespaces.isPending,
+        aksNamespaces.error,
+        aksNamespaces.data,
         aksConfigured,
         isDemo,
         profile,

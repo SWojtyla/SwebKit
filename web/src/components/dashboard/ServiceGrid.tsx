@@ -1,7 +1,5 @@
 import { useNavigate } from "react-router";
 import {
-    AlertCircle,
-    CheckCircle2,
     Database,
     FolderOpen,
     Loader2,
@@ -10,41 +8,69 @@ import {
     PinOff,
     Ship,
     Table2,
-    XCircle,
 } from "lucide-react";
-import {
-    useProfile,
-    useTogglePinnedResource,
-} from "@/lib/hooks";
+import { useProfile, useTogglePinnedResource } from "@/lib/hooks";
 import type { FavoriteResource } from "@/lib/types";
 import type { ServiceConnectivity, ServiceHealth } from "./useServiceHealth";
 
+// Status pill per connectivity state, on the shared state vocabulary
+// (done / needs / blocked / working / queued) so every theme colours it.
 const STATUS_META: Record<
     ServiceConnectivity,
     { label: string; className: string }
 > = {
-    "not-configured": { label: "Not configured", className: "text-muted-foreground" },
-    checking: { label: "Checking…", className: "text-muted-foreground" },
-    connected: { label: "Connected", className: "text-success" },
-    degraded: { label: "Degraded", className: "text-warning" },
-    unavailable: { label: "Unavailable", className: "text-destructive" },
+    "not-configured": {
+        label: "Not configured",
+        className: "bg-state-queued-soft text-state-queued-ink",
+    },
+    "on-demand": {
+        label: "On demand",
+        className: "bg-state-queued-soft text-state-queued-ink",
+    },
+    checking: {
+        label: "Checking…",
+        className: "bg-state-working-soft text-state-working-ink",
+    },
+    connecting: {
+        label: "Connecting…",
+        className: "bg-state-working-soft text-state-working-ink",
+    },
+    connected: {
+        label: "Connected",
+        className: "bg-state-done-soft text-state-done-ink",
+    },
+    degraded: {
+        label: "Degraded",
+        className: "bg-state-needs-soft text-state-needs-ink",
+    },
+    unavailable: {
+        label: "Unavailable",
+        className: "bg-state-blocked-soft text-state-blocked-ink",
+    },
 };
 
-function StatusIcon({ status }: { status: ServiceConnectivity }) {
-    switch (status) {
-        case "connected":
-            return <CheckCircle2 className="h-4 w-4 text-success" />;
-        case "degraded":
-            return <AlertCircle className="h-4 w-4 text-warning" />;
-        case "unavailable":
-            return <XCircle className="h-4 w-4 text-destructive" />;
-        case "checking":
-            return (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            );
-        default:
-            return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
-    }
+function StatusBadge({
+    status,
+    testId,
+}: {
+    status: ServiceConnectivity;
+    testId: string;
+}) {
+    const { label, className } = STATUS_META[status];
+    const busy = status === "checking" || status === "connecting";
+    return (
+        <span
+            className={`inline-flex h-[22px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs font-semibold ${className}`}
+            data-testid={testId}
+        >
+            {busy ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+            )}
+            {label}
+        </span>
+    );
 }
 
 interface ServiceDef {
@@ -138,123 +164,119 @@ export function ServiceGrid({
 
     return (
         <div data-testid="health-tiles">
-        <div
-            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-            data-testid="service-cards"
-        >
-            {SERVICES.map((service) => {
-                const svc = health[service.key];
-                const status = svc?.connectivity ?? "checking";
-                const entities = svc?.entities ?? [];
-                const configured = status !== "not-configured";
-                const Icon = service.icon;
-                const pinned = isPinned(service.key);
-                const countLabel =
-                    service.key === "aks"
-                        ? configured
-                            ? "Cluster configured"
-                            : service.emptyHint
-                        : `${entities.length} ${countUnit(service.key, entities.length)}`;
+            <div
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                data-testid="service-cards"
+            >
+                {SERVICES.map((service) => {
+                    const svc = health[service.key];
+                    const status = svc?.connectivity ?? "checking";
+                    const entities = svc?.entities ?? [];
+                    const configured = status !== "not-configured";
+                    const Icon = service.icon;
+                    const pinned = isPinned(service.key);
+                    const countLabel =
+                        service.key === "aks"
+                            ? configured
+                                ? "Cluster configured"
+                                : service.emptyHint
+                            : `${entities.length} ${countUnit(service.key, entities.length)}`;
 
-                return (
-                    <div
-                        key={service.key}
-                        role="link"
-                        tabIndex={0}
-                        onClick={() => navigate(service.to)}
-                        onKeyDown={(e) =>
-                            e.key === "Enter" && navigate(service.to)
-                        }
-                        className="glass-card relative cursor-pointer rounded-xl p-4 transition-all hover:border-primary hover:shadow-md"
-                        data-testid={`service-card-${service.key}`}
-                    >
-                        <button
-                            type="button"
-                            aria-label={
-                                pinned
-                                    ? `Unpin ${service.name}`
-                                    : `Pin ${service.name} to dashboard`
-                            }
-                            title={
-                                pinned
-                                    ? "Unpin from dashboard"
-                                    : "Pin to dashboard"
-                            }
-                            data-testid={`pin-resource-${service.key}`}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handlePin(service);
-                            }}
-                            disabled={togglePinned.isPending}
-                            className={`absolute right-3 top-3 rounded-md p-1.5 transition-colors hover:bg-accent ${pinned ? "text-primary" : "text-muted-foreground"}`}
-                        >
-                            {pinned ? (
-                                <PinOff className="h-4 w-4" />
-                            ) : (
-                                <Pin className="h-4 w-4" />
-                            )}
-                        </button>
-
-                        <div className="flex items-center gap-3 pr-8">
-                            <Icon className="h-6 w-6 text-primary" />
-                            <div className="min-w-0">
-                                <h3 className="font-semibold">
-                                    {service.name}
-                                </h3>
-                                <p className="truncate text-xs text-muted-foreground">
-                                    {countLabel}
-                                </p>
-                            </div>
-                        </div>
-
+                    return (
                         <div
-                            className="mt-3 flex items-center gap-2 text-xs"
-                            data-testid={`health-tile-${service.key}`}
+                            key={service.key}
+                            role="link"
+                            tabIndex={0}
+                            onClick={() => navigate(service.to)}
+                            onKeyDown={(e) =>
+                                e.key === "Enter" && navigate(service.to)
+                            }
+                            className="glass-card relative cursor-pointer rounded-xl p-4 transition-all hover:-translate-y-px hover:border-border-strong hover:shadow-md"
+                            data-testid={`service-card-${service.key}`}
                         >
-                            <StatusIcon status={status} />
-                            <span className={STATUS_META[status].className}>
-                                {STATUS_META[status].label}
-                            </span>
-                        </div>
-
-                        {configured && entities.length > 0 && (
-                            <ul className="mt-2 space-y-1">
-                                {entities.slice(0, 4).map((entity) => (
-                                    <li
-                                        key={entity.id}
-                                        className="flex items-center gap-1.5 truncate text-xs text-muted-foreground"
-                                        title={entity.label}
-                                    >
-                                        <span
-                                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                                entity.connected === null
-                                                    ? "bg-muted-foreground"
-                                                    : entity.connected
-                                                      ? "bg-success"
-                                                      : "bg-destructive"
-                                            }`}
-                                        />
-                                        <span className="truncate">
-                                            {entity.label}
-                                        </span>
-                                        {entity.detail && (
-                                            <span className="shrink-0 text-muted-foreground/70">
-                                                · {entity.detail}
-                                            </span>
-                                        )}
-                                    </li>
-                                ))}
-                                {entities.length > 4 && (
-                                    <li className="text-xs text-primary">
-                                        +{entities.length - 4} more
-                                    </li>
+                            <button
+                                type="button"
+                                aria-label={
+                                    pinned
+                                        ? `Unpin ${service.name}`
+                                        : `Pin ${service.name} to dashboard`
+                                }
+                                title={
+                                    pinned
+                                        ? "Unpin from dashboard"
+                                        : "Pin to dashboard"
+                                }
+                                data-testid={`pin-resource-${service.key}`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handlePin(service);
+                                }}
+                                disabled={togglePinned.isPending}
+                                className={`absolute right-3 top-3 rounded-md p-1.5 transition-colors hover:bg-accent ${pinned ? "text-primary" : "text-muted-foreground"}`}
+                            >
+                                {pinned ? (
+                                    <PinOff className="h-4 w-4" />
+                                ) : (
+                                    <Pin className="h-4 w-4" />
                                 )}
-                            </ul>
-                        )}
-                    </div>
-                );
-            })}
-        </div>
+                            </button>
+
+                            <div className="flex items-center gap-3 pr-8">
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-icon-tile text-icon-tile-ink">
+                                    <Icon className="h-[18px] w-[18px]" />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <h3 className="font-semibold">
+                                        {service.name}
+                                    </h3>
+                                    <p className="truncate text-xs text-muted-foreground">
+                                        {countLabel}
+                                    </p>
+                                </div>
+                                <StatusBadge
+                                    status={status}
+                                    testId={`health-tile-${service.key}`}
+                                />
+                            </div>
+
+                            {configured && entities.length > 0 && (
+                                <ul className="mt-3 space-y-1">
+                                    {entities.slice(0, 4).map((entity) => (
+                                        <li
+                                            key={entity.id}
+                                            className="flex items-center gap-1.5 truncate text-xs text-muted-foreground"
+                                            title={entity.label}
+                                        >
+                                            <span
+                                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                                    entity.connected === null
+                                                        ? "bg-muted-foreground"
+                                                        : entity.connected
+                                                          ? "bg-success"
+                                                          : "bg-destructive"
+                                                }`}
+                                            />
+                                            <span className="truncate">
+                                                {entity.label}
+                                            </span>
+                                            {entity.detail && (
+                                                <span className="shrink-0 text-muted-foreground/70">
+                                                    · {entity.detail}
+                                                </span>
+                                            )}
+                                        </li>
+                                    ))}
+                                    {entities.length > 4 && (
+                                        <li className="text-xs text-primary">
+                                            +{entities.length - 4} more
+                                        </li>
+                                    )}
+                                </ul>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 }

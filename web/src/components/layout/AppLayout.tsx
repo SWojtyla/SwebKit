@@ -1,4 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+    useState,
+    useEffect,
+    useCallback,
+    useRef,
+    lazy,
+    Suspense,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router";
 import {
@@ -28,8 +35,8 @@ import { CommandPalette } from "./CommandPalette";
 import { PinnedRail } from "./PinnedRail";
 import { setNotificationBellSlot } from "./notification-bell-slot";
 import { EnvironmentBadge } from "./EnvironmentBadge";
+import { DuckMark } from "./DuckMark";
 import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
-import { GlobalAgentPanel } from "@/components/agent/GlobalAgentPanel";
 import { DemoTour } from "./DemoTour";
 import {
     useDemoMode,
@@ -47,7 +54,14 @@ import {
 } from "@/lib/stores/panel-preferences";
 import { notifyScreenRouteChanged } from "@/lib/stores/screen-state";
 import { initDeepLinks, type DeepLinkContext } from "@/lib/deep-links";
-import { useSettingsStore, migrateTheme } from "@/lib/stores/settings";
+import {
+    useSettingsStore,
+    migrateTheme,
+    isDarkTheme,
+    isDuckTheme,
+    THEME_LABELS,
+    BOOT_FONT_SIZE_PREF,
+} from "@/lib/stores/settings";
 import { useAgentPanelStore } from "@/lib/stores/agent-panel";
 import { useMonitoringStream } from "@/lib/hooks/useMonitoring";
 import {
@@ -78,6 +92,14 @@ const navItems = [
     { to: "/settings", label: "Settings", icon: Settings },
 ];
 
+// Loaded on first open, then kept mounted (it owns the global conversation's stream): until then
+// the markdown stack stays out of the startup chunk and its agent status/permission polls don't run.
+const GlobalAgentPanel = lazy(() =>
+    import("@/components/agent/GlobalAgentPanel").then((m) => ({
+        default: m.GlobalAgentPanel,
+    })),
+);
+
 export function AppLayout() {
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -87,6 +109,8 @@ export function AppLayout() {
     const agentPanelOpen = useAgentPanelStore((s) => s.open);
     const setAgentPanelOpen = useAgentPanelStore((s) => s.setOpen);
     const toggleAgentPanel = useAgentPanelStore((s) => s.toggle);
+    const [agentPanelMounted, setAgentPanelMounted] = useState(agentPanelOpen);
+    if (agentPanelOpen && !agentPanelMounted) setAgentPanelMounted(true);
     const navigate = useNavigate();
     const location = useLocation();
     const onAgentPage = location.pathname === "/agent";
@@ -166,8 +190,9 @@ export function AppLayout() {
             medium: "16px",
             large: "18px",
         };
-        document.documentElement.style.fontSize =
-            fontSizeMap[userSettings.fontSize] ?? "16px";
+        const fontSize = fontSizeMap[userSettings.fontSize] ?? "16px";
+        document.documentElement.style.fontSize = fontSize;
+        saveViewPreference(BOOT_FONT_SIZE_PREF, fontSize);
         document.documentElement.dataset.density =
             userSettings.density ?? "comfortable";
     }, [userSettings]);
@@ -391,17 +416,14 @@ export function AppLayout() {
                 (a) => a.state === "unavailable" || a.state === "degraded",
             )
           ? "bad"
-          : areaHealth.some((a) => a.state === "checking")
+          : areaHealth.some(
+                  (a) => a.state === "checking" || a.state === "connecting",
+              )
             ? "warn"
             : "ok";
 
-    const isDarkTheme = theme === "dark" || theme === "clay-dark";
-    const themeLabel = {
-        light: "Aurora Light",
-        dark: "Aurora Dark",
-        clay: "Clay Light",
-        "clay-dark": "Clay Dark",
-    }[theme];
+    const darkTheme = isDarkTheme(theme);
+    const themeLabel = THEME_LABELS[theme];
 
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
@@ -452,16 +474,22 @@ export function AppLayout() {
     return (
         <div className="aurora-bg theme-transition flex h-screen w-screen overflow-hidden bg-background text-foreground">
             <aside
-                className={`flex flex-col bg-sidebar transition-all duration-200 ${navCollapsed ? "w-14" : "w-[232px]"}`}
+                className={`shell-sidebar flex flex-col bg-sidebar transition-all duration-200 ${navCollapsed ? "w-14" : "w-[232px]"}`}
                 style={{ borderRight: "var(--shell-sidebar-edge)" }}
             >
                 <div className="flex h-12 items-center gap-2 px-3">
-                    <div
-                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-primary text-primary-foreground"
-                        title="SwebKit"
-                    >
-                        <Layers className="h-3 w-3" />
-                    </div>
+                    {isDuckTheme(theme) ? (
+                        <span title="SwebKit" data-testid="duck-mark">
+                            <DuckMark className="h-6 w-6 shrink-0" />
+                        </span>
+                    ) : (
+                        <div
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-primary text-primary-foreground"
+                            title="SwebKit"
+                        >
+                            <Layers className="h-3 w-3" />
+                        </div>
+                    )}
                     {!navCollapsed && (
                         <span className="font-display text-base font-semibold tracking-tight">
                             SwebKit
@@ -552,7 +580,7 @@ export function AppLayout() {
                             data-testid="theme-toggle"
                             title={`Theme: ${themeLabel}`}
                         >
-                            {isDarkTheme ? (
+                            {darkTheme ? (
                                 <Sun className="h-4 w-4" />
                             ) : (
                                 <Moon className="h-4 w-4" />
@@ -661,7 +689,9 @@ export function AppLayout() {
                                                 const stateLabel = {
                                                     "not-configured":
                                                         "Not configured",
+                                                    "on-demand": "On demand",
                                                     checking: "Checking",
+                                                    connecting: "Connecting",
                                                     connected: "Connected",
                                                     degraded: "Degraded",
                                                     unavailable: "Unavailable",
@@ -671,10 +701,14 @@ export function AppLayout() {
                                                         ? "fill-success text-success"
                                                         : state ===
                                                                 "checking" ||
+                                                            state ===
+                                                                "connecting" ||
                                                             state === "degraded"
                                                           ? "fill-warning text-warning"
                                                           : state ===
-                                                              "not-configured"
+                                                                  "not-configured" ||
+                                                              state ===
+                                                                  "on-demand"
                                                             ? "fill-muted-foreground text-muted-foreground"
                                                             : "fill-destructive text-destructive";
 
@@ -755,20 +789,24 @@ export function AppLayout() {
                 <main
                     className="flex-1 overflow-auto"
                     style={{
-                        margin: 'var(--shell-sheet-margin)',
-                        background: 'var(--shell-sheet-bg)',
-                        borderRadius: 'var(--shell-sheet-radius)',
-                        boxShadow: 'var(--shell-sheet-shadow)',
+                        margin: "var(--shell-sheet-margin)",
+                        background: "var(--shell-sheet-bg)",
+                        borderRadius: "var(--shell-sheet-radius)",
+                        boxShadow: "var(--shell-sheet-shadow)",
                     }}
                 >
                     <Outlet />
                 </main>
             </div>
 
-            <GlobalAgentPanel
-                open={agentPanelOpen}
-                onClose={() => setAgentPanelOpen(false)}
-            />
+            {agentPanelMounted && (
+                <Suspense fallback={null}>
+                    <GlobalAgentPanel
+                        open={agentPanelOpen}
+                        onClose={() => setAgentPanelOpen(false)}
+                    />
+                </Suspense>
+            )}
 
             <CommandPalette
                 open={paletteOpen}

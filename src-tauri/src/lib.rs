@@ -89,11 +89,12 @@ pub fn run() {
                     }
                 }
             }
-            // Spawn failure is not fatal — manage() degrades to port 0 and retries
+            // Returns immediately: the sidecar boots on a background thread so the
+            // webview loads in parallel with .NET's cold start (get_sidecar_port waits
+            // for it). Spawn failure is not fatal — it degrades to port 0 and retries
             // in the background rather than panicking during setup (a panic here is
             // a silent crash in a windows_subsystem="windows" build with no console).
-            let state = sidecar::manage(handle)?;
-            app.manage(state);
+            sidecar::manage(handle);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

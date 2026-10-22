@@ -75,6 +75,17 @@ returns a `SidecarState` with `port = 0`, the frontend falls into its existing "
 usual `sidecar-*` lifecycle events. Also make READY*TIMEOUTs generous — the failure cost is an app
 that \_looks* dead, not a slow start.
 
+### `.setup()` and sync commands run on the event-loop thread — never block them
+
+`setup()` and every plain `fn` `#[tauri::command]` run on the main thread. `manage()` used to wait
+for Kestrel's "Now listening" inside `setup()`, so the webview could not even start loading until
+.NET had finished its cold start; `restart_sidecar` and `start_port_forward` froze the whole UI for
+up to 60s/30s the same way. Now `manage()` registers `SidecarState` with `port = 0` and boots on a
+background thread, `get_sidecar_port` is `async` and waits on a `BootGate` latch (so
+`initSidecarBaseUrl()` still gets the real port first try), and blocking commands are `async fn`
+wrapping their body in `tauri::async_runtime::spawn_blocking`. A spawn that completes after app exit
+goes through `store_spawned`, which kills it instead of storing it.
+
 ### `AllowedRoots` is in-memory, so a persisted path is not an authorized path
 
 `AllowedRoots` is populated _only_ by the native `pick_file`/`pick_directory` dialogs — that is what
@@ -244,14 +255,62 @@ a captured base is correct there.
 
 Without it, dragging a divider selects the text underneath it.
 
+### Sidecar-held appearance flashes the default first — mirror it for pre-paint
+
+The theme and font size live in the sidecar's `user-settings.json`, which only arrives after the
+sidecar port resolves and the settings query answers — every launch painted the `dark` default and
+then switched. `applyThemeClass` and AppLayout's font-size effect now mirror the values to
+`view-pref:boot-theme` / `view-pref:boot-font-size`, and `public/boot-appearance.js` (a classic
+script in `<head>`, so it runs before the body paints and satisfies `script-src 'self'`) applies
+them. The settings store starts from the same mirror; the hydration effect only corrects it when
+the file disagrees (first run, edited elsewhere). Keep the boot script's class mapping in step with
+`applyThemeClass`.
+
 ### Theme ids are a closed set — migrate at hydration, not at render
 
-Only four themes exist: `light`/`dark` (Aurora) and `clay`/`clay-dark`, applied as classes on
-`<html>` (`dark`, `clay`, `clay dark`). Retired ids must be mapped by `migrateTheme` in
+Only six themes exist: `light`/`dark` (Aurora), `clay`/`clay-dark` and `duck`/`duck-dark` (Duck
+Light / Mallard Dark), applied as classes on `<html>` (`dark`, `clay`, `clay dark`, `duck`,
+`duck dark`). The id → classes table is `THEME_DOM_CLASSES` in `lib/stores/settings.ts`; use its
+`isDarkTheme` / `isDuckTheme` helpers instead of comparing ids. Retired ids must be mapped by `migrateTheme` in
 `lib/stores/settings.ts` **when the persisted store hydrates** — if components render with the raw
 stored value, a stale `liquid-glass` arrives as an unstyled flash and hydration then snaps the theme
 under the user's feet. Legacy utility names still resolve through the bridge block in
 `globals.css`, so untouched components keep working — but don't add new uses of them.
+
+### A family block must restate every token its sibling mode sets
+
+`.duck` and `.clay` come after `.dark` in `globals.css` with the same specificity, so under
+`.duck.dark` any token the `.duck.dark` block leaves out falls back to its *light* value, not
+Aurora Dark's. When adding a token to one mode of a family, add it to the other mode too.
+
+### Re-theming a subtree means restating the bridge tokens
+
+Custom properties inherit the value computed on `<html>`, not the `var()` expression: overriding
+`--text` inside an element does not change `--foreground` there, because `--foreground: var(--text)`
+was already resolved at the root. Duck Light's dark-blue sidebar (`.duck:not(.dark) .shell-sidebar`)
+therefore restates `--foreground`, `--muted-foreground`, `--popover`, `--card` and friends next to
+the base tokens. Duck's yellow `--primary` is also unreadable as text on white, so `.duck
+.text-primary` is re-pointed to `--pond-ink` while `bg-primary` stays yellow.
+
+## Render cost
+
+### A context value built inline re-renders every consumer on every provider render
+
+`NotificationProvider` passed `value={{ notify, notifications, dismiss }}` with `notify`/`dismiss`
+recreated each render, so every toast, dedupe bump and auto-dismiss re-rendered all ~100
+`useNotification()` consumers and invalidated every `useCallback` depending on `notify` (AppLayout
+re-subscribed its Tauri listeners per toast). Providers with many consumers memoize the value and
+keep callbacks stable (`useCallback` over refs and setters); don't put state no consumer reads into
+the value.
+
+### An always-mounted panel still loads its bundle and runs its polls while closed
+
+A panel that returns `null` when closed still runs its hooks. `GlobalAgentPanel` sat in the startup
+chunk (react-markdown with it) and polled agent status/permissions every 5s while hidden. Lazy-load
+such panels and mount them on first open (then keep them mounted if they own state like a stream).
+Likewise memoize per-item renderers in streamed lists (`AgentMarkdown`) and large grids
+(`ResultsGrid`'s `ResultRow`), and skip auto-refresh ticks while `document.visibilityState` is
+`hidden`.
 
 ## TanStack Query
 
@@ -353,6 +412,23 @@ itself off after exactly one page.
 moment ago is not in this render's snapshot yet — so the guard cancelled exactly the moves that
 needed the fresh data. Detect the no-op inside the updater, where the data is current, and let a
 genuinely redundant write be a redundant write.
+
+### A status badge must derive from the feature's readiness signal, not from "some endpoint answered"
+
+`useServiceHealth` (mounted app-wide in `AppLayout`, so it feeds both the dashboard
+cards and the header status dot) marked AKS "Connected" the moment `/api/aks/test` —
+a ~1s ping — resolved, while the namespace list the AKS page actually gates on was
+still loading for ~18s cold. It also fired one probe per configured SQL/Redis entity
+at every startup — but those are on-demand connections nothing keeps open, so the
+aggregate verdict was permanently "Unavailable"/"Degraded" and pinned the status dot
+red forever.
+
+Derive a card's verdict from the same signal the feature page needs
+(`deriveAksConnectivity` walks checking → connecting → connected; "on-demand" is the
+honest terminal state for never-probed services). To show data on a dashboard tile
+without paying for the fetch, subscribe to the shared query key with
+`enabled: false` — it renders whatever the cache already holds and re-renders on
+cache updates, but never fires the request (WatchTiles' Redis hit-rate tile).
 
 ### Query keys that omit the server-side identity serve one backend's data under another's name
 
@@ -464,6 +540,17 @@ their real `%APPDATA%\SwebKit`. A test that needs a request must create it.
 response is still on screen. Meanwhile the Send button is disabled mid-flight, so the next click is
 swallowed and the test silently exercises fewer sends than it looks like. Wait on something that
 advances — a history count, a new row — not on a value that is already there.
+
+### A `$`-anchored URL assertion rejects params the page legitimately appends
+
+`toHaveURL(/\/aks$/)` in the demo-tour spec flaked: the AKS workspace restores a
+persisted/defaulted namespace selection into the URL (`?ns=ecommerce`) as soon as
+the warmed namespace list is in cache — which is right at mount, still inside the
+assertion window. The page behaving correctly is what fails the test. Assert the
+route loosely — `/\/aks($|\?)/` — and let the page own its params.
+
+Same spec file, different flake seen once: the notification-bell test timed out on
+a `pinned-rail-item` boundingBox; rerun passed — timing, not the pin flow.
 
 ### A `.last()` locator resolves at action time, not at assertion time
 

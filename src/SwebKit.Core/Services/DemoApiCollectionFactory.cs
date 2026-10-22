@@ -609,11 +609,11 @@ public static class DemoApiCollectionFactory
         folder.Children.Add(CreateChainGetTokenRequest());
         folder.Children.Add(CreateChainListOrdersRequest());
 
-        // Named-chain demo steps (api-request-chains): create → read → delete a JSONPlaceholder
+        // Named-chain demo steps (api-request-chains): create → update → delete a JSONPlaceholder
         // post, where the create captures $.id into demoPostId and the follow-ups read it through
         // the run-scoped variable overlay via {{demoPostId}}.
         folder.Children.Add(CreateChainCreatePostRequest());
-        folder.Children.Add(CreateChainGetCapturedPostRequest());
+        folder.Children.Add(CreateChainUpdateCapturedPostRequest());
         folder.Children.Add(CreateChainDeleteCapturedPostRequest());
 
         return folder;
@@ -719,22 +719,34 @@ public static class DemoApiCollectionFactory
         };
     }
 
-    private static ApiCollectionNode CreateChainGetCapturedPostRequest()
+    /// <summary>
+    /// PATCH, not GET: JSONPlaceholder fakes the create (it answers id 101 but stores nothing), so
+    /// reading the captured id back is always a 404 that stops the run. PATCH and DELETE accept
+    /// any id, which keeps every step of the demo green while still showing the hand-off.
+    /// </summary>
+    private static ApiCollectionNode CreateChainUpdateCapturedPostRequest()
     {
         return new ApiCollectionNode
         {
-            Id = "__demo__chain_get_post",
-            Name = "GET /posts/{{demoPostId}}",
+            Id = "__demo__chain_update_post",
+            Name = "PATCH /posts/{{demoPostId}}",
             Type = ApiCollectionNodeType.Request,
             Request = new HttpRequestEntry
             {
-                Id = "__demo__chain_get_post",
-                Name = "Get captured post",
-                Method = ApiRequestMethod.Get,
+                Id = "__demo__chain_update_post",
+                Name = "Update captured post",
+                Method = ApiRequestMethod.Patch,
                 Url = "https://jsonplaceholder.typicode.com/posts/{{demoPostId}}",
                 Headers = new List<KeyValuePair<string>>
                 {
+                    new KeyValuePair<string> { Key = "Content-Type", Value = "application/json" },
                     new KeyValuePair<string> { Key = "Accept", Value = "application/json" }
+                },
+                Body = new RequestBody
+                {
+                    Mode = RequestBodyMode.Json,
+                    ContentType = "application/json",
+                    RawContent = "{\n  \"title\": \"swebkit demo post (updated)\"\n}"
                 },
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow
@@ -769,7 +781,7 @@ public static class DemoApiCollectionFactory
 
     /// <summary>
     /// The demo named chain overlaid onto the chains list in demo mode (api-request-chains):
-    /// JSONPlaceholder create → read → delete, where the create step's capture rule feeds
+    /// JSONPlaceholder create → update → delete, where the create step's capture rule feeds
     /// <c>demoPostId</c> into the run-scoped overlay the later steps' URLs resolve against.
     /// </summary>
     public static ApiChain CreateDemoChain()
@@ -778,11 +790,11 @@ public static class DemoApiCollectionFactory
         {
             Id = DemoChainId,
             Name = "JSONPlaceholder CRUD flow",
-            Description = "POST /posts → GET → DELETE, reusing the id captured from the create response.",
+            Description = "POST /posts → PATCH → DELETE, reusing the id captured from the create response.",
             Steps =
             [
                 new ApiChainStep { Id = "__demo__chain_step_create", CollectionId = DemoCollectionId, RequestId = "__demo__chain_create_post" },
-                new ApiChainStep { Id = "__demo__chain_step_get", CollectionId = DemoCollectionId, RequestId = "__demo__chain_get_post" },
+                new ApiChainStep { Id = "__demo__chain_step_update", CollectionId = DemoCollectionId, RequestId = "__demo__chain_update_post" },
                 new ApiChainStep { Id = "__demo__chain_step_delete", CollectionId = DemoCollectionId, RequestId = "__demo__chain_delete_post" },
             ],
             CreatedAt = DateTimeOffset.UtcNow,

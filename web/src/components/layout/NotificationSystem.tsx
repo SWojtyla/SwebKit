@@ -1,4 +1,11 @@
-import { useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+    useCallback,
+    useMemo,
+    useRef,
+    useState,
+    useSyncExternalStore,
+    type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import {
@@ -82,7 +89,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         new Map<string, ReturnType<typeof setTimeout>>(),
     );
 
-    const dismiss = (id: string) => {
+    // `notify`/`dismiss` touch only refs and state setters, so they stay stable — the
+    // context value then never changes, and a toast doesn't re-render every consumer.
+    const dismiss = useCallback((id: string) => {
         // The delete also makes dismiss idempotent: a manual close racing the
         // auto-expire timer can't record the entry twice.
         const timer = dismissTimers.current.get(id);
@@ -98,9 +107,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             setHistory((h) => mergeIntoHistory(h, item));
         }
         setNotifications((prev) => prev.filter((n) => n.id !== id));
-    };
+    }, []);
 
-    const notify = (
+    const notify = useCallback((
         type: NotificationType,
         title: string,
         body?: string,
@@ -139,7 +148,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             id,
             setTimeout(() => dismiss(id), 5000),
         );
-    };
+    }, [dismiss]);
+
+    const contextValue = useMemo(() => ({ notify, dismiss }), [notify, dismiss]);
 
     const markRead = (id: string) =>
         setHistory((h) =>
@@ -270,9 +281,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     );
 
     return (
-        <NotificationContext.Provider
-            value={{ notify, notifications, dismiss }}
-        >
+        <NotificationContext.Provider value={contextValue}>
             {children}
             {/* Toast notifications */}
             <div

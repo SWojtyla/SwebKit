@@ -62,17 +62,18 @@ test.describe("API Client Git Panel", () => {
     await expect(page.getByTestId("api-client-git-panel")).not.toBeVisible();
   });
 
-  test("drawer leaves the app status bar visible", async ({ page }) => {
+  test("drawer stays inside the page, below the titlebar", async ({ page }) => {
     await page.goto("/api-client");
     await page.getByTestId("api-client-git-toggle").click();
 
-    // The previous fixed overlay covered the titlebar and status bar outright.
+    // The previous fixed overlay covered the titlebar outright. The footer status bar is gone
+    // (folded into the titlebar's status popover), so reaching the bottom edge is correct.
     const drawer = await page.getByTestId("api-client-git-panel").boundingBox();
     const viewport = page.viewportSize();
     expect(drawer).not.toBeNull();
     expect(viewport).not.toBeNull();
     expect(drawer!.y).toBeGreaterThan(0);
-    expect(drawer!.y + drawer!.height).toBeLessThan(viewport!.height);
+    expect(drawer!.y + drawer!.height).toBeLessThanOrEqual(viewport!.height);
   });
 });
 

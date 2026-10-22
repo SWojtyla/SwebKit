@@ -1,8 +1,8 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using SwebKit.Core.Abstractions;
 using SwebKit.Core.Configuration;
 using SwebKit.Core.Domain;
+using SwebKit.Core.Services;
 using SwebKit.Kubernetes.AksClient;
 using SwebKit.Sidecar.Endpoints;
 
@@ -20,6 +20,10 @@ namespace SwebKit.Sidecar.Services;
 /// previous behaviour) leaked one connection per invalidation. Demo-mode clients are deliberately
 /// <em>not</em> cached here: <see cref="DemoModeService"/> hands out long-lived singletons it
 /// disposes itself, and caching them would make this pool dispose something it does not own.
+/// <para>Each cache is a <see cref="SingleFlightCache{T}"/>: concurrent cold misses for one key
+/// share a single build. Building an AKS client runs kubelogin/<c>az</c> synchronously, so the
+/// alert engine and the UI's first page load each building the same client — and the loser
+/// disposing its copy — used to cost seconds of duplicate work on startup.</para>
 /// </remarks>
 public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
 {
@@ -30,9 +34,9 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
     private readonly IRedisClientFactory _redisFactory;
     private readonly ILogger<SidecarMonitoringConnectionPool> _logger;
 
-    private readonly ConcurrentDictionary<string, IAksClient> _aksCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, IServiceBusClient> _sbCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, IRedisClient> _redisCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SingleFlightCache<IAksClient> _aksCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SingleFlightCache<IServiceBusClient> _sbCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SingleFlightCache<IRedisClient> _redisCache = new(StringComparer.OrdinalIgnoreCase);
 
     public SidecarMonitoringConnectionPool(
         ProfileRepository profile,
@@ -81,11 +85,9 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
         // whitespace as "no explicit context"), silently evaluating the rule against a different
         // cluster than the pages show.
         var effectiveContext = string.IsNullOrWhiteSpace(context) ? aksConfig.KubeconfigContext : context;
-        return GetOrCreate(
-            _aksCache,
+        return _aksCache.GetOrCreate(
             effectiveContext ?? "default",
-            () => _aksFactory.Create(effectiveContext, aksConfig.KubeconfigPath),
-            "AKS");
+            () => _aksFactory.Create(effectiveContext, aksConfig.KubeconfigPath));
     }
 
     public IServiceBusClient? GetServiceBusClient(string alias)
@@ -107,13 +109,11 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
         if (ns is null)
             return null;
 
-        return GetOrCreate(
-            _sbCache,
+        return _sbCache.GetOrCreate(
             alias,
             () => ns.AuthMode == SbAuthMode.ConnectionString
                 ? _sbFactory.Create(ns.CredentialKey, ns.TransportType)
-                : _sbFactory.CreateWithEntra(ns.FullyQualifiedNamespace, ns.TransportType),
-            "Service Bus");
+                : _sbFactory.CreateWithEntra(ns.FullyQualifiedNamespace, ns.TransportType));
     }
 
     public async ValueTask<IRedisClient?> GetRedisClientAsync(string displayName, CancellationToken ct = default)
@@ -136,11 +136,10 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
             || c.Id == displayName);
         if (cache is null)
             return null;
-        if (_redisCache.TryGetValue(displayName, out var cached))
-            return cached;
-
-        var created = await _redisFactory.CreateAsync(cache, ct).ConfigureAwait(false);
-        return Publish(_redisCache, displayName, created, "Redis");
+        // The shared build runs uncancelled (other callers may be waiting on it); ct bounds only this wait.
+        return await _redisCache
+            .GetOrCreateAsync(displayName, () => _redisFactory.CreateAsync(cache, CancellationToken.None), ct)
+            .ConfigureAwait(false);
     }
 
     public void InvalidateStaleConnections()
@@ -152,16 +151,16 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
 
     public void EvictServiceBusClient(string alias)
     {
-        if (!string.IsNullOrWhiteSpace(alias) && _sbCache.TryRemove(alias, out var client))
-            DisposeEntry(client, "Service Bus", alias);
+        if (!string.IsNullOrWhiteSpace(alias) && _sbCache.TryRemove(alias, out var build))
+            DisposeWhenBuilt(build, "Service Bus", alias);
     }
 
     public void EvictAksClients() => DrainAndDispose(_aksCache, "AKS");
 
     public void EvictRedisClient(string key)
     {
-        if (!string.IsNullOrWhiteSpace(key) && _redisCache.TryRemove(key, out var client))
-            DisposeEntry(client, "Redis", key);
+        if (!string.IsNullOrWhiteSpace(key) && _redisCache.TryRemove(key, out var build))
+            DisposeWhenBuilt(build, "Redis", key);
     }
 
     public ValueTask DisposeAsync()
@@ -170,43 +169,19 @@ public sealed class SidecarMonitoringConnectionPool : IMonitoringConnectionPool
         return ValueTask.CompletedTask;
     }
 
-    /// <summary>
-    /// Caches one client per key without ever leaking a second one. <c>ConcurrentDictionary</c> has
-    /// no atomic "create exactly once" primitive — <c>GetOrAdd</c>'s factory overload can run on two
-    /// threads at once and silently discard one result — so the client is built outside the
-    /// dictionary and the loser of the race is disposed rather than orphaned.
-    /// </summary>
-    private T GetOrCreate<T>(ConcurrentDictionary<string, T> cache, string key, Func<T> factory, string kind)
+    /// <summary>Removes every entry and disposes it — now if built, or when its in-flight build
+    /// completes. Removal is per key, so exactly one caller disposes each client even under
+    /// concurrent invalidation.</summary>
+    private void DrainAndDispose<T>(SingleFlightCache<T> cache, string kind)
         where T : class
     {
-        if (cache.TryGetValue(key, out var existing))
-            return existing;
-
-        return Publish(cache, key, factory(), kind);
+        foreach (var (key, build) in cache.RemoveAll())
+            DisposeWhenBuilt(build, kind, key);
     }
 
-    /// <summary>Adds <paramref name="created"/> unless another thread got there first, in which case
-    /// the loser is disposed and the winner returned.</summary>
-    private T Publish<T>(ConcurrentDictionary<string, T> cache, string key, T created, string kind)
-        where T : class
-    {
-        var winner = cache.GetOrAdd(key, created);
-        if (!ReferenceEquals(winner, created))
-            DisposeEntry(created, kind, key);
-        return winner;
-    }
-
-    /// <summary>Removes every entry and disposes it. <c>TryRemove</c> (rather than <c>Clear</c>)
-    /// guarantees exactly one caller disposes each client even under concurrent invalidation.</summary>
-    private void DrainAndDispose<T>(ConcurrentDictionary<string, T> cache, string kind)
-        where T : class
-    {
-        foreach (var key in cache.Keys.ToArray())
-        {
-            if (cache.TryRemove(key, out var client))
-                DisposeEntry(client, kind, key);
-        }
-    }
+    private void DisposeWhenBuilt<T>(Task<T> build, string kind, string key)
+        where T : class =>
+        SingleFlightCache.WhenBuilt(build, client => DisposeEntry(client, kind, key));
 
     private void DisposeEntry(object? client, string kind, string key)
     {

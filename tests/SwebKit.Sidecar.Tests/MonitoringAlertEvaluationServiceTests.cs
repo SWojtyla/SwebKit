@@ -509,4 +509,57 @@ public class MonitoringAlertEvaluationServiceTests
             [AlertHistoryKind.Resolved, AlertHistoryKind.Suppressed],
             history.Entries.Select(e => e.Kind).ToList());
     }
+
+    [Fact]
+    public async Task HostedLoop_WaitsForTheInitialDelay_BeforeTheFirstEvaluation()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new AlertRuleRepository();
+        await repo.UpsertAsync(Rule(AlertRuleSource.AksPodHealth));
+        var source = new FakeSignalSource(AlertRuleSource.AksPodHealth);
+        var engine = new MonitoringAlertEvaluationService(
+            repo, new FakeConnectionPool(), [source], new ProfileRepository(),
+            new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(),
+            NullLogger<MonitoringAlertEvaluationService>.Instance)
+        {
+            InitialDelay = TimeSpan.FromMilliseconds(750),
+        };
+
+        await engine.StartAsync(CancellationToken.None);
+        try
+        {
+            // The UI's first page load gets a head start: no rule evaluates (and so no cold client
+            // gets built) at t=0.
+            await Task.Delay(150);
+            Assert.False(source.WasCalled);
+
+            Assert.True(SpinWait.SpinUntil(() => source.WasCalled, TimeSpan.FromSeconds(10)));
+        }
+        finally
+        {
+            await engine.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task HostedLoop_StopDuringInitialDelay_EndsPromptly_WithoutEvaluating()
+    {
+        using var _ = new AppDataSandbox();
+        var repo = new AlertRuleRepository();
+        await repo.UpsertAsync(Rule(AlertRuleSource.AksPodHealth));
+        var source = new FakeSignalSource(AlertRuleSource.AksPodHealth);
+        var engine = new MonitoringAlertEvaluationService(
+            repo, new FakeConnectionPool(), [source], new ProfileRepository(),
+            new InMemoryMonitoringSilenceRepository(), new InMemoryAlertHistoryRepository(),
+            NullLogger<MonitoringAlertEvaluationService>.Instance)
+        {
+            InitialDelay = TimeSpan.FromMinutes(5),
+        };
+
+        await engine.StartAsync(CancellationToken.None);
+        await engine.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(engine.ExecuteTask!.IsCompleted);
+        Assert.False(source.WasCalled);
+    }
 }

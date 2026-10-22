@@ -30,19 +30,20 @@ public enum ConnectionOwnership
 /// <para><b>Ownership:</b> every entry carries a <see cref="ConnectionOwnership"/> tag.
 /// <see cref="ConnectionOwnership.Factory"/> entries are owned by this cache and disposed on
 /// eviction/invalidation/disposal. <see cref="ConnectionOwnership.Borrowed"/> entries (e.g. a
-/// demo-mode singleton owned by another service) are cached for lookup but never disposed here.
-/// A concurrent <see cref="GetOrAdd"/> race's loser disposes its uninstalled owned client so
-/// nothing leaks.</para>
+/// demo-mode singleton owned by another service) are cached for lookup but never disposed here.</para>
+///
+/// <para><b>Single flight:</b> entries live in a <see cref="SingleFlightCache{T}"/>, so concurrent
+/// cold misses for one key share a single factory call instead of each building a client and the
+/// losers disposing theirs — a duplicate build is a duplicate credential-chain walk or connection
+/// handshake. A factory that throws leaves nothing cached; the next call retries. An entry evicted
+/// while still being built is disposed as soon as its build completes.</para>
 /// </summary>
 public sealed class ClientCache<TClient> : IAsyncDisposable
     where TClient : class
 {
     private readonly record struct Entry(TClient Client, ConnectionOwnership Ownership);
 
-    private readonly ConcurrentDictionary<string, Entry> _cache = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>Serializes invalidation/disposal so two concurrent calls don't double-dispose.</summary>
-    private readonly object _disposeLock = new();
+    private readonly SingleFlightCache<Entry> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Set by <see cref="DisposeAsync"/>; once true, acquisitions return null and invalidation is a no-op.</summary>
     private volatile bool _closed;
@@ -57,25 +58,18 @@ public sealed class ClientCache<TClient> : IAsyncDisposable
         if (_closed)
             return null;
 
-        if (_cache.TryGetValue(key, out var existing))
-            return existing.Client;
-
-        var (client, ownership) = factory();
-        if (_cache.TryAdd(key, new Entry(client, ownership)))
-            return client;
-
-        // Lost the installation race — dispose our owned client, return the winner.
-        if (ownership == ConnectionOwnership.Factory)
-            DisposeSync(client);
-
-        if (_cache.TryGetValue(key, out var winner))
-            return winner.Client;
-
-        // Edge case: entry was removed between TryAdd and TryGetValue — retry.
-        return GetOrAdd(key, factory);
+        return _cache.GetOrCreate(key, () =>
+        {
+            var (client, ownership) = factory();
+            return new Entry(client, ownership);
+        }).Client;
     }
 
-    /// <summary>Async variant of <see cref="GetOrAdd"/> for factories that must await (e.g. Redis).</summary>
+    /// <summary>
+    /// Async variant of <see cref="GetOrAdd"/> for factories that must await (e.g. Redis). The build
+    /// is shared by every concurrent caller for <paramref name="key"/>, so the factory receives
+    /// <see cref="CancellationToken.None"/>; <paramref name="ct"/> only abandons this caller's wait.
+    /// </summary>
     public async ValueTask<TClient?> GetOrAddAsync(
         string key,
         Func<CancellationToken, ValueTask<(TClient Client, ConnectionOwnership Ownership)>> factory,
@@ -84,20 +78,12 @@ public sealed class ClientCache<TClient> : IAsyncDisposable
         if (_closed)
             return null;
 
-        if (_cache.TryGetValue(key, out var existing))
-            return existing.Client;
-
-        var (client, ownership) = await factory(ct).ConfigureAwait(false);
-        if (_cache.TryAdd(key, new Entry(client, ownership)))
-            return client;
-
-        if (ownership == ConnectionOwnership.Factory)
-            await DisposeClientAsync(client).ConfigureAwait(false);
-
-        if (_cache.TryGetValue(key, out var winner))
-            return winner.Client;
-
-        return await GetOrAddAsync(key, factory, ct).ConfigureAwait(false);
+        var entry = await _cache.GetOrCreateAsync(key, async () =>
+        {
+            var (client, ownership) = await factory(CancellationToken.None).ConfigureAwait(false);
+            return new Entry(client, ownership);
+        }, ct).ConfigureAwait(false);
+        return entry.Client;
     }
 
     /// <summary>Removes and disposes (if factory-owned) the entry for <paramref name="key"/>, if any.</summary>
@@ -106,8 +92,8 @@ public sealed class ClientCache<TClient> : IAsyncDisposable
         if (_closed)
             return;
 
-        if (_cache.TryRemove(key, out var entry) && entry.Ownership == ConnectionOwnership.Factory)
-            DisposeSync(entry.Client);
+        if (_cache.TryRemove(key, out var build))
+            SingleFlightCache.WhenBuilt(build, DisposeOwnedSync);
     }
 
     /// <summary>Synchronously evicts and disposes every factory-owned entry; the cache stays usable afterwards.</summary>
@@ -116,8 +102,8 @@ public sealed class ClientCache<TClient> : IAsyncDisposable
         if (_closed)
             return;
 
-        foreach (var client in RemoveAllOwned())
-            DisposeSync(client);
+        foreach (var (_, build) in _cache.RemoveAll())
+            SingleFlightCache.WhenBuilt(build, DisposeOwnedSync);
     }
 
     /// <summary>Async variant of <see cref="InvalidateAllSync"/>.</summary>
@@ -126,10 +112,10 @@ public sealed class ClientCache<TClient> : IAsyncDisposable
         if (_closed)
             return;
 
-        foreach (var client in RemoveAllOwned())
+        foreach (var (_, build) in _cache.RemoveAll())
         {
             ct.ThrowIfCancellationRequested();
-            await DisposeClientAsync(client).ConfigureAwait(false);
+            await DisposeRemovedAsync(build).ConfigureAwait(false);
         }
     }
 
@@ -140,11 +126,11 @@ public sealed class ClientCache<TClient> : IAsyncDisposable
             return;
         _closed = true;
 
-        foreach (var client in RemoveAllOwned())
+        foreach (var (_, build) in _cache.RemoveAll())
         {
             try
             {
-                await DisposeClientAsync(client).ConfigureAwait(false);
+                await DisposeRemovedAsync(build).ConfigureAwait(false);
             }
             catch
             {
@@ -153,17 +139,24 @@ public sealed class ClientCache<TClient> : IAsyncDisposable
         }
     }
 
-    private List<TClient> RemoveAllOwned()
+    /// <summary>Disposes a removed entry now if it is built, or once its in-flight build completes.</summary>
+    private static async ValueTask DisposeRemovedAsync(Task<Entry> build)
     {
-        lock (_disposeLock)
+        if (!build.IsCompletedSuccessfully)
         {
-            var owned = new List<TClient>();
-            foreach (var (_, entry) in _cache)
-                if (entry.Ownership == ConnectionOwnership.Factory)
-                    owned.Add(entry.Client);
-            _cache.Clear();
-            return owned;
+            SingleFlightCache.WhenBuilt(build, DisposeOwnedSync);
+            return;
         }
+
+        var entry = build.Result;
+        if (entry.Ownership == ConnectionOwnership.Factory)
+            await DisposeClientAsync(entry.Client).ConfigureAwait(false);
+    }
+
+    private static void DisposeOwnedSync(Entry entry)
+    {
+        if (entry.Ownership == ConnectionOwnership.Factory)
+            DisposeSync(entry.Client);
     }
 
     private static void DisposeSync(TClient client)

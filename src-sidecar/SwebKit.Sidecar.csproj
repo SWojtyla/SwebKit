@@ -14,6 +14,15 @@
          File.Language column from their version info — zh-Hant is not a valid MSI language id,
          so the MSI link dies on ICE03 "Invalid Language Id". -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Startup cost is user-visible: the shell waits on /api/health before the UI can load.
+         ReadyToRun precompiles the published assemblies (scripts/tauri/_common.ps1 publishes with
+         -r win-x64, which R2R requires) so the sidecar doesn't JIT its whole startup path. Only
+         affects `dotnet publish`; dev builds and `dotnet run` are unchanged. -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <!-- Microsoft.NET.Sdk.Web defaults to server GC (one heap + GC thread per core), sized for a
+         multi-tenant server. A single-user desktop sidecar wants workstation GC's smaller
+         footprint instead. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>

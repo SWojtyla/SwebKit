@@ -132,6 +132,10 @@ test.describe("Settings", () => {
         await expect(
             page.getByTestId("appearance-theme-clay-dark"),
         ).toBeVisible();
+        await expect(page.getByTestId("appearance-theme-duck")).toBeVisible();
+        await expect(
+            page.getByTestId("appearance-theme-duck-dark"),
+        ).toBeVisible();
         await expect(page.getByTestId("appearance-font-size")).toBeVisible();
         await expect(page.getByTestId("appearance-density")).toBeVisible();
     });
@@ -823,6 +827,27 @@ test.describe("Settings", () => {
         await page.getByTestId("appearance-theme-dark").click();
         await expect(page.locator("html")).toHaveClass(/dark/);
         await expect(page.locator("html")).not.toHaveClass(/clay/);
+    });
+
+    test("the duck themes apply their classes and swap in the duck mark", async ({
+        page,
+    }) => {
+        await page.goto("/settings");
+        await page.getByTestId("settings-tab-appearance").click();
+        await expect(page.getByTestId("duck-mark")).toHaveCount(0);
+
+        await page.getByTestId("appearance-theme-duck-dark").click();
+        await expect(page.locator("html")).toHaveClass(/duck/);
+        await expect(page.locator("html")).toHaveClass(/dark/);
+        await expect(page.getByTestId("duck-mark")).toBeVisible();
+
+        await page.getByTestId("appearance-theme-duck").click();
+        await expect(page.locator("html")).toHaveClass(/duck/);
+        await expect(page.locator("html")).not.toHaveClass(/dark/);
+
+        await page.getByTestId("appearance-theme-dark").click();
+        await expect(page.locator("html")).not.toHaveClass(/duck/);
+        await expect(page.getByTestId("duck-mark")).toHaveCount(0);
     });
 
     // ── Batch 8 (Settings) ───────────────────────────────────────────────────

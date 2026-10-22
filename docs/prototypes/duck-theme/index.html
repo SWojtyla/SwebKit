@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duck theme — SwebKit prototype</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   Duck — prototype theme for SwebKit. Token names mirror globals.css so the
+   block can be lifted into a `.duck` / `.duck.dark` class pair later.
+   Light = "Pond": rubber-duck yellow on pond blue.
+   Dark  = "Mallard": night pond navy, bill-yellow signal, mallard-teal second.
+   Mock data only, nothing wired.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  color-scheme: light;
+  --bg:               oklch(0.975 0.012 225);
+  --surface-1:        oklch(1 0 0);
+  --surface-2:        oklch(0.96 0.016 225);
+  --surface-sunken:   oklch(0.945 0.02 228);
+  --border:           oklch(0.89 0.025 230);
+  --border-strong:    oklch(0.80 0.035 235);
+  --text:             oklch(0.24 0.06 255);
+  --text-muted:       oklch(0.46 0.05 250);
+  --text-subtle:      oklch(0.60 0.04 245);
+
+  --accent:           oklch(0.86 0.17 92);    /* duck yellow */
+  --accent-ink:       oklch(0.50 0.11 75);
+  --accent-contrast:  oklch(0.24 0.07 255);   /* navy on yellow */
+  --accent-soft:      oklch(0.96 0.07 95);
+  --accent-hover:     oklch(0.82 0.17 88);
+  --pond:             oklch(0.47 0.14 245);   /* secondary brand blue */
+  --pond-ink:         oklch(0.42 0.14 248);
+  --pond-soft:        oklch(0.94 0.035 235);
+  --bill:             oklch(0.72 0.17 55);    /* orange bill, tiny doses */
+  --focus:            oklch(0.55 0.16 245);
+
+  --sidebar-bg:       oklch(0.33 0.11 252);
+  --sidebar-text:     oklch(0.88 0.035 235);
+  --sidebar-muted:    oklch(0.70 0.06 240);
+  --sidebar-hover:    oklch(0.38 0.11 252);
+  --sidebar-sel-bg:   var(--accent);
+  --sidebar-sel-text: var(--accent-contrast);
+  --sidebar-edge:     transparent;
+
+  --state-blocked:    oklch(0.57 0.20 25);
+  --state-blocked-ink:oklch(0.47 0.18 25);
+  --state-blocked-soft:oklch(0.95 0.03 25);
+  --state-needs:      oklch(0.74 0.16 70);
+  --state-needs-ink:  oklch(0.48 0.12 65);
+  --state-needs-soft: oklch(0.96 0.05 85);
+  --state-working:    oklch(0.55 0.15 245);
+  --state-working-ink:oklch(0.45 0.14 245);
+  --state-working-soft:oklch(0.94 0.035 240);
+  --state-done:       oklch(0.58 0.14 160);
+  --state-done-ink:   oklch(0.45 0.11 160);
+  --state-done-soft:  oklch(0.95 0.04 160);
+  --state-queued:     oklch(0.62 0.02 245);
+  --state-queued-ink: oklch(0.46 0.02 245);
+  --state-queued-soft:oklch(0.95 0.01 240);
+
+  --cm-key:    oklch(0.42 0.14 248);
+  --cm-string: oklch(0.50 0.12 150);
+  --cm-number: oklch(0.58 0.15 55);
+  --cm-bool:   oklch(0.50 0.16 300);
+  --cm-punct:  oklch(0.55 0.03 245);
+
+  --shadow-1: 0 1px 2px oklch(0.35 0.08 250 / 7%), 0 4px 14px oklch(0.35 0.08 250 / 6%);
+  --shadow-2: 0 2px 6px oklch(0.35 0.08 250 / 10%), 0 14px 32px oklch(0.35 0.08 250 / 10%);
+  --radius-sm: 7px; --radius-md: 10px; --radius-lg: 14px;
+  --wave: oklch(0.86 0.17 92 / 16%);
+  --hero-from: oklch(0.96 0.07 95);
+  --hero-to:   oklch(0.94 0.04 230);
+
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+
+:root.dark {
+  color-scheme: dark;
+  --bg:               oklch(0.17 0.035 248);
+  --surface-1:        oklch(0.21 0.04 248);
+  --surface-2:        oklch(0.25 0.045 248);
+  --surface-sunken:   oklch(0.15 0.03 250);
+  --border:           oklch(0.30 0.045 248);
+  --border-strong:    oklch(0.38 0.05 248);
+  --text:             oklch(0.95 0.015 220);
+  --text-muted:       oklch(0.74 0.035 230);
+  --text-subtle:      oklch(0.58 0.035 235);
+
+  --accent:           oklch(0.85 0.16 90);
+  --accent-ink:       oklch(0.88 0.14 92);
+  --accent-contrast:  oklch(0.20 0.04 250);
+  --accent-soft:      oklch(0.32 0.06 85);
+  --accent-hover:     oklch(0.89 0.15 92);
+  --pond:             oklch(0.72 0.12 178);   /* mallard teal */
+  --pond-ink:         oklch(0.78 0.11 178);
+  --pond-soft:        oklch(0.29 0.05 185);
+  --bill:             oklch(0.75 0.15 55);
+  --focus:            oklch(0.78 0.12 178);
+
+  --sidebar-bg:       oklch(0.14 0.03 250);
+  --sidebar-text:     oklch(0.86 0.025 225);
+  --sidebar-muted:    oklch(0.60 0.035 235);
+  --sidebar-hover:    oklch(0.21 0.04 248);
+  --sidebar-sel-bg:   oklch(0.29 0.05 185);
+  --sidebar-sel-text: oklch(0.88 0.10 178);
+  --sidebar-edge:     oklch(0.26 0.04 248);
+
+  --state-blocked:    oklch(0.68 0.18 25);
+  --state-blocked-ink:oklch(0.76 0.14 25);
+  --state-blocked-soft:oklch(0.28 0.06 25);
+  --state-needs:      oklch(0.82 0.15 85);
+  --state-needs-ink:  oklch(0.86 0.13 88);
+  --state-needs-soft: oklch(0.30 0.06 85);
+  --state-working:    oklch(0.70 0.13 240);
+  --state-working-ink:oklch(0.78 0.11 240);
+  --state-working-soft:oklch(0.29 0.05 245);
+  --state-done:       oklch(0.72 0.13 165);
+  --state-done-ink:   oklch(0.80 0.11 165);
+  --state-done-soft:  oklch(0.28 0.05 170);
+  --state-queued:     oklch(0.66 0.02 240);
+  --state-queued-ink: oklch(0.76 0.02 240);
+  --state-queued-soft:oklch(0.27 0.02 245);
+
+  --cm-key:    oklch(0.80 0.10 220);
+  --cm-string: oklch(0.80 0.12 165);
+  --cm-number: oklch(0.82 0.13 70);
+  --cm-bool:   oklch(0.78 0.12 310);
+  --cm-punct:  oklch(0.62 0.03 240);
+
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 30%), 0 4px 14px oklch(0 0 0 / 22%);
+  --shadow-2: 0 2px 6px oklch(0 0 0 / 34%), 0 14px 32px oklch(0 0 0 / 30%);
+  --wave: oklch(0.72 0.12 178 / 10%);
+  --hero-from: oklch(0.26 0.05 200);
+  --hero-to:   oklch(0.22 0.045 248);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 13px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--text-muted); }
+.subtle { color: var(--text-subtle); }
+
+/* ── shell ─────────────────────────────────────────────────────────────── */
+.app { display: grid; grid-template-columns: 224px 1fr; height: 100vh; }
+.side { background: var(--sidebar-bg); color: var(--sidebar-text); border-right: 1px solid var(--sidebar-edge);
+        display: flex; flex-direction: column; padding: 14px 10px; position: relative; overflow: hidden; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; }
+.brand b { font: 600 16px var(--font-display); letter-spacing: -.01em; color: var(--sidebar-text); }
+.brand small { display: block; font-size: 11px; color: var(--sidebar-muted); }
+.nav { display: flex; flex-direction: column; gap: 2px; position: relative; z-index: 1; }
+.nav button { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border: 0; border-radius: var(--radius-sm);
+              background: transparent; color: var(--sidebar-text); text-align: left; transition: background .12s; }
+.nav button:hover { background: var(--sidebar-hover); }
+.nav button.on { background: var(--sidebar-sel-bg); color: var(--sidebar-sel-text); font-weight: 600; }
+.nav svg { width: 16px; height: 16px; flex: none; opacity: .9; }
+.nav .sep { height: 1px; background: var(--sidebar-hover); margin: 8px 6px; }
+.side .waves { position: absolute; left: 0; right: 0; bottom: 0; height: 120px; pointer-events: none; opacity: .5; }
+.side-foot { margin-top: auto; position: relative; z-index: 1; padding: 10px 8px 2px; font-size: 11px; color: var(--sidebar-muted); display: flex; align-items: center; gap: 8px; }
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+.top { height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 20px; background: var(--surface-1); border-bottom: 1px solid var(--border); }
+.crumbs { color: var(--text-muted); display: flex; gap: 6px; align-items: center; }
+.crumbs b { color: var(--text); font-weight: 600; }
+.search { margin-left: auto; display: flex; align-items: center; gap: 8px; width: 280px; height: 30px; padding: 0 10px;
+          border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-sunken); color: var(--text-subtle); }
+.kbd { margin-left: auto; font: 11px var(--font-mono); padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-1); }
+.health { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 99px; background: var(--state-done-soft); color: var(--state-done-ink); font-weight: 600; font-size: 12px; }
+.content { flex: 1; overflow: auto; padding: 20px; }
+.page { display: none; }
+.page.on { display: block; }
+
+/* ── primitives ────────────────────────────────────────────────────────── */
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); }
+.card-h { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.card-h .act { margin-left: auto; }
+.card-b { padding: 14px 16px; }
+.btn { height: 32px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-1);
+       display: inline-flex; align-items: center; gap: 6px; font-weight: 500; white-space: nowrap; }
+.btn:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: transparent; color: var(--accent-contrast); font-weight: 600;
+               box-shadow: inset 0 -2px 0 oklch(0 0 0 / 10%); }
+.btn.primary:hover { background: var(--accent-hover); }
+.btn.pond { background: var(--pond); color: var(--surface-1); border-color: transparent; }
+:root.dark .btn.pond { color: var(--accent-contrast); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--text-muted); }
+.btn.sm { height: 26px; padding: 0 10px; font-size: 12px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.b-done    { background: var(--state-done-soft);    color: var(--state-done-ink); }
+.b-needs   { background: var(--state-needs-soft);   color: var(--state-needs-ink); }
+.b-blocked { background: var(--state-blocked-soft); color: var(--state-blocked-ink); }
+.b-working { background: var(--state-working-soft); color: var(--state-working-ink); }
+.b-queued  { background: var(--state-queued-soft);  color: var(--state-queued-ink); }
+.chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+
+/* ── dashboard ─────────────────────────────────────────────────────────── */
+.hero { position: relative; overflow: hidden; display: flex; align-items: center; gap: 20px; padding: 20px 24px; margin-bottom: 16px;
+        background: linear-gradient(110deg, var(--hero-from), var(--hero-to)); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.hero h1 { margin: 0 0 4px; font: 600 22px var(--font-display); letter-spacing: -.015em; }
+.hero p { margin: 0; color: var(--text-muted); }
+.hero .acts { margin-left: auto; display: flex; gap: 8px; position: relative; z-index: 1; }
+.hero .ripple { position: absolute; right: -40px; bottom: -60px; width: 340px; height: 160px; pointer-events: none; }
+.grid-svc { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.svc { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; transition: transform .12s, box-shadow .12s, border-color .12s; }
+.svc:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); border-color: var(--border-strong); }
+.svc-h { display: flex; align-items: center; gap: 10px; }
+.svc-ic { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--pond-soft); color: var(--pond-ink); }
+.svc-ic svg { width: 17px; height: 17px; }
+.svc-h b { font-size: 14px; }
+.svc-h .badge { margin-left: auto; }
+.svc .meta { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 12px; }
+.svc .big { font: 600 20px var(--font-display); color: var(--text); }
+.spark { width: 100%; height: 30px; }
+.cols { display: grid; grid-template-columns: 1.6fr 1fr; gap: 12px; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 12px; font-weight: 500; color: var(--text-muted); padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+td { padding: 0 16px; height: 36px; border-bottom: 1px solid var(--border); }
+tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: var(--accent-soft); }
+.ctx { display: flex; flex-direction: column; gap: 8px; }
+.ctx-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface-2); }
+.ctx-row.cur { border-color: var(--accent); background: var(--accent-soft); }
+.ctx-row .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--state-done); }
+.ctx-row .env { margin-left: auto; }
+.env-prod { background: var(--state-blocked-soft); color: var(--state-blocked-ink); border-color: transparent; }
+.env-dev  { background: var(--pond-soft); color: var(--pond-ink); border-color: transparent; }
+.tip { margin-top: 12px; display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--radius-md); background: var(--accent-soft); color: var(--text); font-size: 12px; }
+.tip svg { flex: none; width: 22px; height: 22px; }
+
+/* ── API client ────────────────────────────────────────────────────────── */
+.api { display: grid; grid-template-columns: 250px 1fr; gap: 12px; height: calc(100vh - 48px - 40px); }
+.tree { padding: 8px; overflow: auto; }
+.tree .row { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border-radius: 6px; white-space: nowrap; }
+.tree .row:hover { background: var(--surface-2); }
+.tree .row.sel { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
+.tree .ind { padding-left: 24px; }
+.tree .ind2 { padding-left: 40px; }
+.tree svg { width: 14px; height: 14px; color: var(--text-subtle); flex: none; }
+.m { font: 600 10px var(--font-mono); width: 34px; flex: none; }
+.m-get { color: var(--state-done-ink); } .m-post { color: var(--state-working-ink); } .m-del { color: var(--state-blocked-ink); } .m-put { color: var(--state-needs-ink); }
+.editor { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.tabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--border); background: var(--surface-2); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.tab { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px 8px 0 0; color: var(--text-muted); border: 1px solid transparent; border-bottom: 0; }
+.tab.on { background: var(--surface-1); color: var(--text); border-color: var(--border); margin-bottom: -1px; box-shadow: inset 0 2px 0 var(--accent); }
+.tab .dirty { width: 6px; height: 6px; border-radius: 50%; background: var(--bill); }
+.urlbar { display: flex; gap: 8px; padding: 12px; }
+.url { flex: 1; display: flex; align-items: center; height: 34px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-sunken); overflow: hidden; }
+.url .meth { height: 100%; display: flex; align-items: center; padding: 0 12px; font: 600 12px var(--font-mono); color: var(--state-working-ink); border-right: 1px solid var(--border); background: var(--surface-1); }
+.url .u { padding: 0 12px; font: 12.5px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.var { color: var(--pond-ink); background: var(--pond-soft); border-radius: 4px; padding: 1px 3px; }
+.subtabs { display: flex; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+.subtabs span { padding: 8px 0; color: var(--text-muted); border-bottom: 2px solid transparent; }
+.subtabs span.on { color: var(--text); font-weight: 600; border-color: var(--accent); }
+.subtabs .n { font-size: 11px; color: var(--text-subtle); margin-left: 4px; }
+.kv td { height: 32px; font-family: var(--font-mono); font-size: 12px; }
+.kv td:first-child { width: 28px; padding-right: 0; }
+.check { width: 14px; height: 14px; border-radius: 4px; background: var(--accent); display: grid; place-items: center; color: var(--accent-contrast); }
+.check svg { width: 10px; height: 10px; }
+.split { flex: 1; display: grid; grid-template-rows: auto 1fr; min-height: 0; border-top: 1px solid var(--border); }
+.resp-h { display: flex; align-items: center; gap: 10px; white-space: nowrap; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.resp-h .r { margin-left: auto; display: flex; gap: 6px; }
+pre.json { margin: 0; padding: 12px 16px; overflow: auto; font: 12.5px/1.6 var(--font-mono); background: var(--surface-sunken); }
+.k { color: var(--cm-key); } .s { color: var(--cm-string); } .n { color: var(--cm-number); } .bo { color: var(--cm-bool); } .p { color: var(--cm-punct); }
+.ln { display: inline-block; width: 22px; color: var(--text-subtle); user-select: none; opacity: .6; }
+
+/* ── theme switch ──────────────────────────────────────────────────────── */
+.ts { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 4px; padding: 4px; background: var(--surface-1); border: 1px solid var(--border-strong); border-radius: 99px; box-shadow: var(--shadow-2); z-index: 10; }
+.ts button { border: 0; background: transparent; height: 30px; padding: 0 12px; border-radius: 99px; display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-weight: 500; }
+.ts button.on { background: var(--accent); color: var(--accent-contrast); font-weight: 600; }
+.ts .sw { width: 10px; height: 10px; border-radius: 50%; }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 64px 1fr; }
+  .brand div, .nav button span, .side-foot span { display: none; }
+  .cols, .api { grid-template-columns: 1fr; height: auto; }
+  .search { display: none; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- rubber duck mark -->
+    <symbol id="duck" viewBox="0 0 64 64">
+      <path d="M8 40c0-6 4-10 10-10h6c-3-3-4-6-4-10 0-8 7-14 15-14s15 6 15 14c0 3-1 6-3 8 5 1 9 3 11 6 2 4 0 10-6 14-5 4-13 6-22 6S16 58 11 54c-2-2-3-8-3-14z" fill="oklch(0.86 0.17 92)"/>
+      <path d="M8 40c0-6 4-10 10-10h6c-3-3-4-6-4-10 0-8 7-14 15-14s15 6 15 14c0 3-1 6-3 8 5 1 9 3 11 6 2 4 0 10-6 14-5 4-13 6-22 6S16 58 11 54c-2-2-3-8-3-14z" fill="none" stroke="oklch(0.62 0.13 75)" stroke-width="2"/>
+      <path d="M48 19c5-1 10 0 12 2-2 3-7 5-12 4z" fill="oklch(0.72 0.17 55)"/>
+      <circle cx="40" cy="17" r="3" fill="oklch(0.24 0.06 255)"/>
+      <circle cx="41" cy="16" r="1" fill="#fff"/>
+      <path d="M22 42c6 4 14 4 20 0" fill="none" stroke="oklch(0.70 0.15 80)" stroke-width="2.5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-dash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></g></symbol>
+    <symbol id="i-bus" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></g></symbol>
+    <symbol id="i-ship" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.4 17.5 21 11l-9-4-9 4 2.6 6.5"/><path d="M12 7V2"/><path d="M8 4h8"/></g></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10 9-3 3 3 3"/><path d="m14 15 3-3-3-3"/><rect x="3" y="3" width="18" height="18" rx="2"/></g></symbol>
+    <symbol id="i-db" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></g></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M12 3v18"/></g></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></g></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></g></symbol>
+    <symbol id="i-act" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></g></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></g></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></g></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z" fill="currentColor"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-git" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5c0 4-6 3-10 5"/></g></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></g></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <svg width="34" height="34"><use href="#duck"/></svg>
+      <div><b>SwebKit</b><small>Duck theme · prototype</small></div>
+    </div>
+    <nav class="nav" id="nav">
+      <button class="on" data-p="dash"><svg><use href="#i-dash"/></svg><span>Dashboard</span></button>
+      <button><svg><use href="#i-bus"/></svg><span>Service Bus</span></button>
+      <button><svg><use href="#i-ship"/></svg><span>AKS</span></button>
+      <button data-p="api"><svg><use href="#i-code"/></svg><span>API Client</span></button>
+      <button><svg><use href="#i-db"/></svg><span>Redis</span></button>
+      <button><svg><use href="#i-table"/></svg><span>SQL</span></button>
+      <button><svg><use href="#i-folder"/></svg><span>Storage</span></button>
+      <div class="sep"></div>
+      <button><svg><use href="#i-bot"/></svg><span>AI Agent</span></button>
+      <button><svg><use href="#i-act"/></svg><span>Monitoring</span></button>
+      <button><svg><use href="#i-gear"/></svg><span>Settings</span></button>
+    </nav>
+    <svg class="waves" viewBox="0 0 224 120" preserveAspectRatio="none">
+      <path d="M0 50 Q28 38 56 50 T112 50 T168 50 T224 50 V120 H0z" fill="var(--wave)"/>
+      <path d="M0 74 Q28 62 56 74 T112 74 T168 74 T224 74 V120 H0z" fill="var(--wave)"/>
+      <path d="M0 98 Q28 86 56 98 T112 98 T168 98 T224 98 V120 H0z" fill="var(--wave)"/>
+    </svg>
+    <div class="side-foot"><svg width="16" height="16"><use href="#duck"/></svg><span>v2.14 · quack-ready</span></div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div class="crumbs" id="crumbs"><span>Portima</span><span>›</span><b>Dashboard</b></div>
+      <div class="search"><svg width="14" height="14"><use href="#i-search"/></svg>Search resources, requests…<span class="kbd">Ctrl K</span></div>
+      <span class="health"><span style="width:7px;height:7px;border-radius:50%;background:currentColor"></span>All systems</span>
+    </header>
+
+    <main class="content">
+      <!-- ── Dashboard ─────────────────────────────────────────────── -->
+      <section class="page on" id="p-dash">
+        <div class="hero">
+          <svg width="64" height="64"><use href="#duck"/></svg>
+          <div>
+            <h1>Good morning, Sébastien</h1>
+            <p>5 of 6 services healthy · AKS <span class="mono">aks-brio-dev-we</span> · 2 dead-lettered messages need a look</p>
+          </div>
+          <div class="acts">
+            <button class="btn"><svg width="14" height="14"><use href="#i-refresh"/></svg>Refresh</button>
+            <button class="btn primary"><svg width="14" height="14"><use href="#i-plus"/></svg>New request</button>
+          </div>
+          <svg class="ripple" viewBox="0 0 340 160"><g fill="none" stroke="var(--accent)" stroke-opacity=".35" stroke-width="2"><ellipse cx="170" cy="120" rx="60" ry="14"/><ellipse cx="170" cy="120" rx="110" ry="28" stroke-opacity=".22"/><ellipse cx="170" cy="120" rx="160" ry="42" stroke-opacity=".12"/></g></svg>
+        </div>
+
+        <div class="grid-svc">
+          <div class="card svc">
+            <div class="svc-h"><span class="svc-ic"><svg><use href="#i-ship"/></svg></span><b>AKS</b><span class="badge b-done"><i></i>Healthy</span></div>
+            <div class="meta"><span><span class="big">42</span> pods</span><span>3 namespaces</span></div>
+            <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"><path d="M0 22 L10 20 L20 21 L30 16 L40 18 L50 12 L60 14 L70 10 L80 12 L90 8 L100 9" fill="none" stroke="var(--pond)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+          </div>
+          <div class="card svc">
+            <div class="svc-h"><span class="svc-ic"><svg><use href="#i-bus"/></svg></span><b>Service Bus</b><span class="badge b-needs"><i></i>2 DLQ</span></div>
+            <div class="meta"><span><span class="big">1,284</span> active</span><span>18 queues</span></div>
+            <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"><path d="M0 18 L10 14 L20 19 L30 12 L40 15 L50 20 L60 11 L70 16 L80 9 L90 14 L100 12" fill="none" stroke="var(--pond)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+          </div>
+          <div class="card svc">
+            <div class="svc-h"><span class="svc-ic"><svg><use href="#i-db"/></svg></span><b>Redis</b><span class="badge b-done"><i></i>Healthy</span></div>
+            <div class="meta"><span><span class="big">3.1</span> ms p95</span><span>612 MB</span></div>
+            <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"><path d="M0 15 L10 16 L20 14 L30 15 L40 13 L50 15 L60 14 L70 16 L80 14 L90 15 L100 14" fill="none" stroke="var(--pond)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+          </div>
+          <div class="card svc">
+            <div class="svc-h"><span class="svc-ic"><svg><use href="#i-table"/></svg></span><b>SQL</b><span class="badge b-queued"><i></i>On demand</span></div>
+            <div class="meta"><span><span class="big">4</span> databases</span><span>not probed</span></div>
+            <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"><path d="M0 15 H100" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/></svg>
+          </div>
+          <div class="card svc">
+            <div class="svc-h"><span class="svc-ic"><svg><use href="#i-folder"/></svg></span><b>Storage</b><span class="badge b-blocked"><i></i>403</span></div>
+            <div class="meta"><span><span class="big">—</span></span><span>RBAC missing</span></div>
+            <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"><path d="M0 12 L30 13 L45 12 L55 26 L100 26" fill="none" stroke="var(--state-blocked)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+          </div>
+        </div>
+
+        <div class="cols">
+          <div class="card">
+            <div class="card-h">Recent activity <button class="btn ghost sm act">View all</button></div>
+            <table>
+              <thead><tr><th>What</th><th>Where</th><th>Status</th><th style="text-align:right">When</th></tr></thead>
+              <tbody>
+                <tr><td>POST <span class="mono">/policies/search</span></td><td class="muted">API Client</td><td><span class="badge b-done"><i></i>200</span></td><td class="subtle" style="text-align:right">2 min</td></tr>
+                <tr><td>Resubmit 2 messages</td><td class="muted">sb-brio · <span class="mono">claims-in</span></td><td><span class="badge b-working"><i></i>Sending</span></td><td class="subtle" style="text-align:right">5 min</td></tr>
+                <tr><td>Port-forward <span class="mono">brio-api:8080</span></td><td class="muted">AKS · brio-dev</td><td><span class="badge b-done"><i></i>Open</span></td><td class="subtle" style="text-align:right">12 min</td></tr>
+                <tr><td>Pod <span class="mono">notif-worker-7d9f</span></td><td class="muted">AKS · notif</td><td><span class="badge b-blocked"><i></i>CrashLoop</span></td><td class="subtle" style="text-align:right">18 min</td></tr>
+                <tr><td>Query <span class="mono">dbo.Party</span></td><td class="muted">SQL · brio-dev</td><td><span class="badge b-queued"><i></i>Saved</span></td><td class="subtle" style="text-align:right">1 h</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <div class="card-h">Kube context <span class="chip act">kubeconfig</span></div>
+            <div class="card-b ctx">
+              <div class="ctx-row cur"><span class="dot"></span><span class="mono">aks-brio-dev-we</span><span class="chip env env-dev">dev</span></div>
+              <div class="ctx-row"><span class="dot"></span><span class="mono">aks-brio-stg-we</span><span class="chip env env-dev">stg</span></div>
+              <div class="ctx-row"><span class="dot" style="background:var(--state-queued)"></span><span class="mono">aks-brio-prd-we</span><span class="chip env env-prod">prod</span></div>
+              <div class="tip"><svg><use href="#duck"/></svg><div><b>Rubber-duck tip:</b> explain the CrashLoop to the AI Agent — it reads the pod logs for you.</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── API Client ────────────────────────────────────────────── -->
+      <section class="page" id="p-api">
+        <div class="api">
+          <div class="card tree">
+            <div style="display:flex;align-items:center;gap:6px;padding:4px 8px 8px">
+              <b>Collections</b>
+              <button class="btn sm primary" style="margin-left:auto"><svg width="12" height="12"><use href="#i-plus"/></svg>New</button>
+            </div>
+            <div class="row"><svg><use href="#i-chevd"/></svg><svg><use href="#i-folder"/></svg>brio-api <span class="chip" style="margin-left:auto;height:18px"><svg style="width:11px;height:11px;margin-right:3px"><use href="#i-git"/></svg>main</span></div>
+            <div class="row ind"><svg><use href="#i-chevd"/></svg><svg><use href="#i-folder"/></svg>Policies</div>
+            <div class="row ind2"><span class="m m-get">GET</span>List policies</div>
+            <div class="row ind2 sel"><span class="m m-post">POST</span>Search policies</div>
+            <div class="row ind2"><span class="m m-put">PUT</span>Update policy</div>
+            <div class="row ind2"><span class="m m-del">DEL</span>Cancel policy</div>
+            <div class="row ind"><svg><use href="#i-chev"/></svg><svg><use href="#i-folder"/></svg>Parties</div>
+            <div class="row ind"><svg><use href="#i-chev"/></svg><svg><use href="#i-folder"/></svg>Claims</div>
+            <div class="row"><svg><use href="#i-chev"/></svg><svg><use href="#i-folder"/></svg>phonotif-api</div>
+            <div class="row"><svg><use href="#i-chev"/></svg><svg><use href="#i-folder"/></svg>mail-api</div>
+          </div>
+
+          <div class="card editor">
+            <div class="tabs">
+              <div class="tab"><span class="m m-get">GET</span>List policies</div>
+              <div class="tab on"><span class="m m-post">POST</span>Search policies<span class="dirty"></span></div>
+              <div class="tab"><span class="m m-get">GET</span>Party by id</div>
+            </div>
+            <div class="urlbar">
+              <div class="url"><span class="meth">POST</span><span class="u"><span class="var">{{baseUrl}}</span>/v2/policies/search?broker=<span class="var">{{brokerId}}</span>&amp;page=1</span></div>
+              <button class="btn">dev <svg width="12" height="12"><use href="#i-chevd"/></svg></button>
+              <button class="btn primary"><svg width="12" height="12"><use href="#i-play"/></svg>Send</button>
+            </div>
+            <div class="subtabs"><span>Params<span class="n">2</span></span><span class="on">Headers<span class="n">3</span></span><span>Body</span><span>Auth</span><span>Scripts</span></div>
+            <table class="kv">
+              <tbody>
+                <tr><td><span class="check"><svg><use href="#i-check"/></svg></span></td><td>Authorization</td><td class="muted">Bearer <span class="var">{{token}}</span></td></tr>
+                <tr><td><span class="check"><svg><use href="#i-check"/></svg></span></td><td>Content-Type</td><td class="muted">application/json</td></tr>
+                <tr><td><span class="check"><svg><use href="#i-check"/></svg></span></td><td>X-Correlation-Id</td><td class="muted"><span class="var">{{$guid}}</span></td></tr>
+              </tbody>
+            </table>
+            <div class="split">
+              <div class="resp-h">
+                <b>Response</b>
+                <span class="badge b-done"><i></i>200 OK</span>
+                <span class="subtle mono" style="font-size:12px">184 ms · 2.3 KB</span>
+                <div class="r"><button class="btn sm">Pretty</button><button class="btn sm ghost">Raw</button><button class="btn sm ghost">Headers</button></div>
+              </div>
+<pre class="json"><span class="ln">1</span><span class="p">{</span>
+<span class="ln">2</span>  <span class="k">"total"</span><span class="p">:</span> <span class="n">128</span><span class="p">,</span>
+<span class="ln">3</span>  <span class="k">"page"</span><span class="p">:</span> <span class="n">1</span><span class="p">,</span>
+<span class="ln">4</span>  <span class="k">"items"</span><span class="p">: [</span>
+<span class="ln">5</span>    <span class="p">{</span>
+<span class="ln">6</span>      <span class="k">"policyNumber"</span><span class="p">:</span> <span class="s">"BR-2026-004417"</span><span class="p">,</span>
+<span class="ln">7</span>      <span class="k">"insurer"</span><span class="p">:</span> <span class="s">"AG Insurance"</span><span class="p">,</span>
+<span class="ln">8</span>      <span class="k">"branch"</span><span class="p">:</span> <span class="s">"MOTOR"</span><span class="p">,</span>
+<span class="ln">9</span>      <span class="k">"premium"</span><span class="p">:</span> <span class="n">742.18</span><span class="p">,</span>
+<span class="ln">10</span>      <span class="k">"active"</span><span class="p">:</span> <span class="bo">true</span><span class="p">,</span>
+<span class="ln">11</span>      <span class="k">"holder"</span><span class="p">: {</span> <span class="k">"name"</span><span class="p">:</span> <span class="s">"Donald Pond"</span><span class="p">,</span> <span class="k">"lang"</span><span class="p">:</span> <span class="s">"FR"</span> <span class="p">}</span>
+<span class="ln">12</span>    <span class="p">},</span>
+<span class="ln">13</span>    <span class="p">{</span>
+<span class="ln">14</span>      <span class="k">"policyNumber"</span><span class="p">:</span> <span class="s">"BR-2026-004418"</span><span class="p">,</span>
+<span class="ln">15</span>      <span class="k">"insurer"</span><span class="p">:</span> <span class="s">"Ethias"</span><span class="p">,</span>
+<span class="ln">16</span>      <span class="k">"branch"</span><span class="p">:</span> <span class="s">"FIRE"</span><span class="p">,</span>
+<span class="ln">17</span>      <span class="k">"premium"</span><span class="p">:</span> <span class="n">318.00</span><span class="p">,</span>
+<span class="ln">18</span>      <span class="k">"active"</span><span class="p">:</span> <span class="bo">false</span><span class="p">,</span>
+<span class="ln">19</span>      <span class="k">"holder"</span><span class="p">:</span> <span class="bo">null</span>
+<span class="ln">20</span>    <span class="p">}</span>
+<span class="ln">21</span>  <span class="p">]</span>
+<span class="ln">22</span><span class="p">}</span></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="ts" id="ts">
+  <button data-t="light"><span class="sw" style="background:oklch(0.86 0.17 92);box-shadow:inset 0 0 0 2px oklch(0.47 0.14 245)"></span>Duck Light</button>
+  <button data-t="dark"><span class="sw" style="background:oklch(0.72 0.12 178);box-shadow:inset 0 0 0 2px oklch(0.17 0.035 248)"></span>Mallard Dark</button>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement, ts = document.getElementById('ts');
+  var saved = null;
+  try { saved = localStorage.getItem('duck-proto-theme'); } catch (e) {}
+  var mode = saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  function apply(m) {
+    mode = m;
+    root.classList.toggle('dark', m === 'dark');
+    ts.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === m); });
+    try { localStorage.setItem('duck-proto-theme', m); } catch (e) {}
+  }
+  apply(mode);
+  ts.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) apply(b.dataset.t); });
+
+  var titles = { dash: 'Dashboard', api: 'API Client' };
+  document.getElementById('nav').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-p]'); if (!b) return;
+    document.querySelectorAll('.nav button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    document.querySelectorAll('.page').forEach(function (p) { p.classList.toggle('on', p.id === 'p-' + b.dataset.p); });
+    document.querySelector('#crumbs b').textContent = titles[b.dataset.p];
+  });
+})();
+</script>
+</body>
+</html>

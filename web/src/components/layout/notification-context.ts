@@ -30,7 +30,6 @@ export interface NotificationContextValue {
         action?: NotificationAction,
         link?: string,
     ) => void;
-    notifications: NotificationItem[];
     dismiss: (id: string) => void;
 }
 

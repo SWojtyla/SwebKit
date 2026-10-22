@@ -444,7 +444,7 @@ public class ApiClientChainEndpointTests : IDisposable
         Assert.Equal("plan", events[0].GetProperty("type").GetString());
         Assert.Equal("done", events[^1].GetProperty("type").GetString());
         Assert.Equal(
-            ["__demo__chain_create_post", "__demo__chain_get_post", "__demo__chain_delete_post"],
+            ["__demo__chain_create_post", "__demo__chain_update_post", "__demo__chain_delete_post"],
             executor.ExecutedRequestIds);
         var steps = events[0].GetProperty("steps").EnumerateArray().ToList();
         Assert.All(steps, s => Assert.Equal(DemoApiCollectionFactory.DemoCollectionId, s.GetProperty("collectionId").GetString()));

@@ -121,29 +121,85 @@ public class ClientCacheTests
     }
 
     [Fact]
-    public async Task Concurrent_GetOrAdd_Losers_DisposeTheirOwnedClient()
+    public async Task Concurrent_GetOrAdd_BuildsOnce_AndEveryCallerGetsTheSameClient()
     {
         var cache = new ClientCache<TrackedClient>();
         var created = new System.Collections.Concurrent.ConcurrentBag<TrackedClient>();
+        using var release = new ManualResetEventSlim(false);
 
         var tasks = Enumerable.Range(0, 20)
             .Select(_ => Task.Run(() => cache.GetOrAdd("a", () =>
             {
+                release.Wait(TimeSpan.FromSeconds(10));
                 var client = new TrackedClient();
                 created.Add(client);
                 return (client, ConnectionOwnership.Factory);
             })))
             .ToList();
+        await Task.Delay(50);
+        release.Set();
         var results = await Task.WhenAll(tasks);
 
-        Assert.All(results, r => Assert.NotNull(r));
-        var distinct = results.Distinct().ToList();
-        Assert.Single(distinct);
-        var winner = distinct[0]!;
-
-        // Every created instance except the installed winner must have been disposed by its loser.
-        Assert.Single(created, c => !c.WasDisposedAsync);
+        // One build shared by every caller — no duplicate client was built and thrown away.
+        var winner = Assert.Single(created);
+        Assert.All(results, r => Assert.Same(winner, r));
         Assert.False(winner.WasDisposedAsync);
+    }
+
+    [Fact]
+    public void GetOrAdd_FactoryThrows_IsNotCached_NextCallRetries()
+    {
+        var cache = new ClientCache<TrackedClient>();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            cache.GetOrAdd("a", () => throw new InvalidOperationException("boom")));
+        var client = cache.GetOrAdd("a", () => (new TrackedClient(), ConnectionOwnership.Factory));
+
+        Assert.NotNull(client);
+    }
+
+    [Fact]
+    public async Task GetOrAddAsync_ConcurrentCallers_ShareOneBuild()
+    {
+        var cache = new ClientCache<TrackedClient>();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+
+        var tasks = Enumerable.Range(0, 5)
+            .Select(_ => cache.GetOrAddAsync("a", async ct =>
+            {
+                Interlocked.Increment(ref calls);
+                await gate.Task;
+                return (new TrackedClient(), ConnectionOwnership.Factory);
+            }).AsTask())
+            .ToList();
+        gate.SetResult();
+        var results = await Task.WhenAll(tasks);
+
+        Assert.Equal(1, calls);
+        Assert.Single(results.Distinct());
+    }
+
+    [Fact]
+    public async Task Evict_WhileBuildInFlight_DisposesTheClientWhenTheBuildCompletes()
+    {
+        var cache = new ClientCache<TrackedClient>();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new TrackedClient();
+
+        var pending = cache.GetOrAddAsync("a", async ct =>
+        {
+            await gate.Task;
+            return (client, ConnectionOwnership.Factory);
+        }).AsTask();
+
+        cache.Evict("a");
+        Assert.False(client.WasDisposedAsync);
+        gate.SetResult();
+        await pending;
+
+        // Disposal runs as a continuation of the build, so it may land just after the caller resumes.
+        Assert.True(SpinWait.SpinUntil(() => client.WasDisposedAsync, TimeSpan.FromSeconds(5)));
     }
 
     [Fact]

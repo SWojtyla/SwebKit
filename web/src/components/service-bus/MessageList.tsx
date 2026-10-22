@@ -148,6 +148,8 @@ export function MessageList({
     useEffect(() => {
         if (prefs.autoRefreshInterval === 0 || !nsId || !entity) return;
         const id = setInterval(() => {
+            // Same as AKS: a hidden window shouldn't keep peeking the namespace.
+            if (document.visibilityState === "hidden") return;
             qc.invalidateQueries({
                 queryKey: ["sb-peek", nsId, entity.entityPath],
             });

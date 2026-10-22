@@ -134,9 +134,30 @@ impl PortForwardState {
 /// Tauri command: start a port-forward session by spawning a real `kubectl port-forward`
 /// subprocess. `context`/`kubeconfig` mirror the AKS config already used elsewhere in the app —
 /// when omitted, kubectl falls back to its own default context/kubeconfig resolution.
+///
+/// `async` + `spawn_blocking`: a sync command runs on the main (event-loop) thread, and the
+/// readiness wait below can take up to `FORWARD_READY_TIMEOUT` — the whole UI froze for that long.
 #[tauri::command]
-pub fn start_port_forward(
-    state: State<PortForwardState>,
+pub async fn start_port_forward(
+    app: tauri::AppHandle,
+    namespace: String,
+    pod: String,
+    remote_port: u16,
+    local_port: Option<u16>,
+    context: Option<String>,
+    kubeconfig: Option<String>,
+) -> Result<u16, String> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<PortForwardState>();
+        start_port_forward_blocking(&state, namespace, pod, remote_port, local_port, context, kubeconfig)
+    })
+    .await
+    .map_err(|e| format!("Port-forward task failed: {e}"))?
+}
+
+fn start_port_forward_blocking(
+    state: &PortForwardState,
     namespace: String,
     pod: String,
     remote_port: u16,
@@ -859,15 +880,22 @@ mod granted_roots_tests {
     use super::grant_covers;
     use std::path::PathBuf;
 
-    fn grants(paths: &[&str]) -> Vec<PathBuf> {
-        paths.iter().map(PathBuf::from).collect()
+    // Built from components on the host's own root: a backslashed Windows
+    // literal is a single file name on Linux (CI), where `\` is not a separator.
+    fn path(parts: &[&str]) -> PathBuf {
+        let root = PathBuf::from(if cfg!(windows) { r"C:\" } else { "/" });
+        parts.iter().fold(root, |p, part| p.join(part))
+    }
+
+    fn grants(paths: &[&[&str]]) -> Vec<PathBuf> {
+        paths.iter().map(|p| path(p)).collect()
     }
 
     #[test]
     fn exact_match_covers() {
         assert!(grant_covers(
-            &grants(&[r"C:\Repos\api"]),
-            &PathBuf::from(r"C:\Repos\api"),
+            &grants(&[&["Repos", "api"]]),
+            &path(&["Repos", "api"]),
         ));
     }
 
@@ -876,8 +904,8 @@ mod granted_roots_tests {
         // The case that used to fail: granted the workspace root, the repo
         // inside it kept reporting "not authorized".
         assert!(grant_covers(
-            &grants(&[r"C:\Repos"]),
-            &PathBuf::from(r"C:\Repos\api\collections"),
+            &grants(&[&["Repos"]]),
+            &path(&["Repos", "api", "collections"]),
         ));
     }
 
@@ -885,16 +913,16 @@ mod granted_roots_tests {
     fn descendant_grant_does_not_cover_ancestor() {
         // Granting a subfolder must not unlock the repo root above it.
         assert!(!grant_covers(
-            &grants(&[r"C:\Repos\api"]),
-            &PathBuf::from(r"C:\Repos"),
+            &grants(&[&["Repos", "api"]]),
+            &path(&["Repos"]),
         ));
     }
 
     #[test]
     fn sibling_paths_do_not_cover() {
         assert!(!grant_covers(
-            &grants(&[r"C:\Repos\api"]),
-            &PathBuf::from(r"C:\Repos\api2"),
+            &grants(&[&["Repos", "api"]]),
+            &path(&["Repos", "api2"]),
         ));
     }
 }
