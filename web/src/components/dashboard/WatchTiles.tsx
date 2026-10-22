@@ -1,12 +1,15 @@
 import { useMemo } from "react";
 import { Link } from "react-router";
+import { useQueries } from "@tanstack/react-query";
 import { Activity, FolderOpen, Ship, TrendingUp } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 import {
     useAksDeployments,
     useAksNamespaces,
     useAksPods,
     useProfile,
 } from "@/lib/hooks";
+import type { RedisServerInfo } from "@/lib/types";
 import type { ServiceHealth } from "./useServiceHealth";
 
 /**
@@ -44,14 +47,31 @@ export function WatchTiles({
         return known ? total : null;
     }, [health.storage]);
 
+    // Redis is an on-demand service — the dashboard never probes caches. The
+    // hit-rate tile therefore only reflects `info` data already fetched by
+    // actually browsing a cache this session: `enabled: false` subscribes to
+    // the cache entries the Redis page's own queries create, without ever
+    // firing a request for the tile itself.
+    const redisCaches = profile?.config.redisConfig?.caches ?? [];
+    const redisInfoQueries = useQueries({
+        queries: redisCaches.map((cache) => ({
+            queryKey: ["redis", cache.id, "info"],
+            queryFn: ({ signal }: { signal: AbortSignal }) =>
+                apiFetch<RedisServerInfo>(`/api/redis/${cache.id}/info`, {
+                    signal,
+                }),
+            enabled: false,
+        })),
+    });
+
     const meanHitRatio = useMemo(() => {
-        const ratios = (health.redis?.entities ?? [])
-            .map((e) => e.hitRatio)
+        const ratios = redisInfoQueries
+            .map((q) => q.data?.keyspaceHitRatio)
             .filter((r): r is number => r !== undefined);
         if (ratios.length === 0) return null;
         const mean = ratios.reduce((a, b) => a + b, 0) / ratios.length;
         return (mean * 100).toFixed(1);
-    }, [health.redis]);
+    }, [redisInfoQueries]);
 
     const tiles = [
         {
@@ -77,8 +97,7 @@ export function WatchTiles({
         },
         {
             label: "Cache Hit Rate",
-            value:
-                meanHitRatio !== null ? `${meanHitRatio}%` : "-",
+            value: meanHitRatio !== null ? `${meanHitRatio}%` : "-",
             to: "/redis?tab=info",
             icon: TrendingUp,
             testId: "watch-tile-cache-hit-rate",

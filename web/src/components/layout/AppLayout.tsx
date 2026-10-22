@@ -391,7 +391,9 @@ export function AppLayout() {
                 (a) => a.state === "unavailable" || a.state === "degraded",
             )
           ? "bad"
-          : areaHealth.some((a) => a.state === "checking")
+          : areaHealth.some(
+                  (a) => a.state === "checking" || a.state === "connecting",
+              )
             ? "warn"
             : "ok";
 
@@ -661,7 +663,9 @@ export function AppLayout() {
                                                 const stateLabel = {
                                                     "not-configured":
                                                         "Not configured",
+                                                    "on-demand": "On demand",
                                                     checking: "Checking",
+                                                    connecting: "Connecting",
                                                     connected: "Connected",
                                                     degraded: "Degraded",
                                                     unavailable: "Unavailable",
@@ -671,10 +675,14 @@ export function AppLayout() {
                                                         ? "fill-success text-success"
                                                         : state ===
                                                                 "checking" ||
+                                                            state ===
+                                                                "connecting" ||
                                                             state === "degraded"
                                                           ? "fill-warning text-warning"
                                                           : state ===
-                                                              "not-configured"
+                                                                  "not-configured" ||
+                                                              state ===
+                                                                  "on-demand"
                                                             ? "fill-muted-foreground text-muted-foreground"
                                                             : "fill-destructive text-destructive";
 
@@ -755,10 +763,10 @@ export function AppLayout() {
                 <main
                     className="flex-1 overflow-auto"
                     style={{
-                        margin: 'var(--shell-sheet-margin)',
-                        background: 'var(--shell-sheet-bg)',
-                        borderRadius: 'var(--shell-sheet-radius)',
-                        boxShadow: 'var(--shell-sheet-shadow)',
+                        margin: "var(--shell-sheet-margin)",
+                        background: "var(--shell-sheet-bg)",
+                        borderRadius: "var(--shell-sheet-radius)",
+                        boxShadow: "var(--shell-sheet-shadow)",
                     }}
                 >
                     <Outlet />

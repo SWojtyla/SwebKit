@@ -354,6 +354,23 @@ moment ago is not in this render's snapshot yet — so the guard cancelled exact
 needed the fresh data. Detect the no-op inside the updater, where the data is current, and let a
 genuinely redundant write be a redundant write.
 
+### A status badge must derive from the feature's readiness signal, not from "some endpoint answered"
+
+`useServiceHealth` (mounted app-wide in `AppLayout`, so it feeds both the dashboard
+cards and the header status dot) marked AKS "Connected" the moment `/api/aks/test` —
+a ~1s ping — resolved, while the namespace list the AKS page actually gates on was
+still loading for ~18s cold. It also fired one probe per configured SQL/Redis entity
+at every startup — but those are on-demand connections nothing keeps open, so the
+aggregate verdict was permanently "Unavailable"/"Degraded" and pinned the status dot
+red forever.
+
+Derive a card's verdict from the same signal the feature page needs
+(`deriveAksConnectivity` walks checking → connecting → connected; "on-demand" is the
+honest terminal state for never-probed services). To show data on a dashboard tile
+without paying for the fetch, subscribe to the shared query key with
+`enabled: false` — it renders whatever the cache already holds and re-renders on
+cache updates, but never fires the request (WatchTiles' Redis hit-rate tile).
+
 ### Query keys that omit the server-side identity serve one backend's data under another's name
 
 Every AKS resource key was `["aks-pods", ns]`, with no context element — the key did not
