@@ -268,12 +268,29 @@ the file disagrees (first run, edited elsewhere). Keep the boot script's class m
 
 ### Theme ids are a closed set — migrate at hydration, not at render
 
-Only four themes exist: `light`/`dark` (Aurora) and `clay`/`clay-dark`, applied as classes on
-`<html>` (`dark`, `clay`, `clay dark`). Retired ids must be mapped by `migrateTheme` in
+Only six themes exist: `light`/`dark` (Aurora), `clay`/`clay-dark` and `duck`/`duck-dark` (Duck
+Light / Mallard Dark), applied as classes on `<html>` (`dark`, `clay`, `clay dark`, `duck`,
+`duck dark`). The id → classes table is `THEME_DOM_CLASSES` in `lib/stores/settings.ts`; use its
+`isDarkTheme` / `isDuckTheme` helpers instead of comparing ids. Retired ids must be mapped by `migrateTheme` in
 `lib/stores/settings.ts` **when the persisted store hydrates** — if components render with the raw
 stored value, a stale `liquid-glass` arrives as an unstyled flash and hydration then snaps the theme
 under the user's feet. Legacy utility names still resolve through the bridge block in
 `globals.css`, so untouched components keep working — but don't add new uses of them.
+
+### A family block must restate every token its sibling mode sets
+
+`.duck` and `.clay` come after `.dark` in `globals.css` with the same specificity, so under
+`.duck.dark` any token the `.duck.dark` block leaves out falls back to its *light* value, not
+Aurora Dark's. When adding a token to one mode of a family, add it to the other mode too.
+
+### Re-theming a subtree means restating the bridge tokens
+
+Custom properties inherit the value computed on `<html>`, not the `var()` expression: overriding
+`--text` inside an element does not change `--foreground` there, because `--foreground: var(--text)`
+was already resolved at the root. Duck Light's dark-blue sidebar (`.duck:not(.dark) .shell-sidebar`)
+therefore restates `--foreground`, `--muted-foreground`, `--popover`, `--card` and friends next to
+the base tokens. Duck's yellow `--primary` is also unreadable as text on white, so `.duck
+.text-primary` is re-pointed to `--pond-ink` while `bg-primary` stays yellow.
 
 ## Render cost
 

@@ -10,10 +10,14 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components, ExtraProps } from "react-markdown";
-import { useSettingsStore } from "@/lib/stores/settings";
+import {
+    isDarkTheme,
+    useSettingsStore,
+    type Theme,
+} from "@/lib/stores/settings";
 
-function getMermaidTheme(theme: string): "default" | "dark" {
-    return theme === "dark" || theme === "clay-dark" ? "dark" : "default";
+function getMermaidTheme(theme: Theme): "default" | "dark" {
+    return isDarkTheme(theme) ? "dark" : "default";
 }
 
 export function MermaidBlock({ code }: { code: string }) {

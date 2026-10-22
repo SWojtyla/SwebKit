@@ -4,10 +4,11 @@
 /* ═══════════════════════════════════════════════════════════════════════
    SwebKit — SwebOS design system (SwebFlow/docs/design/spec.md)
 
-   Two families, four themes: Aurora (cool indigo, crisp cards) and Clay
-   (warm sand and terracotta, soft and tactile). DOM classes are family +
-   mode: aurora-light → :root, aurora-dark → .dark, clay-light → .clay,
-   clay-dark → .clay.dark.
+   Three families, six themes: Aurora (cool indigo, crisp cards), Clay
+   (warm sand and terracotta, soft and tactile) and Duck (pond blue and
+   rubber-duck yellow). DOM classes are family + mode: aurora-light → :root,
+   aurora-dark → .dark, clay-light → .clay, clay-dark → .clay.dark,
+   duck-light → .duck, mallard-dark → .duck.dark.
 
    Token values are verbatim from SwebFlow's globals.css so the two apps
    stay pixel-identical. The "legacy bridge" block maps SwebKit's pre-skin
@@ -135,6 +136,9 @@
   --aurora-1: var(--accent-ink);
   --aurora-2: var(--accent);
   --aurora-3: var(--accent);
+  /* dashboard service-card icon tile; Duck swaps it to pond blue */
+  --icon-tile-bg: var(--accent-soft);
+  --icon-tile-ink: var(--accent-ink);
 }
 
 /* ── Aurora Dark ───────────────────────────────────────────────────────── */
@@ -356,8 +360,181 @@
   --info-foreground: var(--state-working-foreground);
 }
 
+/* ── Duck Light ────────────────────────────────────────────────────────
+   Pond-blue sidebar, rubber-duck yellow signal. Yellow is the primary
+   *fill* (buttons, nav selection, bars) with navy ink on it; primary-coloured
+   *text* reads pond blue instead (see "Duck extras" further down). */
+.duck {
+  color-scheme: light;
+  --bg:               oklch(0.975 0.012 225);
+  --frame:            oklch(1 0 0);
+  --surface-1:        oklch(1 0 0);
+  --surface-2:        oklch(0.96 0.016 225);
+  --surface-sunken:   oklch(0.945 0.02 228);
+  --border:           oklch(0.89 0.025 230);
+  --border-strong:    oklch(0.80 0.035 235);
+  --rule:             var(--border);
+  --text:             oklch(0.24 0.06 255);
+  --text-muted:       oklch(0.46 0.05 250);
+  --text-subtle:      oklch(0.60 0.04 245);
+  --accent:           oklch(0.86 0.17 92);
+  --accent-ink:       oklch(0.45 0.10 75);
+  --accent-contrast:  oklch(0.24 0.07 255);
+  --accent-soft:      oklch(0.96 0.07 95);
+  --accent-hover:     oklch(0.82 0.17 88);
+  --focus:            oklch(0.55 0.16 245);
+  --pond:             oklch(0.47 0.14 245);
+  --pond-ink:         oklch(0.42 0.14 248);
+  --pond-soft:        oklch(0.94 0.035 235);
+  --duck-wave:        oklch(0.86 0.17 92 / 16%);
+
+  --state-blocked:    oklch(0.57 0.20 25);
+  --state-blocked-ink:  oklch(0.47 0.18 25);
+  --state-blocked-soft: oklch(0.95 0.03 25);
+  --state-needs:      oklch(0.74 0.16 70);
+  --state-needs-ink:  oklch(0.48 0.12 65);
+  --state-needs-soft: oklch(0.96 0.05 85);
+  --state-working:    oklch(0.55 0.15 245);
+  --state-working-ink:  oklch(0.45 0.14 245);
+  --state-working-soft: oklch(0.94 0.035 240);
+  --state-waiting:    oklch(0.55 0.15 295);
+  --state-waiting-ink:  oklch(0.45 0.14 295);
+  --state-waiting-soft: oklch(0.94 0.03 295);
+  --state-queued:     oklch(0.62 0.02 245);
+  --state-queued-ink:   oklch(0.46 0.02 245);
+  --state-queued-soft:  oklch(0.95 0.01 240);
+  --state-done:       oklch(0.58 0.14 160);
+  --state-done-ink:   oklch(0.45 0.11 160);
+  --state-done-soft:  oklch(0.95 0.04 160);
+
+  --shadow-1: 0 1px 2px oklch(0.35 0.08 250 / 7%), 0 4px 14px oklch(0.35 0.08 250 / 6%);
+  --shadow-2: 0 2px 6px oklch(0.35 0.08 250 / 10%), 0 14px 32px oklch(0.35 0.08 250 / 10%);
+  --shadow-3: 0 4px 10px oklch(0.35 0.08 250 / 12%), 0 24px 56px oklch(0.35 0.08 250 / 14%);
+  --radius-sm: 7px; --radius-md: 10px; --radius-lg: 14px;
+  --bg-image:
+    radial-gradient(1000px 640px at 88% -10%, oklch(0.86 0.17 92 / 9%), transparent 62%),
+    radial-gradient(900px 620px at -6% 108%, oklch(0.55 0.14 245 / 6%), transparent 60%);
+
+  --sidebar:            oklch(0.33 0.11 252);
+  --header:             var(--surface-1);
+  --shell-sidebar-bg:   oklch(0.33 0.11 252);
+  --shell-sidebar-edge: none;
+  --shell-topbar-bg:    var(--surface-1);
+  --shell-topbar-edge:  1px solid var(--border);
+  --shell-navsel-bg:    var(--accent);
+  --shell-navsel-text:  var(--accent-contrast);
+  --shell-navsel-shadow: inset 0 -2px 0 oklch(0 0 0 / 10%);
+  --shell-sheet-margin: 0;
+  --shell-sheet-bg:     transparent;
+  --shell-sheet-radius: 0;
+  --shell-sheet-shadow: none;
+  --icon-tile-bg:       var(--pond-soft);
+  --icon-tile-ink:      var(--pond-ink);
+  --aurora-1:           var(--pond-ink);
+  --aurora-2:           var(--pond);
+  --aurora-3:           var(--pond);
+
+  --state-blocked-foreground: oklch(1 0 0);
+  --state-needs-foreground:   oklch(0 0 0);
+  --state-working-foreground: oklch(1 0 0);
+  --state-waiting-foreground: oklch(1 0 0);
+  --state-queued-foreground:  oklch(0 0 0);
+  --state-done-foreground:    oklch(1 0 0);
+  --destructive-foreground: var(--state-blocked-foreground);
+  --success-foreground: var(--state-done-foreground);
+  --warning-foreground: var(--state-needs-foreground);
+  --info-foreground: var(--state-working-foreground);
+}
+
+/* ── Mallard Dark ──────────────────────────────────────────────────────
+   Night-pond navy, bill-yellow signal, mallard-teal second colour. Restates
+   every token .duck sets — .duck comes later in source than .dark, so any
+   token left out here would fall back to its Duck Light value. */
+.duck.dark {
+  color-scheme: dark;
+  --bg:               oklch(0.17 0.035 248);
+  --frame:            oklch(0.21 0.04 248);
+  --surface-1:        oklch(0.21 0.04 248);
+  --surface-2:        oklch(0.25 0.045 248);
+  --surface-sunken:   oklch(0.15 0.03 250);
+  --border:           oklch(0.30 0.045 248);
+  --border-strong:    oklch(0.38 0.05 248);
+  --rule:             var(--border);
+  --text:             oklch(0.95 0.015 220);
+  --text-muted:       oklch(0.74 0.035 230);
+  --text-subtle:      oklch(0.58 0.035 235);
+  --accent:           oklch(0.85 0.16 90);
+  --accent-ink:       oklch(0.88 0.14 92);
+  --accent-contrast:  oklch(0.20 0.04 250);
+  --accent-soft:      oklch(0.32 0.06 85);
+  --accent-hover:     oklch(0.89 0.15 92);
+  --focus:            oklch(0.78 0.12 178);
+  --pond:             oklch(0.72 0.12 178);
+  --pond-ink:         oklch(0.80 0.11 178);
+  --pond-soft:        oklch(0.29 0.05 185);
+  --duck-wave:        oklch(0.72 0.12 178 / 10%);
+
+  --state-blocked:    oklch(0.68 0.18 25);
+  --state-blocked-ink:  oklch(0.76 0.14 25);
+  --state-blocked-soft: oklch(0.28 0.06 25);
+  --state-needs:      oklch(0.82 0.15 85);
+  --state-needs-ink:  oklch(0.86 0.13 88);
+  --state-needs-soft: oklch(0.30 0.06 85);
+  --state-working:    oklch(0.70 0.13 240);
+  --state-working-ink:  oklch(0.78 0.11 240);
+  --state-working-soft: oklch(0.29 0.05 245);
+  --state-waiting:    oklch(0.70 0.15 295);
+  --state-waiting-ink:  oklch(0.76 0.13 295);
+  --state-waiting-soft: oklch(0.29 0.05 295);
+  --state-queued:     oklch(0.66 0.02 240);
+  --state-queued-ink:   oklch(0.76 0.02 240);
+  --state-queued-soft:  oklch(0.27 0.02 245);
+  --state-done:       oklch(0.72 0.13 165);
+  --state-done-ink:   oklch(0.80 0.11 165);
+  --state-done-soft:  oklch(0.28 0.05 170);
+
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 30%), 0 4px 14px oklch(0 0 0 / 22%);
+  --shadow-2: 0 2px 6px oklch(0 0 0 / 34%), 0 14px 32px oklch(0 0 0 / 30%);
+  --shadow-3: 0 4px 10px oklch(0 0 0 / 40%), 0 24px 56px oklch(0 0 0 / 40%);
+  --radius-sm: 7px; --radius-md: 10px; --radius-lg: 14px;
+  --bg-image:
+    radial-gradient(1000px 640px at 88% -10%, oklch(0.72 0.12 178 / 7%), transparent 62%),
+    radial-gradient(900px 620px at -6% 108%, oklch(0.85 0.16 90 / 4%), transparent 60%);
+
+  --sidebar:            oklch(0.14 0.03 250);
+  --header:             var(--surface-1);
+  --shell-sidebar-bg:   oklch(0.14 0.03 250);
+  --shell-sidebar-edge: 1px solid oklch(0.26 0.04 248);
+  --shell-topbar-bg:    var(--surface-1);
+  --shell-topbar-edge:  1px solid var(--border);
+  --shell-navsel-bg:    var(--pond-soft);
+  --shell-navsel-text:  var(--pond-ink);
+  --shell-navsel-shadow: none;
+  --shell-sheet-margin: 0;
+  --shell-sheet-bg:     transparent;
+  --shell-sheet-radius: 0;
+  --shell-sheet-shadow: none;
+  --icon-tile-bg:       var(--pond-soft);
+  --icon-tile-ink:      var(--pond-ink);
+  --aurora-1:           var(--pond-ink);
+  --aurora-2:           var(--accent);
+  --aurora-3:           var(--accent);
+
+  --state-blocked-foreground: oklch(0 0 0);
+  --state-needs-foreground:   oklch(0 0 0);
+  --state-working-foreground: oklch(0 0 0);
+  --state-waiting-foreground: oklch(0 0 0);
+  --state-queued-foreground:  oklch(0 0 0);
+  --state-done-foreground:    oklch(0 0 0);
+  --destructive-foreground: var(--state-blocked-foreground);
+  --success-foreground: var(--state-done-foreground);
+  --warning-foreground: var(--state-needs-foreground);
+  --info-foreground: var(--state-working-foreground);
+}
+
 /* `dark:` follows the .dark class on <html>, not the OS colour scheme —
-   it covers aurora-dark (.dark) and clay-dark (.clay.dark) alike. */
+   it covers aurora-dark (.dark), clay-dark (.clay.dark) and mallard-dark
+   (.duck.dark) alike. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ── Theme Tokens → Tailwind ───────────────────────────────────────────── */
@@ -376,6 +553,8 @@
   --color-accent-hover: var(--accent-hover);
   --color-focus: var(--focus);
   --color-frame: var(--frame);
+  --color-icon-tile: var(--icon-tile-bg);
+  --color-icon-tile-ink: var(--icon-tile-ink);
   --color-state-blocked: var(--state-blocked);
   --color-state-blocked-ink: var(--state-blocked-ink);
   --color-state-blocked-soft: var(--state-blocked-soft);
@@ -891,6 +1070,92 @@ body {
   --cm-invalid: oklch(0.68 0.16 25);
   --cm-gutter: oklch(0.57 0.015 70);
   --cm-active-line: oklch(0.76 0.12 45 / 8%);
+}
+
+/* Duck: pond-blue keys, reed-green strings, bill-orange numbers. */
+.duck {
+  --cm-key: oklch(0.42 0.14 248);
+  --cm-string: oklch(0.48 0.12 150);
+  --cm-number: oklch(0.55 0.15 55);
+  --cm-bool: oklch(0.50 0.16 300);
+  --cm-null: oklch(0.55 0.03 245);
+  --cm-punct: oklch(0.55 0.03 245);
+  --cm-comment: oklch(0.55 0.05 200);
+  --cm-tag: oklch(0.50 0.16 340);
+  --cm-attr: oklch(0.48 0.11 70);
+  --cm-invalid: oklch(0.55 0.20 25);
+  --cm-gutter: oklch(0.62 0.03 245);
+  --cm-active-line: oklch(0.86 0.17 92 / 14%);
+}
+
+.duck.dark {
+  --cm-key: oklch(0.80 0.10 220);
+  --cm-string: oklch(0.80 0.12 165);
+  --cm-number: oklch(0.82 0.13 70);
+  --cm-bool: oklch(0.78 0.12 310);
+  --cm-null: oklch(0.66 0.03 240);
+  --cm-punct: oklch(0.62 0.03 240);
+  --cm-comment: oklch(0.62 0.05 200);
+  --cm-tag: oklch(0.78 0.13 340);
+  --cm-attr: oklch(0.85 0.14 88);
+  --cm-invalid: oklch(0.70 0.18 25);
+  --cm-gutter: oklch(0.55 0.035 240);
+  --cm-active-line: oklch(0.85 0.16 90 / 7%);
+}
+
+/* ── Duck extras ─────────────────────────────────────────────────────────
+   Yellow is too light to read as text on white, so primary-coloured text and
+   icons take the pond colour (blue in Duck Light, teal in Mallard Dark) while
+   bg-primary stays yellow. Unlayered, so it outranks the Tailwind utility. */
+.duck .text-primary,
+.duck .hover\:text-primary:hover {
+  color: var(--pond-ink);
+}
+
+/* Duck Light's sidebar is a dark pond-blue zone inside a light theme: re-point
+   the tokens its contents (nav, pinned rail, notification bell + popover)
+   read so they render light-on-blue. The bridge tokens are restated because
+   custom properties inherit the value computed on <html>, not the expression. */
+.duck:not(.dark) .shell-sidebar {
+  color-scheme: dark;
+  --text:             oklch(0.95 0.02 230);
+  --text-muted:       oklch(0.86 0.04 235);
+  --text-subtle:      oklch(0.72 0.06 240);
+  --surface-1:        oklch(0.29 0.10 253);
+  --surface-2:        oklch(0.39 0.11 252);
+  --border:           oklch(0.42 0.09 252);
+  --border-strong:    oklch(0.50 0.09 250);
+  --accent-soft:      oklch(0.40 0.10 252);
+  --accent-ink:       oklch(0.90 0.13 92);
+  --pond-ink:         oklch(0.88 0.14 92);
+  --foreground:       var(--text);
+  --muted-foreground: var(--text-subtle);
+  --sidebar-foreground: var(--text-muted);
+  --card:             var(--surface-1);
+  --card-foreground:  var(--text);
+  --popover:          var(--surface-1);
+  --popover-foreground: var(--text);
+  --muted:            var(--surface-2);
+  --secondary:        var(--surface-2);
+  color: var(--foreground);
+}
+
+/* Ripples along the bottom of the sidebar, tinted by --duck-wave. */
+.duck .shell-sidebar {
+  position: relative;
+  isolation: isolate;
+}
+
+.duck .shell-sidebar::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 120px;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--duck-wave);
+  --duck-waves: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 224 120' preserveAspectRatio='none'%3E%3Cpath d='M0 50Q28 38 56 50T112 50T168 50T224 50V120H0z' fill-opacity='.45'/%3E%3Cpath d='M0 74Q28 62 56 74T112 74T168 74T224 74V120H0z' fill-opacity='.45'/%3E%3Cpath d='M0 98Q28 86 56 98T112 98T168 98T224 98V120H0z' fill-opacity='.45'/%3E%3C/svg%3E");
+  mask: var(--duck-waves) bottom / 100% 100% no-repeat;
 }
 
 /* Span classes for the small-body <pre> path, sharing the tokens above so the

@@ -13,8 +13,10 @@
     }
     var theme = read("boot-theme") || "dark";
     var root = document.documentElement;
-    if (theme === "dark" || theme === "clay-dark") root.classList.add("dark");
+    if (theme === "dark" || theme === "clay-dark" || theme === "duck-dark")
+        root.classList.add("dark");
     if (theme === "clay" || theme === "clay-dark") root.classList.add("clay");
+    if (theme === "duck" || theme === "duck-dark") root.classList.add("duck");
     var fontSize = read("boot-font-size");
     if (fontSize) root.style.fontSize = fontSize;
 })();

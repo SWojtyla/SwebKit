@@ -7,17 +7,57 @@ export const BOOT_THEME_PREF = "boot-theme";
 export const BOOT_FONT_SIZE_PREF = "boot-font-size";
 
 // SwebOS families: Aurora light/dark reuse the historic `light`/`dark` ids so
-// existing user-settings.json values keep meaning; Clay is the second family.
-export type Theme = "light" | "dark" | "clay" | "clay-dark";
+// existing user-settings.json values keep meaning; Clay is the second family and
+// Duck (Duck Light / Mallard Dark) the third.
+export type Theme =
+    | "light"
+    | "dark"
+    | "clay"
+    | "clay-dark"
+    | "duck"
+    | "duck-dark";
 
 // The quick-cycle button/shortcut rotates through every available theme.
-const THEME_CYCLE: Theme[] = ["dark", "light", "clay-dark", "clay"];
+const THEME_CYCLE: Theme[] = [
+    "dark",
+    "light",
+    "clay-dark",
+    "clay",
+    "duck-dark",
+    "duck",
+];
 
-// DOM contract: aurora-light → :root, aurora-dark → .dark,
-// clay-light → .clay, clay-dark → .clay.dark.
-const THEME_CLASSES = ["dark", "clay", "clay-dark"];
+// DOM contract: family class (none for Aurora) + `.dark` for the dark mode.
+// Mirrored by public/boot-appearance.js.
+const THEME_DOM_CLASSES: Record<Theme, string[]> = {
+    light: [],
+    dark: ["dark"],
+    clay: ["clay"],
+    "clay-dark": ["clay", "dark"],
+    duck: ["duck"],
+    "duck-dark": ["duck", "dark"],
+};
 
-const ALL_THEMES: Theme[] = ["light", "dark", "clay", "clay-dark"];
+const THEME_CLASSES = ["dark", "clay", "duck"];
+
+const ALL_THEMES = Object.keys(THEME_DOM_CLASSES) as Theme[];
+
+export const THEME_LABELS: Record<Theme, string> = {
+    light: "Aurora Light",
+    dark: "Aurora Dark",
+    clay: "Clay Light",
+    "clay-dark": "Clay Dark",
+    duck: "Duck Light",
+    "duck-dark": "Mallard Dark",
+};
+
+export function isDarkTheme(theme: Theme): boolean {
+    return THEME_DOM_CLASSES[theme].includes("dark");
+}
+
+export function isDuckTheme(theme: Theme): boolean {
+    return THEME_DOM_CLASSES[theme].includes("duck");
+}
 
 // Retired palettes map to the nearest Aurora mode — a stale user-settings.json
 // value should land somewhere sensible, not on the default.
@@ -53,13 +93,8 @@ interface SettingsState {
 
 function applyThemeClass(theme: Theme) {
     document.documentElement.classList.remove(...THEME_CLASSES);
-    if (theme === "dark") {
-        document.documentElement.classList.add("dark");
-    } else if (theme === "clay") {
-        document.documentElement.classList.add("clay");
-    } else if (theme === "clay-dark") {
-        document.documentElement.classList.add("clay", "dark");
-    }
+    const classes = THEME_DOM_CLASSES[theme];
+    if (classes.length) document.documentElement.classList.add(...classes);
     saveViewPreference(BOOT_THEME_PREF, theme);
 }
 

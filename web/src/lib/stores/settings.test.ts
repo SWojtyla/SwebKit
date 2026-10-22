@@ -1,12 +1,25 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { isTheme, migrateTheme } from "./settings";
+import {
+    isDarkTheme,
+    isDuckTheme,
+    isTheme,
+    migrateTheme,
+    THEME_LABELS,
+    type Theme,
+} from "./settings";
+
+const ALL: Theme[] = [
+    "light",
+    "dark",
+    "clay",
+    "clay-dark",
+    "duck",
+    "duck-dark",
+];
 
 describe("isTheme", () => {
-    it("accepts the four SwebOS theme ids", () => {
-        expect(isTheme("light")).toBe(true);
-        expect(isTheme("dark")).toBe(true);
-        expect(isTheme("clay")).toBe(true);
-        expect(isTheme("clay-dark")).toBe(true);
+    it("accepts the six SwebOS theme ids", () => {
+        for (const id of ALL) expect(isTheme(id)).toBe(true);
     });
 
     it("rejects retired ids, unknown strings, and empty values", () => {
@@ -22,10 +35,7 @@ describe("isTheme", () => {
 
 describe("migrateTheme", () => {
     it("passes live ids through unchanged", () => {
-        expect(migrateTheme("light")).toBe("light");
-        expect(migrateTheme("dark")).toBe("dark");
-        expect(migrateTheme("clay")).toBe("clay");
-        expect(migrateTheme("clay-dark")).toBe("clay-dark");
+        for (const id of ALL) expect(migrateTheme(id)).toBe(id);
     });
 
     it("maps retired dark themes to aurora dark", () => {
@@ -54,6 +64,26 @@ describe("migrateTheme", () => {
         expect(migrateTheme("")).toBeNull();
         expect(migrateTheme(null)).toBeNull();
         expect(migrateTheme(undefined)).toBeNull();
+    });
+});
+
+describe("theme helpers", () => {
+    it("flags exactly the dark modes as dark", () => {
+        expect(ALL.filter(isDarkTheme)).toEqual([
+            "dark",
+            "clay-dark",
+            "duck-dark",
+        ]);
+    });
+
+    it("flags Duck Light and Mallard Dark as the duck family", () => {
+        expect(ALL.filter(isDuckTheme)).toEqual(["duck", "duck-dark"]);
+    });
+
+    it("labels every theme, with the duck pair named Duck Light / Mallard Dark", () => {
+        for (const id of ALL) expect(THEME_LABELS[id]).toBeTruthy();
+        expect(THEME_LABELS.duck).toBe("Duck Light");
+        expect(THEME_LABELS["duck-dark"]).toBe("Mallard Dark");
     });
 });
 
@@ -103,5 +133,32 @@ describe("boot theme mirror", () => {
             JSON.stringify("clay-dark"),
         );
         expect([...classes].sort()).toEqual(["clay", "dark"]);
+    });
+
+    it("applies the duck family classes and clears them on the way out", async () => {
+        const { useSettingsStore } = await import("./settings");
+        useSettingsStore.getState().setTheme("duck-dark");
+        expect([...classes].sort()).toEqual(["dark", "duck"]);
+
+        useSettingsStore.getState().setTheme("duck");
+        expect([...classes]).toEqual(["duck"]);
+
+        useSettingsStore.getState().setTheme("clay");
+        expect([...classes]).toEqual(["clay"]);
+
+        useSettingsStore.getState().setTheme("light");
+        expect([...classes]).toEqual([]);
+    });
+
+    it("cycles through every theme, duck pair included, back to the start", async () => {
+        const { useSettingsStore } = await import("./settings");
+        useSettingsStore.getState().setTheme("dark");
+        const seen: Theme[] = [];
+        for (let i = 0; i < ALL.length; i++) {
+            useSettingsStore.getState().toggleTheme();
+            seen.push(useSettingsStore.getState().theme);
+        }
+        expect([...seen].sort()).toEqual([...ALL].sort());
+        expect(useSettingsStore.getState().theme).toBe("dark");
     });
 });

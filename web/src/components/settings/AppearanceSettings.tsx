@@ -1,69 +1,89 @@
-import { useSettingsStore, type Theme } from "@/lib/stores/settings";
+import {
+    isDarkTheme,
+    useSettingsStore,
+    THEME_LABELS,
+    type Theme,
+} from "@/lib/stores/settings";
 import { useUserSettings, useUpdateUserSettings } from "@/lib/hooks";
 import { type UserSettings } from "@/lib/types";
 
 // SwebOS families (docs/features/active/swebos-skin.md): Aurora is the cool
-// indigo family, Clay the warm sand/terracotta one — each in light and dark.
-const THEMES: { id: Theme; label: string; desc: string }[] = [
-    {
-        id: "light",
-        label: "Aurora Light",
-        desc: "Cool light surface, indigo accent",
-    },
-    {
-        id: "dark",
-        label: "Aurora Dark",
-        desc: "Deep indigo surface, crisp cards",
-    },
-    {
-        id: "clay",
-        label: "Clay Light",
-        desc: "Warm sand frame, terracotta accent",
-    },
-    {
-        id: "clay-dark",
-        label: "Clay Dark",
-        desc: "Dark earth frame, soft sheets",
-    },
+// indigo family, Clay the warm sand/terracotta one, Duck the pond-blue and
+// rubber-duck-yellow one — each in light and dark.
+const THEMES: { id: Theme; desc: string }[] = [
+    { id: "light", desc: "Cool light surface, indigo accent" },
+    { id: "dark", desc: "Deep indigo surface, crisp cards" },
+    { id: "clay", desc: "Warm sand frame, terracotta accent" },
+    { id: "clay-dark", desc: "Dark earth frame, soft sheets" },
+    { id: "duck", desc: "Pond-blue sidebar, rubber-duck yellow" },
+    { id: "duck-dark", desc: "Night pond, bill yellow and teal" },
 ];
 
+// Mini-preview swatches in each theme's own palette (rail = sidebar strip).
+const PREVIEW: Record<
+    Theme,
+    { frame: string; rail: string; card: string; accent: string }
+> = {
+    light: {
+        frame: "oklch(0.985 0.005 260)",
+        rail: "oklch(1 0 0)",
+        card: "oklch(1 0 0)",
+        accent: "oklch(0.52 0.20 268)",
+    },
+    dark: {
+        frame: "oklch(0.155 0.016 265)",
+        rail: "oklch(0.19 0.018 265)",
+        card: "oklch(0.19 0.018 265)",
+        accent: "oklch(0.55 0.20 268)",
+    },
+    clay: {
+        frame: "oklch(0.925 0.018 68)",
+        rail: "oklch(0.925 0.018 68)",
+        card: "oklch(0.99 0.006 75)",
+        accent: "oklch(0.50 0.13 40)",
+    },
+    "clay-dark": {
+        frame: "oklch(0.155 0.012 50)",
+        rail: "oklch(0.155 0.012 50)",
+        card: "oklch(0.23 0.014 50)",
+        accent: "oklch(0.55 0.13 42)",
+    },
+    duck: {
+        frame: "oklch(0.975 0.012 225)",
+        rail: "oklch(0.33 0.11 252)",
+        card: "oklch(1 0 0)",
+        accent: "oklch(0.86 0.17 92)",
+    },
+    "duck-dark": {
+        frame: "oklch(0.17 0.035 248)",
+        rail: "oklch(0.14 0.03 250)",
+        card: "oklch(0.21 0.04 248)",
+        accent: "oklch(0.85 0.16 90)",
+    },
+};
+
 function ThemePreview({ id }: { id: Theme }) {
-    const isDark = id === "dark" || id === "clay-dark";
-    const isClay = id === "clay" || id === "clay-dark";
-    // Mini frame + card preview in the family's own palette.
-    const frame = isClay
-        ? isDark
-            ? "bg-[oklch(0.155_0.012_50)]"
-            : "bg-[oklch(0.925_0.018_68)]"
-        : isDark
-          ? "bg-[oklch(0.155_0.016_265)]"
-          : "bg-[oklch(0.985_0.005_260)]";
-    const card = isClay
-        ? isDark
-            ? "bg-[oklch(0.23_0.014_50)]"
-            : "bg-[oklch(0.99_0.006_75)]"
-        : isDark
-          ? "bg-[oklch(0.19_0.018_265)]"
-          : "bg-[oklch(1_0_0)]";
-    const accent = isClay
-        ? isDark
-            ? "bg-[oklch(0.55_0.13_42)]"
-            : "bg-[oklch(0.50_0.13_40)]"
-        : isDark
-          ? "bg-[oklch(0.55_0.20_268)]"
-          : "bg-[oklch(0.52_0.20_268)]";
-    const line = isDark ? "bg-white/15" : "bg-black/10";
+    const { frame, rail, card, accent } = PREVIEW[id];
+    const line = isDarkTheme(id) ? "bg-white/15" : "bg-black/10";
 
     return (
         <div
-            className={`mb-3 flex h-16 items-center justify-center rounded-lg ${frame}`}
+            className="mb-3 flex h-16 overflow-hidden rounded-lg"
+            style={{ background: frame }}
         >
-            <div
-                className={`flex h-9 w-20 flex-col gap-1.5 rounded-md border border-black/5 p-1.5 shadow-sm ${card}`}
-            >
-                <div className={`h-1.5 w-8 rounded-full ${accent}`} />
-                <div className={`h-1 w-12 rounded-full ${line}`} />
-                <div className={`h-1 w-9 rounded-full ${line}`} />
+            <div className="h-full w-5 shrink-0" style={{ background: rail }} />
+            <div className="flex flex-1 items-center justify-center">
+                <div
+                    className="flex h-9 w-20 flex-col gap-1.5 rounded-md border border-black/5 p-1.5 shadow-sm"
+                    style={{ background: card }}
+                >
+                    <div
+                        className="h-1.5 w-8 rounded-full"
+                        style={{ background: accent }}
+                    />
+                    <div className={`h-1 w-12 rounded-full ${line}`} />
+                    <div className={`h-1 w-9 rounded-full ${line}`} />
+                </div>
             </div>
         </div>
     );
@@ -108,7 +128,9 @@ export function AppearanceSettings() {
                             data-testid={`appearance-theme-${t.id}`}
                         >
                             <ThemePreview id={t.id} />
-                            <div className="text-sm font-medium">{t.label}</div>
+                            <div className="text-sm font-medium">
+                                {THEME_LABELS[t.id]}
+                            </div>
                             <div className="text-xs text-muted-foreground">
                                 {t.desc}
                             </div>

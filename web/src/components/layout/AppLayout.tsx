@@ -35,6 +35,7 @@ import { CommandPalette } from "./CommandPalette";
 import { PinnedRail } from "./PinnedRail";
 import { setNotificationBellSlot } from "./notification-bell-slot";
 import { EnvironmentBadge } from "./EnvironmentBadge";
+import { DuckMark } from "./DuckMark";
 import { KeyboardShortcutsPanel } from "./KeyboardShortcutsPanel";
 import { DemoTour } from "./DemoTour";
 import {
@@ -56,6 +57,9 @@ import { initDeepLinks, type DeepLinkContext } from "@/lib/deep-links";
 import {
     useSettingsStore,
     migrateTheme,
+    isDarkTheme,
+    isDuckTheme,
+    THEME_LABELS,
     BOOT_FONT_SIZE_PREF,
 } from "@/lib/stores/settings";
 import { useAgentPanelStore } from "@/lib/stores/agent-panel";
@@ -418,13 +422,8 @@ export function AppLayout() {
             ? "warn"
             : "ok";
 
-    const isDarkTheme = theme === "dark" || theme === "clay-dark";
-    const themeLabel = {
-        light: "Aurora Light",
-        dark: "Aurora Dark",
-        clay: "Clay Light",
-        "clay-dark": "Clay Dark",
-    }[theme];
+    const darkTheme = isDarkTheme(theme);
+    const themeLabel = THEME_LABELS[theme];
 
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
@@ -475,16 +474,22 @@ export function AppLayout() {
     return (
         <div className="aurora-bg theme-transition flex h-screen w-screen overflow-hidden bg-background text-foreground">
             <aside
-                className={`flex flex-col bg-sidebar transition-all duration-200 ${navCollapsed ? "w-14" : "w-[232px]"}`}
+                className={`shell-sidebar flex flex-col bg-sidebar transition-all duration-200 ${navCollapsed ? "w-14" : "w-[232px]"}`}
                 style={{ borderRight: "var(--shell-sidebar-edge)" }}
             >
                 <div className="flex h-12 items-center gap-2 px-3">
-                    <div
-                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-primary text-primary-foreground"
-                        title="SwebKit"
-                    >
-                        <Layers className="h-3 w-3" />
-                    </div>
+                    {isDuckTheme(theme) ? (
+                        <span title="SwebKit" data-testid="duck-mark">
+                            <DuckMark className="h-6 w-6 shrink-0" />
+                        </span>
+                    ) : (
+                        <div
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-primary text-primary-foreground"
+                            title="SwebKit"
+                        >
+                            <Layers className="h-3 w-3" />
+                        </div>
+                    )}
                     {!navCollapsed && (
                         <span className="font-display text-base font-semibold tracking-tight">
                             SwebKit
@@ -575,7 +580,7 @@ export function AppLayout() {
                             data-testid="theme-toggle"
                             title={`Theme: ${themeLabel}`}
                         >
-                            {isDarkTheme ? (
+                            {darkTheme ? (
                                 <Sun className="h-4 w-4" />
                             ) : (
                                 <Moon className="h-4 w-4" />
